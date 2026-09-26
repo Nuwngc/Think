@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Màn chờ ngắn trong lúc mở Chrome -->
+    <style name="Theme.Think.Launch" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="android:statusBarColor">@color/splash_bg</item>
+        <item name="android:navigationBarColor">@color/splash_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:colorAccent">@color/brand</item>
+    </style>
+    <!-- Bong bóng chat và bản dự phòng chạy bằng WebView -->
+    <style name="Theme.Think.Web" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/surface</item>
+        <item name="android:statusBarColor">@color/surface</item>
+        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:colorAccent">@color/brand</item>
+    </style>
+    <style name="Theme.Think.Dialog" parent="@android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:colorAccent">@color/brand</item>
+        <item name="android:windowMinWidthMajor">88%</item>
+        <item name="android:windowMinWidthMinor">92%</item>
+    </style>
+    <style name="Theme.Think.Invisible" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowNoDisplay">false</item>
+    </style>
+</resources>

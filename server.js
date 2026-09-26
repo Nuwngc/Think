@@ -408,28 +408,53 @@ app.get('/manifest.webmanifest', (req, res) => {
   );
 });
 
-// App Android (APK từ PWABuilder) kiểm tra file này để mở toàn màn hình, không hiện thanh địa chỉ.
-// Cách 1: chép assetlinks.json vào thư mục data/.  Cách 2: đặt ANDROID_PACKAGE + ANDROID_SHA256 trong .env
-app.get('/.well-known/assetlinks.json', (req, res) => {
-  res.set('Cache-Control', 'no-cache');
+// App Android kiểm tra file này để mở toàn màn hình (không thanh địa chỉ) và nhận thông báo.
+// App Think có bong bóng chat (thư mục android/, file public/download/think.apk) đã được khai báo sẵn bên dưới.
+// APK tự làm bằng PWABuilder thì thêm: Cách 1: chép assetlinks.json vào thư mục data/.
+// Cách 2: đặt ANDROID_PACKAGE + ANDROID_SHA256 (nhiều mã cách nhau bằng dấu phẩy) trong .env
+const THINK_APP = {
+  package: 'com.nuwngc.think',
+  sha256: 'EA:58:D7:0C:09:C1:16:B8:B9:EE:D3:F7:84:83:B8:44:56:4E:09:A3:91:58:5E:CB:02:56:86:85:9B:83:0B:24',
+};
+const LINK_RELATION = ['delegate_permission/common.handle_all_urls'];
+
+function assetStatements() {
+  const statements = [];
   const file = path.join(DATA_DIR, 'assetlinks.json');
   if (fs.existsSync(file)) {
     try {
-      return res.json(JSON.parse(fs.readFileSync(file, 'utf8')));
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (Array.isArray(parsed)) statements.push(...parsed);
     } catch {
       console.warn('[apk] data/assetlinks.json không phải JSON hợp lệ. Hãy chép lại nguyên file từ PWABuilder.');
-      return res.status(500).json({ error: 'assetlinks.json không hợp lệ' });
     }
   }
   const pkg = (process.env.ANDROID_PACKAGE || '').trim();
-  const fingerprints = (process.env.ANDROID_SHA256 || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const fingerprints = (process.env.ANDROID_SHA256 || '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
   if (pkg && fingerprints.length) {
-    return res.json([{
-      relation: ['delegate_permission/common.handle_all_urls'],
-      target: { namespace: 'android_app', package_name: pkg, sha256_cert_fingerprints: fingerprints },
-    }]);
+    statements.push({ relation: LINK_RELATION, target: { namespace: 'android_app', package_name: pkg, sha256_cert_fingerprints: fingerprints } });
   }
-  res.status(404).json([]);
+  // Gộp theo tên gói để mỗi app chỉ có một khai báo, rồi thêm khóa ký của app Think
+  const byPackage = new Map();
+  for (const s of statements) {
+    const t = s && s.target;
+    if (!t || t.namespace !== 'android_app' || !t.package_name) continue;
+    const prev = byPackage.get(t.package_name) || new Set();
+    for (const f of t.sha256_cert_fingerprints || []) prev.add(String(f).toUpperCase());
+    byPackage.set(t.package_name, prev);
+  }
+  const mine = byPackage.get(THINK_APP.package) || new Set();
+  mine.add(THINK_APP.sha256);
+  byPackage.set(THINK_APP.package, mine);
+  return [...byPackage].map(([name, prints]) => ({
+    relation: LINK_RELATION,
+    target: { namespace: 'android_app', package_name: name, sha256_cert_fingerprints: [...prints] },
+  }));
+}
+
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.json(assetStatements());
 });
 
 // Máy chủ không giữ ổ đĩa (Render Free): ảnh chưa có trên máy thì tải từ Firebase về trước khi gửi
@@ -981,6 +1006,90 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
   });
   if (!sent) return res.status(400).json({ error: 'Chưa có thiết bị nào bật thông báo cho tài khoản này.' });
   res.json({ ok: true, sent });
+});
+
+/* ---------------- API: app Android (bong bóng chat, trả lời nhanh) ---------------- */
+
+// App Android mở web bằng Chrome, còn bong bóng chat và ô "Trả lời" trong thông báo là phần của app.
+// Hai phần không dùng chung đăng nhập, nên web cấp một mã dùng một lần để app tự đăng nhập theo.
+const APP_LINK_TTL = 2 * 60 * 1000;
+const appLinks = new Map(); // mã -> { userId, exp }
+
+app.post('/api/app/link', requireAuth, requireReady, (req, res) => {
+  const now = Date.now();
+  for (const [code, entry] of appLinks) if (entry.exp < now) appLinks.delete(code);
+  const code = crypto.randomBytes(24).toString('base64url');
+  appLinks.set(code, { userId: req.user.id, exp: now + APP_LINK_TTL });
+  res.json({ code, expiresIn: APP_LINK_TTL / 1000 });
+});
+
+app.post('/api/app/redeem', (req, res) => {
+  const key = `link:${req.ip || 'unknown'}`;
+  if (limiter.count(key) >= 20) return res.status(429).json({ error: 'Thử quá nhiều lần. Đợi 15 phút rồi thử lại.' });
+  const code = String(req.body?.code || '');
+  const entry = appLinks.get(code);
+  appLinks.delete(code);
+  if (!entry || entry.exp < Date.now()) {
+    limiter.hit(key);
+    return res.status(400).json({ error: 'Mã liên kết đã hết hạn. Mở app, vào Cá nhân và bấm "Bật bong bóng chat" lần nữa.' });
+  }
+  const user = get('SELECT * FROM users WHERE id = ?', entry.userId);
+  if (!user || user.disabled) return res.status(403).json({ error: 'Tài khoản này đã bị khóa.' });
+  const token = auth.createSession(user.id, 'App Android (bong bóng chat)');
+  res.json({ token, cookieName: COOKIE, maxAge: auth.SESSION_TTL, user: meUser(user) });
+});
+
+// Nội dung cho thông báo kiểu hội thoại của app: tên, ảnh từng người gửi và các tin chưa đọc
+app.get('/api/app/notification/:id', requireAuth, requireReady, (req, res) => {
+  const convId = Number(req.params.id);
+  const mem = membership(convId, req.user.id);
+  if (!mem) return res.status(404).json({ error: 'Không tìm thấy cuộc trò chuyện.' });
+  const conv = get('SELECT id, type, name FROM conversations WHERE id = ?', convId);
+  const isGroup = conv.type !== 'dm';
+  const peer = isGroup
+    ? null
+    : get(
+        `SELECT u.id, u.display_name, u.avatar FROM members o JOIN users u ON u.id = o.user_id
+          WHERE o.conversation_id = ? AND o.user_id <> ? LIMIT 1`,
+        convId,
+        req.user.id
+      );
+  const pick = (unreadOnly) =>
+    all(
+      `SELECT m.id, m.sender_id, m.text, m.image, m.image_purged, m.deleted, m.created_at, u.display_name, u.avatar
+         FROM messages m JOIN users u ON u.id = m.sender_id
+        WHERE m.conversation_id = ? AND m.kind <> 'system' ${unreadOnly ? 'AND m.id > ? AND m.sender_id <> ?' : ''}
+        ORDER BY m.id DESC LIMIT 8`,
+      ...(unreadOnly ? [convId, mem.last_read_id || 0, req.user.id] : [convId])
+    );
+  let rows = pick(true);
+  const unread = rows.length;
+  if (!rows.length) rows = pick(false).slice(0, 3);
+  const me = get('SELECT id, display_name, avatar FROM users WHERE id = ?', req.user.id);
+  res.json({
+    conversation: {
+      id: conv.id,
+      isGroup,
+      title: isGroup ? conv.name : peer ? peer.display_name : 'Think',
+      avatar: isGroup ? null : peer ? peer.avatar : null,
+    },
+    me: { id: me.id, name: me.display_name, avatar: me.avatar || null },
+    unread,
+    messages: rows.reverse().map((m) => {
+      const hasImage = Boolean(m.image || m.image_purged);
+      let text = m.text || '';
+      if (m.deleted) text = 'Tin nhắn đã bị thu hồi';
+      else if (hasImage) text = text ? `📷 ${text}` : '📷 Ảnh';
+      return {
+        id: m.id,
+        senderId: m.sender_id,
+        senderName: m.display_name,
+        senderAvatar: m.avatar || null,
+        text,
+        createdAt: m.created_at,
+      };
+    }),
+  });
 });
 
 /* ---------------- API: admin ---------------- */

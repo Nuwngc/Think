@@ -45,6 +45,23 @@
   const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const isTouch = () => window.matchMedia('(pointer: coarse)').matches;
+  const isAndroid = () => /android/i.test(navigator.userAgent);
+
+  // App Think cho Android mở web kèm ?app=android&v=<bản app>; bong bóng chat mở web kèm ?bubble=1
+  const NATIVE = window.ThinkApp || null; // cầu nối tới app, chỉ có trong bong bóng chat
+  const IN_BUBBLE = new URLSearchParams(location.search).get('bubble') === '1';
+  (() => {
+    const q = new URLSearchParams(location.search);
+    if (q.get('app') === 'android') store.set('android-app', q.get('v') || '1');
+    if (q.has('app') || q.has('v')) {
+      q.delete('app');
+      q.delete('v');
+      const rest = q.toString();
+      history.replaceState(history.state, '', location.pathname + (rest ? `?${rest}` : '') + location.hash);
+    }
+  })();
+  if (IN_BUBBLE) document.documentElement.classList.add('bubble-mode');
+  const inAndroidApp = () => !IN_BUBBLE && Boolean(store.get('android-app')) && isStandalone();
   const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* =========================================================
@@ -1790,6 +1807,11 @@ ${sections}
 
   // Tải một ảnh về máy (iPhone: mở bảng chia sẻ để lưu vào Ảnh)
   async function downloadImage(src) {
+    if (NATIVE && NATIVE.download) {
+      NATIVE.download(new URL(src, location.href).href);
+      toast('Đang tải ảnh về máy…');
+      return;
+    }
     try {
       const res = await fetch(src, { credentials: 'same-origin' });
       if (!res.ok) throw new Error('http');
@@ -2358,13 +2380,81 @@ ${sections}
   }
   function renderInstall() {
     const hint = $('#install-hint');
+    const apk = $('#apk-link');
+    apk.hidden = true;
     $('#install-btn').hidden = !state.installEvent;
+    if (inAndroidApp()) {
+      $('#install-btn').hidden = true;
+      hint.textContent = `Bạn đang dùng app Think cho Android (bản ${store.get('android-app')}).`;
+      checkAppUpdate();
+      return;
+    }
+    if (isAndroid() && !IN_BUBBLE && !NATIVE) {
+      $('#install-btn').hidden = true;
+      apk.hidden = false;
+      apk.textContent = '';
+      apk.append(icon('download'), 'Tải app Android');
+      hint.textContent = 'App Think cho Android: tin nhắn hiện thành bong bóng chat như Messenger, trả lời được ngay trong thông báo. Tải về, mở file để cài (nếu máy hỏi thì cho phép cài app từ Chrome).';
+      return;
+    }
     if (isStandalone()) hint.textContent = 'Bạn đang dùng bản đã cài trên máy.';
     else if (state.installEvent) hint.textContent = 'Cài để mở nhanh từ màn hình chính và nhận thông báo như app thường.';
     else if (isIOS()) hint.textContent = 'Trong Safari, bấm nút Chia sẻ rồi chọn "Thêm vào MH chính".';
     else hint.textContent = 'Mở menu của trình duyệt (nút ⋮) và chọn "Cài đặt ứng dụng" hoặc "Thêm vào màn hình chính".';
   }
   $('#install-btn').addEventListener('click', promptInstall);
+
+  // Bản app Android mới nhất nằm ở /download/version.json (đi kèm file think.apk)
+  let latestApp = null;
+  async function checkAppUpdate() {
+    try {
+      if (!latestApp) latestApp = await (await fetch('/download/version.json', { cache: 'no-store' })).json();
+    } catch {
+      return;
+    }
+    const mine = Number(store.get('android-app') || 0);
+    if (!latestApp || !(Number(latestApp.versionCode) > mine) || !inAndroidApp()) return;
+    const apk = $('#apk-link');
+    apk.hidden = false;
+    apk.textContent = '';
+    apk.append(icon('download'), `Cập nhật lên bản ${latestApp.versionName}`);
+    $('#install-hint').textContent = `Đã có app Think bản ${latestApp.versionName}. ${latestApp.notes || ''} Tải về rồi mở file để cài đè, không mất dữ liệu.`.trim();
+  }
+
+  /* ----- Bong bóng chat (app Android) ----- */
+  // Bấm nút thì web mở app kèm một mã dùng một lần, app dùng mã đó để tự đăng nhập cho bong bóng
+  // và ô Trả lời nhanh (hai phần này không dùng chung đăng nhập với Chrome).
+  // Mã được lấy sẵn trước khi bấm, vì Chrome chỉ cho mở app ngay trong lúc người dùng bấm.
+  let bubbleTimer = null;
+  async function renderBubblePanel() {
+    const panel = $('#bubble-panel');
+    clearTimeout(bubbleTimer);
+    panel.hidden = !inAndroidApp();
+    if (panel.hidden || !state.me) return;
+    const link = $('#bubble-link');
+    link.removeAttribute('href');
+    link.setAttribute('aria-disabled', 'true');
+    try {
+      const { code } = await api('/api/app/link', { method: 'POST', body: {} });
+      const fallback = `${location.origin}/download/think.apk`;
+      link.href = `intent://link?code=${encodeURIComponent(code)}#Intent;scheme=thinkchat;package=com.nuwngc.think;`
+        + `S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
+      link.removeAttribute('aria-disabled');
+    } catch (err) {
+      $('#bubble-status').textContent = err.message;
+    }
+    // Mã chỉ dùng được 2 phút: đổi mã mới trước khi hết hạn
+    bubbleTimer = setTimeout(() => { if (state.tab === 'me') renderBubblePanel(); }, 90_000);
+  }
+  $('#bubble-link').addEventListener('click', (e) => {
+    if (e.currentTarget.getAttribute('aria-disabled') === 'true') {
+      e.preventDefault();
+      toast('Đang chuẩn bị, bấm lại sau một giây nhé.');
+      return;
+    }
+    // Mã đã dùng: lấy mã mới cho lần bấm sau
+    setTimeout(() => { if (state.tab === 'me') renderBubblePanel(); }, 1500);
+  });
 
   /* =========================================================
      Tài khoản của tôi
@@ -2403,6 +2493,7 @@ ${sections}
     $('#sound-toggle').checked = state.sound;
     renderNotify();
     renderInstall();
+    renderBubblePanel();
   }
 
   $('#name-form').addEventListener('submit', (e) => {
@@ -3143,6 +3234,7 @@ ${sections}
       case 'download-image': downloadImage($('#lightbox img').src); break;
       case 'new-group': navigate('#/new-group', { replace: true }); break;
       case 'group-info': navigate('#/group'); break;
+      case 'open-app': if (NATIVE && NATIVE.openApp) NATIVE.openApp(location.hash || '#/'); break;
       case 'chat-title':
         if (state.convs.get(state.currentId)?.type === 'group') navigate('#/group');
         break;

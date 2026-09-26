@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Think</string>
+    <string name="channel_messages">Tin nhắn</string>
+    <string name="channel_messages_desc">Tin nhắn mới, hiện thành bong bóng chat nếu bạn cho phép</string>
+    <string name="channel_other">Thông báo khác</string>
+    <string name="channel_other_desc">Cảm xúc, thêm vào nhóm, bản cập nhật app</string>
+    <string name="asset_statements">[{\"relation\": [\"delegate_permission/common.handle_all_urls\"], \"target\": {\"namespace\": \"web\", \"site\": \"https://thinkchat.id.vn\"}}]</string>
+</resources>

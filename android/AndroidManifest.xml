@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App Think cho Android. Phiên bản app: sửa versionCode/versionName ở đây, rồi chạy android/build.sh -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.nuwngc.think"
+    android:versionCode="2"
+    android:versionName="2.0.0">
+
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Android 11+: phải khai báo thì mới thấy được Chrome và các trình duyệt khác -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:allowBackup="false"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="false"
+        android:theme="@style/Theme.Think.Launch">
+
+        <meta-data android:name="asset_statements" android:resource="@string/asset_statements" />
+
+        <!-- Mở web Think toàn màn hình bằng Chrome (Trusted Web Activity) -->
+        <activity
+            android:name=".LauncherActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.Think.Launch">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Bấm link thinkchat.id.vn ở app khác (Zalo, Messenger...) thì mở bằng app Think -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="thinkchat.id.vn" />
+            </intent-filter>
+        </activity>
+
+        <!-- Khung chat trong bong bóng -->
+        <activity
+            android:name=".BubbleActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.Think.Web"
+            android:allowEmbedded="true"
+            android:resizeableActivity="true"
+            android:documentLaunchMode="always"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density" />
+
+        <!-- Dự phòng khi máy không có trình duyệt nào -->
+        <activity
+            android:name=".WebAppActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.Think.Web"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density" />
+
+        <!-- Web gọi app bằng thinkchat://link?code=... để bật bong bóng chat -->
+        <activity
+            android:name=".LinkActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:theme="@style/Theme.Think.Dialog">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="thinkchat" android:host="link" />
+            </intent-filter>
+        </activity>
+
+        <!-- Chrome nhờ app xin quyền thông báo (Android 13+) -->
+        <activity
+            android:name=".PermissionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.Think.Invisible" />
+
+        <!-- Nút Trả lời / Đã đọc trong thông báo -->
+        <receiver android:name=".ReplyReceiver" android:exported="false" />
+
+        <!-- Chrome chuyển thông báo của web sang đây để app hiện (kèm bong bóng chat) -->
+        <service
+            android:name=".DelegationService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.support.customtabs.trusted.TRUSTED_WEB_ACTIVITY_SERVICE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.customtabs.trusted.SMALL_ICON"
+                android:resource="@drawable/ic_stat_think" />
+        </service>
+    </application>
+</manifest>

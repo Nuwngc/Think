@@ -11,6 +11,7 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - Thanh điều hướng dưới cùng: **Tin nhắn**, **Cá nhân** (đổi tên, mật khẩu, ảnh đại diện, thông báo, lưu trên máy) và **Quản trị** (chỉ admin thấy).
 - **Lưu trên máy người dùng**: tin nhắn và ảnh được giữ lại trên điện thoại, mở app là xem được ngay kể cả khi mất mạng hay máy chủ đang thức dậy. Tải lịch sử chat thành file, tải ảnh về máy.
 - **Bộ nhớ máy chủ**: thanh hiển thị dung lượng đã dùng, **tự dọn ảnh và tin nhắn cũ nhất khi sắp đầy**, dọn thủ công có xem trước.
+- **App Android có bong bóng chat** (Android 11+): tin nhắn mới hiện thành bong bóng nổi như Messenger, chạm vào để trả lời ngay; thông báo có ảnh từng người gửi, ô **Trả lời** và nút **Đã đọc**. Tải app ngay trên web (Cá nhân → Cài app lên máy).
 - **Trả lời tin nhắn** (chạm giữ → Trả lời, hoặc vuốt ngang tin nhắn) và **thả cảm xúc** ❤️ 😆 😮 😢 😡 👍, xem được ai đã thả.
 - Realtime: đang nhập…, đang hoạt động / hoạt động X phút trước, "Đã xem" (nhóm hiện ảnh người đã xem), thu hồi tin nhắn.
 - Thông báo đầy đủ:
@@ -183,7 +184,7 @@ Bấm **Create Web Service**. Trong tab **Logs**, thấy dòng `Firebase chưa c
 
 - Cập nhật code: `git push` là Render tự deploy lại, dữ liệu vẫn còn (nằm trên Firebase).
 - Quên mật khẩu admin: gói Free không có tab Shell. Thêm biến `RESET_ADMIN_PASSWORD` = mật khẩu mới → lưu (Render tự khởi động lại) → đăng nhập được thì **xóa biến đó đi**.
-- Làm APK (mục 7): dùng link onrender.com, điền `ANDROID_PACKAGE` và `ANDROID_SHA256` trong Environment thay cho file assetlinks.json.
+- App Android (mục 7): máy chủ đã tự khai báo app Think, không cần thêm biến nào. Tên miền riêng (vd `thinkchat.id.vn`): thêm ở **Settings → Custom Domains** của Render; đổi tên miền thì phải build lại app (mục 7).
 - Hạn mức Firestore miễn phí: 1 GiB dữ liệu, 50.000 lượt đọc, 20.000 lượt ghi mỗi ngày, dư sức cho một nhóm bạn. App tự tính giới hạn 900 MB và tự dọn ảnh cũ khi sắp đầy (mục 12).
 - Log báo `Chưa tạo Firestore Database`: làm lại bước 1.2. Báo `Khóa Firebase không hợp lệ`: dán lại đúng nội dung file `.json`.
 
@@ -200,7 +201,7 @@ Muốn đổi tên, ảnh đại diện, mật khẩu: bấm tab **Cá nhân** �
 
 | Thiết bị | Cách cài |
 |---|---|
-| Android (Chrome) | Mở link, bấm **Cài app** trên dải nhắc, hoặc menu ⋮ → **Cài đặt ứng dụng** |
+| Android | Mở link bằng Chrome → **Cá nhân → Cài app lên máy → Tải app Android** (có bong bóng chat, xem mục 7) |
 | iPhone / iPad (iOS 16.4+) | Mở bằng **Safari** → nút Chia sẻ → **Thêm vào MH chính**, rồi mở app từ màn hình chính |
 | Máy tính (Chrome/Edge) | Bấm biểu tượng cài đặt ở cuối thanh địa chỉ |
 
@@ -208,105 +209,65 @@ Sau khi cài, mở app → bấm **Bật thông báo** (dải nhắc ở đầu 
 
 Trên iPhone, thông báo **chỉ chạy trong app đã thêm vào màn hình chính**, không chạy trong tab Safari thường.
 
-**Muốn file APK để cài như app thường?** Xem mục 7.
+**App Android có bong bóng chat:** xem mục 7.
 
-## 7. Tạo file APK cho Android (chi tiết)
+## 7. App Think cho Android (bong bóng chat)
 
-File APK là một "vỏ" app (công nghệ Trusted Web Activity) mở web Think toàn màn hình bằng Chrome, nên **thông báo đẩy vẫn hoạt động** và app luôn chạy bản web mới nhất. Sửa tính năng rồi `git push` là app trên máy bạn bè tự cập nhật, **không cần làm lại APK**. Chỉ làm APK mới khi đổi link, tên app hoặc icon.
+App Think cho Android (thư mục `android/`, file cài `public/download/think.apk`) mở web Think toàn màn hình bằng Chrome, giống APK làm bằng PWABuilder, và có thêm:
 
-### Chuẩn bị
+- **Bong bóng chat** (Android 11 trở lên): tin nhắn mới hiện thành bong bóng nổi trên màn hình như Messenger. Chạm vào bong bóng là mở khung chat nhỏ, đọc và trả lời ngay, không cần mở app.
+- Thông báo kiểu hội thoại: tên và ảnh từng người gửi, các tin chưa đọc, ô **Trả lời** gõ ngay trong thông báo, nút **Đã đọc**.
+- Tự báo khi có bản app mới.
 
-- Một link HTTPS **cố định**: link Render dạng `https://ten-app.onrender.com` hoặc tên miền VPS. **Không** dùng link `trycloudflare.com` (đổi mỗi lần chạy lại, link đổi là APK hỏng).
-- Mở link đó bằng Chrome, đăng nhập thử một lần. Render Free đang ngủ thì cần khoảng 1 phút để dậy, PWABuilder phải đọc được trang mới tạo được gói.
-- Máy của bạn bè cần có **Chrome** (xem lưu ý về Huawei ở cuối mục).
+App vẫn chạy bản web mới nhất trên máy chủ: sửa tính năng rồi `git push` là app trên máy mọi người tự cập nhật. Chỉ cần cài lại app khi đổi tên miền, icon, hoặc có bản app mới.
 
-### Bước 1. Tạo gói trên PWABuilder
+### Cài app
 
-1. Mở **pwabuilder.com** (làm trên điện thoại hay máy tính đều được).
-2. Dán link của bạn vào ô, bấm **Start**. Đợi chấm điểm xong. Nếu báo thiếu vài mục như "screenshots" thì kệ, không ảnh hưởng tới APK.
-3. Bấm **Package For Stores**, chọn **Android**, rồi bấm **Generate Package**. Hiện ra bảng tùy chọn (Options).
+1. **Máy đang có app Think cũ làm bằng PWABuilder thì gỡ trước** (giữ lâu biểu tượng → Gỡ cài đặt). Hai bản ký bằng khóa khác nhau nên không cài đè được. Tin nhắn và đăng nhập nằm trong Chrome nên không mất.
+2. Mở `https://thinkchat.id.vn` bằng **Chrome**, vào **Cá nhân → Cài app lên máy → Tải app Android** (hoặc mở thẳng `https://thinkchat.id.vn/download/think.apk`).
+3. Mở file vừa tải. Android hỏi quyền **cài ứng dụng không rõ nguồn gốc**: bấm **Cài đặt**, bật quyền cho Chrome, quay lại rồi bấm **Cài đặt**. Nếu **Play Protect** cảnh báo: **Chi tiết → Vẫn cài đặt** (cảnh báo này hiện với mọi APK không tải từ Google Play).
+4. Mở app Think. Lần đầu có thể hiện dòng nhỏ báo app chạy bằng Chrome: bình thường.
 
-### Bước 2. Điền tùy chọn
+### Bật bong bóng chat (mỗi máy làm một lần)
 
-Tên các mục có thể hơi khác tùy phiên bản PWABuilder, mục nào không có trong bảng dưới thì để mặc định.
+1. Trong app: **Cá nhân → Thông báo → Bật thông báo** (nếu chưa bật).
+2. **Cá nhân → Bong bóng chat → Bật bong bóng chat**. App hiện hộp thoại và hướng dẫn tiếp:
+   - **Cho phép thông báo** (Android 13+).
+   - **Cho phép bong bóng**: trong trang cài đặt mở ra, chọn **Tất cả cuộc trò chuyện đều có thể hiện bong bóng**.
+   - **Máy Samsung**: vào thêm **Cài đặt → Thông báo → Cài đặt nâng cao → Thông báo nổi → Bong bóng**.
+3. Nhờ ai đó nhắn thử khi bạn đang ở màn hình chính: tin nhắn hiện thành bong bóng.
 
-| Mục | Điền |
-|---|---|
-| Package ID | `com.nuwngc.think` (chữ thường không dấu, số, dấu chấm). **Đặt một lần rồi giữ nguyên mãi mãi** |
-| App name | `Think` |
-| Launcher name | `Think` (tên dưới biểu tượng app) |
-| App version | `1.0.0` |
-| App version code | `1` |
-| Host, Start URL | để nguyên như PWABuilder tự điền (link của bạn và `/`) |
-| Display mode | `Standalone` |
-| Notification delegation | **Bật**, để thông báo hiện dưới tên app Think |
-| Signing key | **New**. Điền Key alias (vd `think`), họ tên, mật khẩu, và ghi lại mật khẩu |
+Bấm "Bật bong bóng chat" là web đưa cho app một mã dùng một lần để app tự đăng nhập cho bong bóng và ô Trả lời (hai phần này không dùng chung đăng nhập với Chrome). Đổi mật khẩu thì phải bấm lại nút này. Android 10 trở xuống không có bong bóng, nhưng vẫn trả lời được ngay trong thông báo.
 
-**Quan trọng:** Signing key mặc định là **None**, tức APK chưa ký nên **không cài được**. Phải chọn **New**.
+### Kiểm tra khi có trục trặc
 
-### Bước 3. Tải về và cất khóa ký
+- Mở `https://thinkchat.id.vn/.well-known/assetlinks.json`: phải có `com.nuwngc.think` và dãy `EA:58:D7:0C:…:0B:24` (khóa của app Think, máy chủ tự thêm). Dãy của APK PWABuilder cũ trong `ANDROID_SHA256` (nếu có) vẫn giữ được, không ảnh hưởng.
+- **Có thanh địa chỉ ở trên cùng** hoặc **đứng mãi ở logo**: kiểm tra dòng trên, cập nhật Chrome, rồi đóng hẳn app và mở lại. Vẫn bị thì vào **Cài đặt → Ứng dụng → Chrome → Bộ nhớ → Xóa bộ nhớ đệm**.
+- **Không hiện bong bóng mà chỉ có thông báo thường**: bấm lại "Bật bong bóng chat" để xem bước nào còn thiếu. Kéo thông báo xuống, bấm biểu tượng bong bóng ở góc thông báo cũng bật được cho từng cuộc trò chuyện.
+- **Bong bóng hiện màn hình đăng nhập**: chưa liên kết (hoặc vừa đổi mật khẩu). Bấm lại "Bật bong bóng chat" trong app.
+- **Máy không có Chrome** (vd Huawei đời mới): app mở bằng trình duyệt khác và không có bong bóng; nếu máy không có trình duyệt nào, app mở web bằng khung riêng nhưng không nhận thông báo đẩy.
 
-Bấm tải về, được một file zip. Giải nén ra:
+### Build lại app (dành cho chủ server)
 
-| File | Dùng để |
-|---|---|
-| `….apk` | cài lên điện thoại (gửi cho bạn bè) |
-| `….aab` | chỉ dùng nếu đưa lên Google Play |
-| `assetlinks.json` | khai báo app với máy chủ (bước 4) |
-| `signing.keystore` và `signing-key-info.txt` | khóa ký app, **cất thật kỹ** |
+Chỉ cần khi đổi tên miền (`android/src/com/nuwngc/think/Config.java`), icon, tên app, hoặc sửa phần Android. Không cần Android Studio: chạy trên Ubuntu/Debian (không chạy trên Termux).
 
-Cất `signing.keystore` và `signing-key-info.txt` vào chỗ an toàn (vd Google Drive riêng, **không** đưa lên GitHub). Mất khóa thì không làm được bản cập nhật cài đè lên app cũ, mọi người phải gỡ app rồi cài lại.
-
-### Bước 4. Khai báo app với máy chủ (assetlinks)
-
-Bước này để app mở **toàn màn hình, không có thanh địa chỉ**. Mở file `assetlinks.json` trong zip bằng một app xem văn bản, sẽ thấy dạng:
-
-```json
-[{"relation": ["delegate_permission/common.handle_all_urls"],
-  "target": {"namespace": "android_app", "package_name": "com.nuwngc.think",
-             "sha256_cert_fingerprints": ["AB:CD:EF:12:…:89"]}}]
+```bash
+sudo apt install aapt dalvik-exchange zipalign apksigner openjdk-17-jdk-headless
+# tăng android:versionCode (2 → 3) và android:versionName trong android/AndroidManifest.xml
+export THINK_KEYSTORE=/đường/dẫn/think-release.jks   # khóa ký app, cất riêng, KHÔNG đưa lên GitHub
+export THINK_KS_PASS='mật khẩu khóa ký'
+export THINK_RELEASE_NOTES='Mô tả ngắn bản mới'
+./android/build.sh
+git add public/download && git commit -m "App Android bản mới" && git push
 ```
 
-**Trên Render:** vào service → **Environment** → thêm 2 biến, rồi lưu (Render tự khởi động lại):
+Script tạo `public/download/think.apk` và `public/download/version.json`. Sau khi deploy, app trên máy mọi người tự báo "Có app Think bản mới", chạm vào để tải và cài đè (không mất dữ liệu).
 
-| Tên | Giá trị |
-|---|---|
-| `ANDROID_PACKAGE` | `com.nuwngc.think` (đúng như `package_name`) |
-| `ANDROID_SHA256` | nguyên dãy `AB:CD:EF:…` trong `sha256_cert_fingerprints`, giữ cả dấu hai chấm |
+**Khóa ký (`think-release.jks` + mật khẩu) phải giữ mãi.** Mất khóa thì bản mới không cài đè được, mọi người phải gỡ app rồi cài lại. Khi đổi sang khóa khác, nhớ sửa dãy SHA-256 trong `THINK_APP` ở `server.js` (script in dãy này ra ở cuối).
 
-Không chép file vào thư mục `data/` trên Render: ổ đĩa Render Free bị xóa mỗi lần khởi động lại, file sẽ mất.
+### Cách khác: tự làm APK bằng PWABuilder
 
-**Trên VPS:** chép file thành `data/assetlinks.json` (mở file, sao chép toàn bộ, chạy `nano data/assetlinks.json`, dán vào, lưu). Hoặc dùng 2 biến trên trong file `.env`.
-
-Kiểm tra: mở `https://ten-app.onrender.com/.well-known/assetlinks.json`, thấy đúng package và dãy SHA256 là được.
-
-### Bước 5. Cài lên điện thoại
-
-1. Gửi file `.apk` qua Zalo, Messenger hoặc Google Drive (gửi dạng **file**, không phải ảnh).
-2. Mở file. Android hỏi quyền **cài ứng dụng không rõ nguồn gốc**: bấm **Cài đặt**, bật quyền cho app đang mở file (Zalo, Files…), quay lại rồi bấm **Cài đặt**.
-3. Nếu **Play Protect** cảnh báo ứng dụng chưa được xác minh: bấm **Chi tiết** rồi **Vẫn cài đặt**. Cảnh báo này hiện với mọi APK không tải từ Google Play.
-4. Mở app Think, đăng nhập, rồi vào **Cá nhân → Thông báo → Bật thông báo**. Android 13 trở lên sẽ hỏi quyền thông báo, chọn **Cho phép**.
-
-### Bước 6. Kiểm tra
-
-- App mở **toàn màn hình, không có thanh địa chỉ**: thành công.
-- Lần đầu mở có thể hiện dòng nhỏ báo app chạy bằng Chrome: bình thường.
-- **Có thanh địa chỉ ở trên cùng:** hoặc bước 4 chưa đúng, hoặc lúc mở app Render đang ngủ nên xác minh bị lỡ. Mở link bằng Chrome cho máy chủ dậy, đóng hẳn app (vuốt khỏi đa nhiệm) rồi mở lại. Vẫn còn thì kiểm tra lại 2 biến ở bước 4, sau đó vào **Cài đặt → Ứng dụng → Chrome → Bộ nhớ → Xóa bộ nhớ đệm** và mở lại app.
-
-### Làm bản APK mới (đổi link, tên hoặc icon)
-
-Làm lại bước 1 và 2, nhưng:
-- **Giữ nguyên** Package ID.
-- Tăng **App version code** (1 → 2) và **App version** (1.0.0 → 1.0.1).
-- Signing key chọn **Mine**: tải lên `signing.keystore`, điền alias và các mật khẩu trong `signing-key-info.txt`.
-
-Bạn bè mở file APK mới là cài đè lên bản cũ, không mất đăng nhập hay tin nhắn đã lưu.
-
-### Lưu ý
-
-- **Máy không có dịch vụ Google** (Huawei đời mới như P50 Pro): không có Chrome thì APK không mở toàn màn hình được và **không nhận thông báo khi đóng app**. Nên dùng bản web: Chrome hoặc trình duyệt Huawei → menu → **Thêm vào màn hình chính**.
-- **iPhone** không cài được APK: dùng Safari → nút Chia sẻ → **Thêm vào MH chính** (mục 6).
-- **Đưa lên Google Play** (không bắt buộc): dùng file `.aab`, cần tài khoản nhà phát triển Google Play (phí đăng ký một lần). Google sẽ ký lại app, nên phải thêm dãy SHA-256 trong Play Console (App integrity) vào `ANDROID_SHA256`, nhiều dãy cách nhau bằng dấu phẩy.
+Vẫn dùng được nếu không cần bong bóng chat: pwabuilder.com → dán link → **Package For Stores → Android**, Package ID khác `com.nuwngc.think` (vd `com.nuwngc.think.web`), **Signing key chọn New**, tải zip về, rồi thêm `ANDROID_PACKAGE` / `ANDROID_SHA256` (lấy trong `assetlinks.json` của zip) vào biến môi trường của Render. Máy chủ sẽ gộp khai báo đó với khai báo của app Think.
 
 ## 8. Quên mật khẩu admin
 
@@ -398,6 +359,8 @@ src/push.js          Thông báo đẩy (Web Push / VAPID)
 scripts/admin.js     Công cụ dòng lệnh cho chủ server
 scripts/tunnel.js    Mở link HTTPS tạm thời (npm run share / npm run tunnel)
 public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu trên máy), sw.js (service worker)
+public/download/     File cài app Android (think.apk) và version.json
+android/             Mã app Android: mở web bằng Chrome, bong bóng chat, trả lời trong thông báo (build.sh để build)
 deploy/              Mẫu cấu hình Caddy và Nginx
 ```
 

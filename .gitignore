@@ -5,3 +5,8 @@ data/
 # Khóa Firebase: tuyệt đối không đưa lên GitHub
 *firebase-adminsdk*.json
 service-account*.json
+# App Android: file tạm khi build, và khóa ký (tuyệt đối không đưa lên GitHub)
+android/build/
+android/.sdk/
+*.jks
+*.keystore

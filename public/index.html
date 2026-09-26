@@ -36,6 +36,7 @@
     <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 12.2c0 4-3.6 7.2-8 7.2-1.2 0-2.3-.2-3.3-.6L4 20l1.2-3.6C4.4 15.2 4 13.8 4 12.2 4 8.2 7.6 5 12 5s8 3.2 8 7.2Z"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 10.5 5 5 5-5"/><path d="M5 20h14"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 4.1 2.6 17.6A2 2 0 0 0 4.3 20.6h15.4a2 2 0 0 0 1.7-3L13.7 4.1a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4.5"/><path d="M12 17.2h.01"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-7 7"/><path d="M10 20H4v-6"/><path d="M4 20l7-7"/></symbol>
     <symbol id="i-group" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18.2 14.8c1.8.8 3 2.5 3.3 5.2"/></symbol>
   </svg>
 
@@ -62,6 +63,7 @@
         <button class="btn btn-pill btn-block" type="submit">Đăng nhập</button>
       </form>
       <p class="auth-note">Chưa có tài khoản? Nhờ admin của nhóm tạo cho bạn.</p>
+      <p class="auth-note bubble-only">Bong bóng chat chưa được liên kết. Mở app Think, vào Cá nhân, bấm "Bật bong bóng chat" để khỏi phải đăng nhập ở đây.</p>
     </div>
   </main>
 
@@ -173,10 +175,22 @@
           </div>
         </div>
 
+        <div class="panel" id="bubble-panel" hidden>
+          <h3>Bong bóng chat</h3>
+          <p class="hint">Tin nhắn mới hiện thành bong bóng nổi trên màn hình giống Messenger. Chạm vào bong bóng để đọc và trả lời ngay, không cần mở app. Trong thông báo cũng có ô Trả lời nhanh.</p>
+          <div class="btn-row">
+            <a class="btn btn-primary" id="bubble-link" role="button" aria-disabled="true"><svg class="ic"><use href="#i-chat"/></svg>Bật bong bóng chat</a>
+          </div>
+          <p class="hint" id="bubble-status" aria-live="polite">Cần Android 11 trở lên. Bấm nút xong, app sẽ mở phần cài đặt: chọn cho phép mọi cuộc trò chuyện hiện bong bóng.</p>
+        </div>
+
         <div class="panel">
           <h3>Cài app lên máy</h3>
           <p class="hint" id="install-hint"></p>
-          <div><button class="btn" type="button" id="install-btn" hidden>Cài app</button></div>
+          <div class="btn-row">
+            <button class="btn" type="button" id="install-btn" hidden>Cài app</button>
+            <a class="btn btn-primary" id="apk-link" href="/download/think.apk" download="Think.apk" hidden><svg class="ic"><use href="#i-download"/></svg>Tải app Android</a>
+          </div>
         </div>
 
         <div class="panel">
@@ -302,6 +316,7 @@
             <p id="chat-status"></p>
           </div>
           <button class="icon-btn" type="button" id="group-info-btn" data-action="group-info" aria-label="Thông tin nhóm" hidden><svg class="ic"><use href="#i-info"/></svg></button>
+          <button class="icon-btn bubble-only" type="button" data-action="open-app" aria-label="Mở trong app Think"><svg class="ic"><use href="#i-expand"/></svg></button>
         </header>
         <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions"></div>
         <div class="chat-foot">
