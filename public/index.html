@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Think</title>
+  <meta name="description" content="Chat riêng cho hội bạn">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16211d" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/favicon-48.png" sizes="48x48" type="image/png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Think">
+  <link rel="preload" href="/fonts/be-vietnam-pro-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/be-vietnam-pro-vietnamese-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/socket.io/socket.io.min.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-new" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.6 3.1 8.1 7.5 9.5 4.4-1.4 7.5-4.9 7.5-9.5V6Z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="9" r="1.8"/><path d="m21 15-4.2-4.2a1.5 1.5 0 0 0-2.1 0L6 19.5"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="m5.5 11.5 6.5-6.5 6.5 6.5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><path d="M12 7.6h.01"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-group" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18.2 14.8c1.8.8 3 2.5 3.3 5.2"/></symbol>
+  </svg>
+
+  <div id="view-boot" class="screen boot">
+    <img src="/icons/icon-192.png" alt="" width="64" height="64">
+    <p id="boot-hint" class="boot-hint" role="status" hidden>Máy chủ đang thức dậy, chờ khoảng 1 phút nhé…</p>
+  </div>
+
+  <!-- Đăng nhập: nền đen chữ trắng -->
+  <main id="view-login" class="screen auth auth-login" hidden>
+    <div class="auth-brand"><h1 class="wordmark" data-appname>Think</h1></div>
+    <div class="auth-main">
+      <form id="login-form" class="auth-form" novalidate>
+        <div class="float">
+          <input id="login-username" name="username" placeholder=" " autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+          <label for="login-username" class="float-label">Tên đăng nhập</label>
+        </div>
+        <div class="float has-toggle">
+          <input id="login-password" name="password" type="password" placeholder=" " autocomplete="current-password" required>
+          <label for="login-password" class="float-label">Mật khẩu</label>
+          <button type="button" class="pw-toggle" aria-label="Hiện mật khẩu"><svg class="ic"><use href="#i-eye"/></svg></button>
+        </div>
+        <p class="form-error" role="alert" hidden></p>
+        <button class="btn btn-pill btn-block" type="submit">Đăng nhập</button>
+      </form>
+      <p class="auth-note">Chưa có tài khoản? Nhờ admin của nhóm tạo cho bạn.</p>
+    </div>
+  </main>
+
+  <!-- Đổi mật khẩu lần đầu -->
+  <main id="view-force" class="screen auth" hidden>
+    <div class="auth-brand"><p class="wordmark" data-appname>Think</p></div>
+    <div class="auth-main">
+      <h1 class="auth-headline auth-headline-sm">Đặt mật khẩu của riêng bạn</h1>
+      <p class="auth-lead">Mật khẩu admin gửi chỉ dùng cho lần đầu. Đặt mật khẩu mới để bắt đầu chat.</p>
+      <form id="force-form" class="auth-form" novalidate>
+        <input class="visually-hidden" name="username" autocomplete="username" tabindex="-1" aria-hidden="true">
+        <div class="float has-toggle">
+          <input id="force-new" name="newPassword" type="password" placeholder=" " autocomplete="new-password" required>
+          <label for="force-new" class="float-label">Mật khẩu mới</label>
+          <button type="button" class="pw-toggle" aria-label="Hiện mật khẩu"><svg class="ic"><use href="#i-eye"/></svg></button>
+        </div>
+        <div class="float">
+          <input id="force-confirm" name="confirm" type="password" placeholder=" " autocomplete="new-password" required>
+          <label for="force-confirm" class="float-label">Nhập lại mật khẩu mới</label>
+        </div>
+        <p class="hint">Ít nhất 6 ký tự.</p>
+        <p class="form-error" role="alert" hidden></p>
+        <button class="btn btn-pill btn-block" type="submit">Lưu mật khẩu</button>
+      </form>
+      <button class="btn btn-pill-outline btn-block" type="button" data-action="logout">Đăng xuất</button>
+    </div>
+  </main>
+
+  <!-- Màn hình chính -->
+  <div id="view-main" class="screen main" hidden>
+    <aside class="sidebar" aria-label="Danh sách cuộc trò chuyện">
+      <header class="side-head">
+        <button class="me-btn" type="button" data-action="settings" aria-label="Tài khoản của bạn"><span class="avatar" id="me-avatar"></span></button>
+        <h1 class="side-title" data-appname>Think</h1>
+        <button class="icon-btn" type="button" id="admin-btn" data-action="admin" aria-label="Quản lý tài khoản" hidden><svg class="ic"><use href="#i-shield"/></svg></button>
+        <button class="icon-btn" type="button" data-action="new" aria-label="Tin nhắn mới"><svg class="ic"><use href="#i-new"/></svg></button>
+      </header>
+      <div id="banner"></div>
+      <div class="search">
+        <input id="conv-search" type="search" placeholder="Tìm cuộc trò chuyện" aria-label="Tìm cuộc trò chuyện" autocomplete="off">
+      </div>
+      <ul id="conv-list" class="conv-list"></ul>
+      <p id="conn-status" class="conn-status" role="status" hidden>Đang kết nối lại… Nếu app vừa ngủ, máy chủ cần khoảng 1 phút để thức dậy.</p>
+    </aside>
+
+    <section class="chat" aria-label="Cuộc trò chuyện">
+      <div id="chat-empty" class="chat-empty">
+        <p>Chọn một cuộc trò chuyện, hoặc bấm nút bút chì để nhắn riêng cho một người.</p>
+      </div>
+      <div id="chat-pane" class="chat-pane" hidden>
+        <header class="chat-head">
+          <button class="icon-btn back-btn" type="button" data-action="back" aria-label="Quay lại"><svg class="ic"><use href="#i-back"/></svg></button>
+          <span class="avatar" id="chat-avatar"></span>
+          <div class="chat-title" data-action="chat-title">
+            <h2 id="chat-name"></h2>
+            <p id="chat-status"></p>
+          </div>
+          <button class="icon-btn" type="button" id="group-info-btn" data-action="group-info" aria-label="Thông tin nhóm" hidden><svg class="ic"><use href="#i-info"/></svg></button>
+        </header>
+        <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions"></div>
+        <div class="chat-foot">
+          <button id="jump-btn" class="jump-btn" type="button" hidden>Có tin nhắn mới</button>
+          <p id="typing" class="typing" hidden></p>
+          <div id="reply-bar" class="reply-bar" hidden></div>
+          <form id="composer" class="composer" autocomplete="off">
+            <button type="button" class="icon-btn" data-action="pick-image" aria-label="Gửi ảnh"><svg class="ic"><use href="#i-image"/></svg></button>
+            <input id="image-input" type="file" accept="image/*" multiple hidden>
+            <textarea id="composer-input" rows="1" placeholder="Nhắn tin" aria-label="Nội dung tin nhắn" maxlength="4000"></textarea>
+            <button type="submit" class="send-btn" aria-label="Gửi"><svg class="ic"><use href="#i-send"/></svg></button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Các bảng trượt -->
+  <div id="sheet-layer" class="sheet-layer" hidden>
+    <div class="sheet-backdrop" data-action="close-sheet"></div>
+
+    <section id="sheet-settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="settings-title">Tài khoản</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <div class="profile">
+          <button class="avatar-edit" type="button" data-action="pick-avatar" aria-label="Đổi ảnh đại diện">
+            <span class="avatar avatar-xl" id="settings-avatar"></span>
+            <span class="avatar-edit-tag">Đổi ảnh</span>
+          </button>
+          <input id="avatar-input" type="file" accept="image/*" hidden>
+          <p class="profile-username" id="settings-username"></p>
+          <button class="link-btn" type="button" id="remove-avatar" data-action="remove-avatar" hidden>Gỡ ảnh đại diện</button>
+        </div>
+
+        <form id="name-form" class="panel" novalidate>
+          <h3>Tên hiển thị</h3>
+          <div class="inline">
+            <input name="displayName" maxlength="40" aria-label="Tên hiển thị" required>
+            <button class="btn btn-primary" type="submit">Lưu tên</button>
+          </div>
+          <p class="hint">Mọi người trong nhóm sẽ thấy tên này.</p>
+        </form>
+
+        <form id="password-form" class="panel" novalidate>
+          <h3>Đổi mật khẩu</h3>
+          <input class="visually-hidden" name="username" autocomplete="username" tabindex="-1" aria-hidden="true">
+          <label class="field"><span>Mật khẩu hiện tại</span>
+            <span class="pw">
+              <input name="currentPassword" type="password" autocomplete="current-password" required>
+              <button type="button" class="pw-toggle" aria-label="Hiện mật khẩu"><svg class="ic"><use href="#i-eye"/></svg></button>
+            </span>
+          </label>
+          <label class="field"><span>Mật khẩu mới</span>
+            <input name="newPassword" type="password" autocomplete="new-password" required>
+          </label>
+          <label class="field"><span>Nhập lại mật khẩu mới</span>
+            <input name="confirm" type="password" autocomplete="new-password" required>
+          </label>
+          <p class="form-error" role="alert" hidden></p>
+          <div><button class="btn btn-primary" type="submit">Đổi mật khẩu</button></div>
+          <p class="hint">Các thiết bị khác đang đăng nhập tài khoản này sẽ bị đăng xuất.</p>
+        </form>
+
+        <div class="panel">
+          <h3>Thông báo</h3>
+          <p class="hint" id="notify-status"></p>
+          <div class="btn-row">
+            <button class="btn" type="button" id="notify-toggle">Bật thông báo</button>
+            <button class="btn btn-quiet" type="button" id="notify-test" hidden>Gửi thử</button>
+          </div>
+          <label class="switch-row"><span>Phát âm báo khi đang mở app</span><input type="checkbox" id="sound-toggle" class="switch"></label>
+        </div>
+
+        <div class="panel">
+          <h3>Cài app lên máy</h3>
+          <p class="hint" id="install-hint"></p>
+          <div><button class="btn" type="button" id="install-btn" hidden>Cài app</button></div>
+        </div>
+
+        <div class="panel">
+          <button class="btn btn-danger btn-block" type="button" data-action="logout">Đăng xuất</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="sheet-new" class="sheet" role="dialog" aria-modal="true" aria-labelledby="new-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="new-title">Tin nhắn mới</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <button class="person new-group-row" type="button" data-action="new-group">
+          <span class="avatar is-group"><svg class="ic"><use href="#i-group"/></svg></span>
+          <span class="person-main"><span class="person-name">Tạo nhóm mới</span><span class="person-sub">Chat riêng với vài người bạn chọn</span></span>
+        </button>
+        <input id="people-search" class="search-input" type="search" placeholder="Tìm theo tên" aria-label="Tìm bạn bè" autocomplete="off">
+        <ul id="people-list" class="people-list"></ul>
+      </div>
+    </section>
+
+    <section id="sheet-admin" class="sheet" role="dialog" aria-modal="true" aria-labelledby="admin-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="admin-title">Quản lý tài khoản</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <form id="create-form" class="panel" novalidate>
+          <h3>Tạo tài khoản mới</h3>
+          <label class="field"><span>Tên đăng nhập</span>
+            <input name="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="vd: minh.tran" required>
+          </label>
+          <label class="field"><span>Tên hiển thị</span>
+            <input name="displayName" maxlength="40" placeholder="vd: Minh Trần">
+          </label>
+          <label class="field"><span>Mật khẩu tạm</span>
+            <input name="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Để trống để app tự tạo">
+          </label>
+          <label class="check-row"><input type="checkbox" name="admin"><span>Cho làm admin</span></label>
+          <p class="form-error" role="alert" hidden></p>
+          <div><button class="btn btn-primary" type="submit">Tạo tài khoản</button></div>
+        </form>
+        <div id="credential" class="credential" hidden></div>
+        <div class="panel">
+          <h3 id="member-heading">Thành viên</h3>
+          <ul id="admin-list" class="admin-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="sheet-new-group" class="sheet" role="dialog" aria-modal="true" aria-labelledby="new-group-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="new-group-title">Nhóm mới</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <form id="new-group-form" class="panel" novalidate>
+          <label class="field"><span>Tên nhóm</span>
+            <input name="groupName" maxlength="60" placeholder="vd: Đi Đà Lạt tháng 10" autocomplete="off">
+          </label>
+          <p class="hint">Để trống thì app tự đặt theo tên thành viên.</p>
+        </form>
+        <div class="panel">
+          <h3 id="new-group-count">Chọn thành viên</h3>
+          <input id="new-group-search" class="search-input" type="search" placeholder="Tìm theo tên" aria-label="Tìm người để thêm vào nhóm" autocomplete="off">
+          <ul id="new-group-list" class="people-list"></ul>
+        </div>
+      </div>
+      <div class="sheet-foot">
+        <button class="btn btn-primary btn-block" type="button" id="new-group-create" disabled>Chọn ít nhất 2 người</button>
+      </div>
+    </section>
+
+    <section id="sheet-group" class="sheet" role="dialog" aria-modal="true" aria-labelledby="group-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="group-title">Thông tin nhóm</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <div class="profile" id="group-profile"></div>
+        <form id="group-name-form" class="panel" novalidate>
+          <h3>Tên nhóm</h3>
+          <div class="inline">
+            <input name="groupName" maxlength="60" aria-label="Tên nhóm" required>
+            <button class="btn btn-primary" type="submit">Lưu tên</button>
+          </div>
+        </form>
+        <div class="panel">
+          <div class="panel-row">
+            <h3 id="group-member-heading">Thành viên</h3>
+            <button class="btn btn-sm" type="button" id="group-add-toggle">Thêm người</button>
+          </div>
+          <div id="group-add" class="group-add" hidden>
+            <input id="group-add-search" class="search-input" type="search" placeholder="Tìm người để thêm" aria-label="Tìm người để thêm vào nhóm" autocomplete="off">
+            <ul id="group-add-list" class="people-list"></ul>
+            <button class="btn btn-primary btn-block" type="button" id="group-add-confirm" disabled>Chọn người để thêm</button>
+          </div>
+          <ul id="group-members" class="people-list"></ul>
+        </div>
+        <div class="panel">
+          <button class="btn btn-danger btn-block" type="button" id="group-leave">Rời nhóm</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="lightbox" class="lightbox" hidden>
+    <img alt="Ảnh trong cuộc trò chuyện">
+    <button class="icon-btn" type="button" data-action="close-lightbox" aria-label="Đóng ảnh"><svg class="ic"><use href="#i-close"/></svg></button>
+  </div>
+  <div id="menu-layer" class="menu-layer" hidden><div id="msg-menu" class="menu" role="menu"></div></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+</body>
+</html>

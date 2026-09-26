@@ -1,0 +1,7 @@
+node_modules/
+data/
+.env
+*.log
+# Khóa Firebase: tuyệt đối không đưa lên GitHub
+*firebase-adminsdk*.json
+service-account*.json

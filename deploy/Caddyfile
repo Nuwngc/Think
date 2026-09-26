@@ -1,0 +1,6 @@
+# Caddy tự xin và gia hạn chứng chỉ HTTPS miễn phí.
+# Thay chat.tenmien.com bằng tên miền của bạn (đã trỏ bản ghi A về IP của VPS).
+chat.tenmien.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000
+}
