@@ -19,6 +19,7 @@
   <link rel="preload" href="/fonts/be-vietnam-pro-vietnamese-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/app.css">
   <script src="/socket.io/socket.io.min.js" defer></script>
+  <script src="/localdb.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -32,6 +33,9 @@
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><path d="M12 7.6h.01"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 12.2c0 4-3.6 7.2-8 7.2-1.2 0-2.3-.2-3.3-.6L4 20l1.2-3.6C4.4 15.2 4 13.8 4 12.2 4 8.2 7.6 5 12 5s8 3.2 8 7.2Z"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 10.5 5 5 5-5"/><path d="M5 20h14"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 4.1 2.6 17.6A2 2 0 0 0 4.3 20.6h15.4a2 2 0 0 0 1.7-3L13.7 4.1a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4.5"/><path d="M12 17.2h.01"/></symbol>
     <symbol id="i-group" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18.2 14.8c1.8.8 3 2.5 3.3 5.2"/></symbol>
   </svg>
 
@@ -88,67 +92,32 @@
 
   <!-- Màn hình chính -->
   <div id="view-main" class="screen main" hidden>
-    <aside class="sidebar" aria-label="Danh sách cuộc trò chuyện">
-      <header class="side-head">
-        <button class="me-btn" type="button" data-action="settings" aria-label="Tài khoản của bạn"><span class="avatar" id="me-avatar"></span></button>
-        <h1 class="side-title" data-appname>Think</h1>
-        <button class="icon-btn" type="button" id="admin-btn" data-action="admin" aria-label="Quản lý tài khoản" hidden><svg class="ic"><use href="#i-shield"/></svg></button>
-        <button class="icon-btn" type="button" data-action="new" aria-label="Tin nhắn mới"><svg class="ic"><use href="#i-new"/></svg></button>
-      </header>
-      <div id="banner"></div>
-      <div class="search">
-        <input id="conv-search" type="search" placeholder="Tìm cuộc trò chuyện" aria-label="Tìm cuộc trò chuyện" autocomplete="off">
-      </div>
-      <ul id="conv-list" class="conv-list"></ul>
-      <p id="conn-status" class="conn-status" role="status" hidden>Đang kết nối lại… Nếu app vừa ngủ, máy chủ cần khoảng 1 phút để thức dậy.</p>
-    </aside>
-
-    <section class="chat" aria-label="Cuộc trò chuyện">
-      <div id="chat-empty" class="chat-empty">
-        <p>Chọn một cuộc trò chuyện, hoặc bấm nút bút chì để nhắn riêng cho một người.</p>
-      </div>
-      <div id="chat-pane" class="chat-pane" hidden>
-        <header class="chat-head">
-          <button class="icon-btn back-btn" type="button" data-action="back" aria-label="Quay lại"><svg class="ic"><use href="#i-back"/></svg></button>
-          <span class="avatar" id="chat-avatar"></span>
-          <div class="chat-title" data-action="chat-title">
-            <h2 id="chat-name"></h2>
-            <p id="chat-status"></p>
-          </div>
-          <button class="icon-btn" type="button" id="group-info-btn" data-action="group-info" aria-label="Thông tin nhóm" hidden><svg class="ic"><use href="#i-info"/></svg></button>
+    <aside class="sidebar">
+      <!-- Tab Tin nhắn -->
+      <section id="page-chats" class="tab-page" aria-label="Tin nhắn">
+        <header class="side-head">
+          <h1 class="side-title" data-appname>Think</h1>
+          <button class="icon-btn" type="button" data-action="new" aria-label="Tin nhắn mới"><svg class="ic"><use href="#i-new"/></svg></button>
         </header>
-        <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions"></div>
-        <div class="chat-foot">
-          <button id="jump-btn" class="jump-btn" type="button" hidden>Có tin nhắn mới</button>
-          <p id="typing" class="typing" hidden></p>
-          <div id="reply-bar" class="reply-bar" hidden></div>
-          <form id="composer" class="composer" autocomplete="off">
-            <button type="button" class="icon-btn" data-action="pick-image" aria-label="Gửi ảnh"><svg class="ic"><use href="#i-image"/></svg></button>
-            <input id="image-input" type="file" accept="image/*" multiple hidden>
-            <textarea id="composer-input" rows="1" placeholder="Nhắn tin" aria-label="Nội dung tin nhắn" maxlength="4000"></textarea>
-            <button type="submit" class="send-btn" aria-label="Gửi"><svg class="ic"><use href="#i-send"/></svg></button>
-          </form>
+        <div id="banner"></div>
+        <div class="search">
+          <input id="conv-search" type="search" placeholder="Tìm cuộc trò chuyện" aria-label="Tìm cuộc trò chuyện" autocomplete="off">
         </div>
-      </div>
-    </section>
-  </div>
+        <ul id="conv-list" class="conv-list"></ul>
+        <p id="conn-status" class="conn-status" role="status" hidden>Đang kết nối lại… Nếu app vừa ngủ, máy chủ cần khoảng 1 phút để thức dậy.</p>
+      </section>
 
-  <!-- Các bảng trượt -->
-  <div id="sheet-layer" class="sheet-layer" hidden>
-    <div class="sheet-backdrop" data-action="close-sheet"></div>
-
-    <section id="sheet-settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1" hidden>
-      <header class="sheet-head">
-        <h2 id="settings-title">Tài khoản</h2>
-        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
-      </header>
-      <div class="sheet-body">
+      <!-- Tab Cá nhân -->
+      <section id="page-me" class="tab-page" aria-label="Cá nhân" hidden>
+        <header class="side-head"><h1 class="side-title">Cá nhân</h1></header>
+        <div class="page-body">
         <div class="profile">
           <button class="avatar-edit" type="button" data-action="pick-avatar" aria-label="Đổi ảnh đại diện">
             <span class="avatar avatar-xl" id="settings-avatar"></span>
             <span class="avatar-edit-tag">Đổi ảnh</span>
           </button>
           <input id="avatar-input" type="file" accept="image/*" hidden>
+          <p class="profile-title" id="me-name"></p>
           <p class="profile-username" id="settings-username"></p>
           <button class="link-btn" type="button" id="remove-avatar" data-action="remove-avatar" hidden>Gỡ ảnh đại diện</button>
         </div>
@@ -192,6 +161,18 @@
           <label class="switch-row"><span>Phát âm báo khi đang mở app</span><input type="checkbox" id="sound-toggle" class="switch"></label>
         </div>
 
+        <div class="panel" id="local-panel">
+          <h3>Lưu trên máy này</h3>
+          <p class="hint">Máy chủ có thể tự xóa tin nhắn và ảnh cũ khi sắp đầy. Bản lưu trên máy giúp bạn vẫn xem lại được, kể cả lúc mất mạng hay máy chủ đang thức dậy.</p>
+          <label class="switch-row"><span>Lưu tin nhắn và ảnh trên máy</span><input type="checkbox" id="local-toggle" class="switch"></label>
+          <label class="switch-row"><span>Tự tải ảnh mới về máy</span><input type="checkbox" id="local-images-toggle" class="switch"></label>
+          <p class="local-stats" id="local-stats" aria-live="polite"></p>
+          <div class="btn-row">
+            <button class="btn" type="button" id="local-export"><svg class="ic"><use href="#i-download"/></svg>Tải lịch sử chat</button>
+            <button class="btn btn-quiet btn-danger-quiet" type="button" id="local-clear">Xóa dữ liệu trên máy</button>
+          </div>
+        </div>
+
         <div class="panel">
           <h3>Cài app lên máy</h3>
           <p class="hint" id="install-hint"></p>
@@ -202,29 +183,17 @@
           <button class="btn btn-danger btn-block" type="button" data-action="logout">Đăng xuất</button>
         </div>
       </div>
-    </section>
+      </section>
 
-    <section id="sheet-new" class="sheet" role="dialog" aria-modal="true" aria-labelledby="new-title" tabindex="-1" hidden>
-      <header class="sheet-head">
-        <h2 id="new-title">Tin nhắn mới</h2>
-        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
-      </header>
-      <div class="sheet-body">
-        <button class="person new-group-row" type="button" data-action="new-group">
-          <span class="avatar is-group"><svg class="ic"><use href="#i-group"/></svg></span>
-          <span class="person-main"><span class="person-name">Tạo nhóm mới</span><span class="person-sub">Chat riêng với vài người bạn chọn</span></span>
-        </button>
-        <input id="people-search" class="search-input" type="search" placeholder="Tìm theo tên" aria-label="Tìm bạn bè" autocomplete="off">
-        <ul id="people-list" class="people-list"></ul>
-      </div>
-    </section>
-
-    <section id="sheet-admin" class="sheet" role="dialog" aria-modal="true" aria-labelledby="admin-title" tabindex="-1" hidden>
-      <header class="sheet-head">
-        <h2 id="admin-title">Quản lý tài khoản</h2>
-        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
-      </header>
-      <div class="sheet-body">
+      <!-- Tab Quản trị (chỉ admin) -->
+      <section id="page-admin" class="tab-page" aria-label="Quản trị" hidden>
+        <header class="side-head"><h1 class="side-title">Quản trị</h1></header>
+        <div class="seg" role="tablist" aria-label="Mục quản trị">
+          <button class="seg-btn" type="button" role="tab" id="seg-accounts" data-seg="accounts" aria-selected="true" aria-controls="admin-accounts">Tài khoản</button>
+          <button class="seg-btn" type="button" role="tab" id="seg-storage" data-seg="storage" aria-selected="false" aria-controls="admin-storage" tabindex="-1">Bộ nhớ máy chủ</button>
+        </div>
+        <div class="page-body" id="admin-accounts" role="tabpanel" aria-labelledby="seg-accounts">
+          <div id="storage-alert"></div>
         <form id="create-form" class="panel" novalidate>
           <h3>Tạo tài khoản mới</h3>
           <label class="field"><span>Tên đăng nhập</span>
@@ -245,6 +214,127 @@
           <h3 id="member-heading">Thành viên</h3>
           <ul id="admin-list" class="admin-list"></ul>
         </div>
+      </div>
+        <div class="page-body" id="admin-storage" role="tabpanel" aria-labelledby="seg-storage" hidden>
+          <section class="panel storage-card" id="storage-card" aria-labelledby="storage-title">
+            <div class="panel-row">
+              <h3 id="storage-title">Bộ nhớ máy chủ</h3>
+              <button class="btn btn-sm btn-quiet" type="button" id="storage-refresh">Làm mới</button>
+            </div>
+            <div id="storage-view"><p class="hint">Đang tải…</p></div>
+          </section>
+
+          <form id="clean-settings" class="panel" novalidate>
+            <h3>Tự dọn khi sắp đầy</h3>
+            <label class="switch-row"><span>Tự xóa ảnh và tin nhắn cũ nhất khi bộ nhớ sắp đầy</span><input type="checkbox" name="autoClean" class="switch"></label>
+            <div class="field-row">
+              <label class="field"><span>Bắt đầu dọn khi đạt</span>
+                <select name="cleanAt">
+                  <option value="80">80%</option><option value="85">85%</option><option value="90">90%</option><option value="95">95%</option>
+                </select>
+              </label>
+              <label class="field"><span>Dọn cho đến khi còn</span>
+                <select name="cleanTo">
+                  <option value="50">50%</option><option value="60">60%</option><option value="70">70%</option><option value="75">75%</option><option value="80">80%</option>
+                </select>
+              </label>
+            </div>
+            <label class="field"><span>Giới hạn dung lượng (MB)</span>
+              <input name="limitMb" type="number" inputmode="numeric" min="50" step="10" placeholder="Mặc định">
+            </label>
+            <p class="hint" id="limit-hint"></p>
+            <p class="form-error" role="alert" hidden></p>
+            <div><button class="btn btn-primary" type="submit">Lưu cài đặt</button></div>
+          </form>
+
+          <form id="clean-form" class="panel" novalidate>
+            <h3>Dọn thủ công</h3>
+            <div class="field-row">
+              <label class="field"><span>Xóa</span>
+                <select name="kind">
+                  <option value="images">Ảnh</option>
+                  <option value="messages">Tin nhắn</option>
+                </select>
+              </label>
+              <label class="field"><span>Cũ hơn</span>
+                <select name="olderThanDays">
+                  <option value="7">7 ngày</option><option value="30" selected>30 ngày</option><option value="90">3 tháng</option>
+                  <option value="180">6 tháng</option><option value="365">1 năm</option><option value="0">Tất cả</option>
+                </select>
+              </label>
+            </div>
+            <div id="clean-preview" class="clean-preview" aria-live="polite" hidden></div>
+            <div class="btn-row">
+              <button class="btn" type="submit" id="clean-check">Kiểm tra</button>
+              <button class="btn btn-danger" type="button" id="clean-run" hidden>Xóa ngay</button>
+            </div>
+            <p class="hint">Xóa ảnh: tin nhắn vẫn còn, chỉ ảnh bị xóa khỏi máy chủ. Xóa tin nhắn: tin mới nhất của mỗi cuộc trò chuyện luôn được giữ. Ai bật "Lưu trên máy" vẫn xem lại được phần đã lưu trên điện thoại của mình.</p>
+          </form>
+        </div>
+      </section>
+
+      <nav class="tabbar" aria-label="Điều hướng chính">
+        <button class="tab" type="button" data-tab="chats" aria-label="Tin nhắn">
+          <span class="tab-icon"><svg class="ic"><use href="#i-chat"/></svg><span class="tab-badge" id="tab-badge" hidden></span></span>
+          <span class="tab-label">Tin nhắn</span>
+        </button>
+        <button class="tab" type="button" data-tab="me" aria-label="Cá nhân">
+          <span class="tab-icon"><span class="avatar" id="tab-avatar"></span></span>
+          <span class="tab-label">Cá nhân</span>
+        </button>
+        <button class="tab" type="button" data-tab="admin" id="tab-admin" aria-label="Quản trị" hidden>
+          <span class="tab-icon"><svg class="ic"><use href="#i-shield"/></svg></span>
+          <span class="tab-label">Quản trị</span>
+        </button>
+      </nav>
+    </aside>
+
+    <section class="chat" aria-label="Cuộc trò chuyện">
+      <div id="chat-empty" class="chat-empty">
+        <p>Chọn một cuộc trò chuyện, hoặc bấm nút bút chì để nhắn riêng cho một người.</p>
+      </div>
+      <div id="chat-pane" class="chat-pane" hidden>
+        <header class="chat-head">
+          <button class="icon-btn back-btn" type="button" data-action="back" aria-label="Quay lại"><svg class="ic"><use href="#i-back"/></svg></button>
+          <span class="avatar" id="chat-avatar"></span>
+          <div class="chat-title" data-action="chat-title">
+            <h2 id="chat-name"></h2>
+            <p id="chat-status"></p>
+          </div>
+          <button class="icon-btn" type="button" id="group-info-btn" data-action="group-info" aria-label="Thông tin nhóm" hidden><svg class="ic"><use href="#i-info"/></svg></button>
+        </header>
+        <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions"></div>
+        <div class="chat-foot">
+          <button id="jump-btn" class="jump-btn" type="button" hidden>Có tin nhắn mới</button>
+          <p id="typing" class="typing" hidden></p>
+          <div id="reply-bar" class="reply-bar" hidden></div>
+          <form id="composer" class="composer" autocomplete="off">
+            <button type="button" class="icon-btn" data-action="pick-image" aria-label="Gửi ảnh"><svg class="ic"><use href="#i-image"/></svg></button>
+            <input id="image-input" type="file" accept="image/*" multiple hidden>
+            <textarea id="composer-input" rows="1" placeholder="Nhắn tin" aria-label="Nội dung tin nhắn" maxlength="4000"></textarea>
+            <button type="submit" class="send-btn" aria-label="Gửi"><svg class="ic"><use href="#i-send"/></svg></button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Các bảng trượt -->
+  <div id="sheet-layer" class="sheet-layer" hidden>
+    <div class="sheet-backdrop" data-action="close-sheet"></div>
+
+    <section id="sheet-new" class="sheet" role="dialog" aria-modal="true" aria-labelledby="new-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="new-title">Tin nhắn mới</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <button class="person new-group-row" type="button" data-action="new-group">
+          <span class="avatar is-group"><svg class="ic"><use href="#i-group"/></svg></span>
+          <span class="person-main"><span class="person-name">Tạo nhóm mới</span><span class="person-sub">Chat riêng với vài người bạn chọn</span></span>
+        </button>
+        <input id="people-search" class="search-input" type="search" placeholder="Tìm theo tên" aria-label="Tìm bạn bè" autocomplete="off">
+        <ul id="people-list" class="people-list"></ul>
       </div>
     </section>
 
@@ -306,7 +396,10 @@
 
   <div id="lightbox" class="lightbox" hidden>
     <img alt="Ảnh trong cuộc trò chuyện">
-    <button class="icon-btn" type="button" data-action="close-lightbox" aria-label="Đóng ảnh"><svg class="ic"><use href="#i-close"/></svg></button>
+    <div class="lightbox-actions">
+      <button class="icon-btn" type="button" data-action="download-image" aria-label="Tải ảnh về máy"><svg class="ic"><use href="#i-download"/></svg></button>
+      <button class="icon-btn" type="button" data-action="close-lightbox" aria-label="Đóng ảnh"><svg class="ic"><use href="#i-close"/></svg></button>
+    </div>
   </div>
   <div id="menu-layer" class="menu-layer" hidden><div id="msg-menu" class="menu" role="menu"></div></div>
   <div id="toasts" class="toasts" aria-live="polite"></div>

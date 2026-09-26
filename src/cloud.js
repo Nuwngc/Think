@@ -24,6 +24,7 @@ let lastKey = null;
 let lastRun = 0;
 let running = null;
 let slot = null;
+let slots = {};              // dung lượng từng ô sao lưu trên Firestore: { A: {chunks, size}, B: {...} }
 const pending = new Set();   // các lượt lưu/xóa file đang chạy
 const fetching = new Map();  // file đang được tải về
 const misses = new Map();    // file không có trên Firestore (nhớ 10 phút)
@@ -101,7 +102,11 @@ async function restoreAll() {
   const dbFile = path.join(DATA_DIR, 'chat.db');
   try {
     const meta = await col('meta').doc('db').get();
-    if (meta.exists) slot = meta.get('slot');
+    if (meta.exists) {
+      const info = meta.data();
+      slot = info.slot;
+      slots = info.slots || { [info.slot]: { chunks: info.chunks, size: info.size } };
+    }
     if (fs.existsSync(dbFile)) {
       // Trên máy đã có database (vd chạy trên Termux có bật Firebase): giữ bản trên máy
       console.log('☁️  Đã có dữ liệu trên máy, giữ nguyên và tự sao lưu lên Firebase khi có thay đổi.');
@@ -147,9 +152,14 @@ async function doBackup() {
     const gz = zlib.gzipSync(fs.readFileSync(tmp), { level: 9 });
     const next = slot === 'A' ? 'B' : 'A'; // ghi vào ô còn lại rồi mới chuyển, lỗi giữa chừng không hỏng bản cũ
     const chunks = await writeChunks(col('dbchunks'), next, gz);
-    await col('meta').doc('db').set({ slot: next, chunks, size: gz.length, updatedAt: Date.now() });
+    const before = (slots[next] && slots[next].chunks) || 0;
+    const nextSlots = { ...slots, [next]: { chunks, size: gz.length } };
+    await col('meta').doc('db').set({ slot: next, chunks, size: gz.length, updatedAt: Date.now(), slots: nextSlots });
     slot = next;
+    slots = nextSlots;
     lastKey = key;
+    // Bản mới ít mảnh hơn bản cũ trong ô này: xóa các mảnh thừa cho khỏi tốn chỗ
+    for (let i = chunks; i < before; i++) await col('dbchunks').doc(`${next}#${i}`).delete().catch(() => {});
   } catch (err) {
     console.warn('☁️  Sao lưu lên Firebase lỗi, sẽ thử lại:', explain(err));
     throw err;
@@ -231,4 +241,18 @@ function fetchFile(rel) {
   return job;
 }
 
-module.exports = { init, enabled, restoreAll, attach, backupNow, flush, saveFile, removeFile, fetchFile, explain };
+// Dung lượng các bản sao lưu database đang chiếm trên Firestore (2 ô A/B)
+function backupBytes() {
+  const sizes = Object.values(slots).map((x) => (x && x.size) || 0);
+  if (!sizes.length) return 0;
+  return sizes.length === 1 ? sizes[0] * 2 : sizes.reduce((a, b) => a + b, 0);
+}
+
+// Dung lượng một file trên Firestore (dùng khi chưa có bản trên máy chủ)
+async function fileSize(rel) {
+  if (!firestore) return 0;
+  const meta = await col('files').doc(fileId(rel)).get();
+  return meta.exists ? meta.get('size') || 0 : 0;
+}
+
+module.exports = { init, enabled, restoreAll, attach, backupNow, flush, saveFile, removeFile, fetchFile, explain, backupBytes, fileSize };

@@ -8,6 +8,9 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - Mỗi người tự đổi được: tên hiển thị, mật khẩu, ảnh đại diện.
 - Phòng chung cho cả nhóm, nhắn riêng 1-1, và **nhóm chat riêng** tự tạo (đặt tên, thêm/xóa người, rời nhóm, có trưởng nhóm).
 - Gửi ảnh (tự nén trên máy trước khi gửi), dán ảnh bằng Ctrl+V trên máy tính.
+- Thanh điều hướng dưới cùng: **Tin nhắn**, **Cá nhân** (đổi tên, mật khẩu, ảnh đại diện, thông báo, lưu trên máy) và **Quản trị** (chỉ admin thấy).
+- **Lưu trên máy người dùng**: tin nhắn và ảnh được giữ lại trên điện thoại, mở app là xem được ngay kể cả khi mất mạng hay máy chủ đang thức dậy. Tải lịch sử chat thành file, tải ảnh về máy.
+- **Bộ nhớ máy chủ**: thanh hiển thị dung lượng đã dùng, **tự dọn ảnh và tin nhắn cũ nhất khi sắp đầy**, dọn thủ công có xem trước.
 - **Trả lời tin nhắn** (chạm giữ → Trả lời, hoặc vuốt ngang tin nhắn) và **thả cảm xúc** ❤️ 😆 😮 😢 😡 👍, xem được ai đã thả.
 - Realtime: đang nhập…, đang hoạt động / hoạt động X phút trước, "Đã xem" (nhóm hiện ảnh người đã xem), thu hồi tin nhắn.
 - Thông báo đầy đủ:
@@ -181,17 +184,17 @@ Bấm **Create Web Service**. Trong tab **Logs**, thấy dòng `Firebase chưa c
 - Cập nhật code: `git push` là Render tự deploy lại, dữ liệu vẫn còn (nằm trên Firebase).
 - Quên mật khẩu admin: gói Free không có tab Shell. Thêm biến `RESET_ADMIN_PASSWORD` = mật khẩu mới → lưu (Render tự khởi động lại) → đăng nhập được thì **xóa biến đó đi**.
 - Làm APK (mục 7): dùng link onrender.com, điền `ANDROID_PACKAGE` và `ANDROID_SHA256` trong Environment thay cho file assetlinks.json.
-- Hạn mức Firestore miễn phí: 1 GiB dữ liệu, 50.000 lượt đọc, 20.000 lượt ghi mỗi ngày, dư sức cho một nhóm bạn.
+- Hạn mức Firestore miễn phí: 1 GiB dữ liệu, 50.000 lượt đọc, 20.000 lượt ghi mỗi ngày, dư sức cho một nhóm bạn. App tự tính giới hạn 900 MB và tự dọn ảnh cũ khi sắp đầy (mục 12).
 - Log báo `Chưa tạo Firestore Database`: làm lại bước 1.2. Báo `Khóa Firebase không hợp lệ`: dán lại đúng nội dung file `.json`.
 
 ## 5. Lần đầu sử dụng
 
 1. Đăng nhập bằng tài khoản admin in ra ở log, đặt mật khẩu mới.
-2. Bấm biểu tượng cái khiên ở góc trên → **Tạo tài khoản mới** cho từng người.
+2. Bấm tab **Quản trị** ở thanh dưới cùng → mục **Tài khoản** → **Tạo tài khoản mới** cho từng người.
    Để trống ô mật khẩu tạm thì app tự tạo. Bấm **Sao chép** hoặc **Chia sẻ** để gửi thông tin qua Zalo/Messenger.
 3. Bạn bè đăng nhập bằng mật khẩu tạm, app bắt đặt mật khẩu riêng rồi mới vào chat.
 
-Muốn đổi tên, ảnh đại diện, mật khẩu: bấm vào ảnh đại diện của mình ở góc trên bên trái.
+Muốn đổi tên, ảnh đại diện, mật khẩu: bấm tab **Cá nhân** ở thanh dưới cùng.
 
 ## 6. Cài app và bật thông báo
 
@@ -201,33 +204,109 @@ Muốn đổi tên, ảnh đại diện, mật khẩu: bấm vào ảnh đại d
 | iPhone / iPad (iOS 16.4+) | Mở bằng **Safari** → nút Chia sẻ → **Thêm vào MH chính**, rồi mở app từ màn hình chính |
 | Máy tính (Chrome/Edge) | Bấm biểu tượng cài đặt ở cuối thanh địa chỉ |
 
-Sau khi cài, mở app → bấm **Bật thông báo** (dải nhắc ở đầu danh sách, hoặc trong Tài khoản → Thông báo). Bấm **Gửi thử** để kiểm tra.
+Sau khi cài, mở app → bấm **Bật thông báo** (dải nhắc ở đầu danh sách, hoặc trong tab **Cá nhân → Thông báo**). Bấm **Gửi thử** để kiểm tra.
 
 Trên iPhone, thông báo **chỉ chạy trong app đã thêm vào màn hình chính**, không chạy trong tab Safari thường.
 
 **Muốn file APK để cài như app thường?** Xem mục 7.
 
-## 7. Tạo file APK cho Android
+## 7. Tạo file APK cho Android (chi tiết)
 
-File APK là "vỏ" mở web Think toàn màn hình như app thường (công nghệ Trusted Web Activity chạy bằng Chrome), nên **thông báo đẩy vẫn hoạt động**. Sửa code web thì **không cần** làm lại APK, chỉ làm lại khi đổi tên miền, tên app hoặc icon.
+File APK là một "vỏ" app (công nghệ Trusted Web Activity) mở web Think toàn màn hình bằng Chrome, nên **thông báo đẩy vẫn hoạt động** và app luôn chạy bản web mới nhất. Sửa tính năng rồi `git push` là app trên máy bạn bè tự cập nhật, **không cần làm lại APK**. Chỉ làm APK mới khi đổi link, tên app hoặc icon.
 
-**Điều kiện:** web phải chạy ở một địa chỉ HTTPS **cố định** (VPS + tên miền, xem mục 3). Link `trycloudflare.com` đổi mỗi lần chạy lại nên không làm APK được: link đổi là APK hỏng.
+### Chuẩn bị
 
-1. Mở **pwabuilder.com** (trên điện thoại hay máy tính đều được), dán địa chỉ web, vd `https://chat.tenmien.com`, bấm Start.
-2. Chọn đóng gói cho **Android** rồi tạo gói (Generate Package).
-3. Trong phần tùy chọn:
-   - Package ID: đặt dạng `com.tenban.think` (chỉ chữ thường không dấu, số, dấu chấm).
-   - **Signing key: chọn New.** Mặc định là None (APK chưa ký, không cài được). Điền tên và mật khẩu cho khóa.
-4. Tải file zip về và giải nén. Bên trong có:
-   - file `.apk` để cài lên điện thoại,
-   - `assetlinks.json` để đưa lên server,
-   - file khóa `.keystore` và thông tin khóa: **cất kỹ**, cần khi muốn làm bản APK mới mà không bắt mọi người gỡ app.
-5. Đưa `assetlinks.json` lên server: chép vào thư mục `data/` của project, thành `data/assetlinks.json`. Không cần khởi động lại.
-   Trên VPS cách nhanh nhất: mở file đó, sao chép toàn bộ nội dung, chạy `nano data/assetlinks.json`, dán vào rồi lưu.
-   Kiểm tra: mở `https://chat.tenmien.com/.well-known/assetlinks.json` thấy nội dung là được.
-6. Gửi file `.apk` cho bạn bè qua Zalo hoặc Google Drive. Khi cài, điện thoại hỏi quyền cài ứng dụng không rõ nguồn gốc thì cho phép; Play Protect cảnh báo thì chọn "Vẫn cài đặt".
+- Một link HTTPS **cố định**: link Render dạng `https://ten-app.onrender.com` hoặc tên miền VPS. **Không** dùng link `trycloudflare.com` (đổi mỗi lần chạy lại, link đổi là APK hỏng).
+- Mở link đó bằng Chrome, đăng nhập thử một lần. Render Free đang ngủ thì cần khoảng 1 phút để dậy, PWABuilder phải đọc được trang mới tạo được gói.
+- Máy của bạn bè cần có **Chrome** (xem lưu ý về Huawei ở cuối mục).
 
-Lần đầu mở app có thể hiện dòng nhỏ báo đang chạy bằng Chrome, đó là bình thường. Nếu app hiện **thanh địa chỉ** ở trên cùng nghĩa là `assetlinks.json` chưa đúng: kiểm tra lại bước 5.
+### Bước 1. Tạo gói trên PWABuilder
+
+1. Mở **pwabuilder.com** (làm trên điện thoại hay máy tính đều được).
+2. Dán link của bạn vào ô, bấm **Start**. Đợi chấm điểm xong. Nếu báo thiếu vài mục như "screenshots" thì kệ, không ảnh hưởng tới APK.
+3. Bấm **Package For Stores**, chọn **Android**, rồi bấm **Generate Package**. Hiện ra bảng tùy chọn (Options).
+
+### Bước 2. Điền tùy chọn
+
+Tên các mục có thể hơi khác tùy phiên bản PWABuilder, mục nào không có trong bảng dưới thì để mặc định.
+
+| Mục | Điền |
+|---|---|
+| Package ID | `com.nuwngc.think` (chữ thường không dấu, số, dấu chấm). **Đặt một lần rồi giữ nguyên mãi mãi** |
+| App name | `Think` |
+| Launcher name | `Think` (tên dưới biểu tượng app) |
+| App version | `1.0.0` |
+| App version code | `1` |
+| Host, Start URL | để nguyên như PWABuilder tự điền (link của bạn và `/`) |
+| Display mode | `Standalone` |
+| Notification delegation | **Bật**, để thông báo hiện dưới tên app Think |
+| Signing key | **New**. Điền Key alias (vd `think`), họ tên, mật khẩu, và ghi lại mật khẩu |
+
+**Quan trọng:** Signing key mặc định là **None**, tức APK chưa ký nên **không cài được**. Phải chọn **New**.
+
+### Bước 3. Tải về và cất khóa ký
+
+Bấm tải về, được một file zip. Giải nén ra:
+
+| File | Dùng để |
+|---|---|
+| `….apk` | cài lên điện thoại (gửi cho bạn bè) |
+| `….aab` | chỉ dùng nếu đưa lên Google Play |
+| `assetlinks.json` | khai báo app với máy chủ (bước 4) |
+| `signing.keystore` và `signing-key-info.txt` | khóa ký app, **cất thật kỹ** |
+
+Cất `signing.keystore` và `signing-key-info.txt` vào chỗ an toàn (vd Google Drive riêng, **không** đưa lên GitHub). Mất khóa thì không làm được bản cập nhật cài đè lên app cũ, mọi người phải gỡ app rồi cài lại.
+
+### Bước 4. Khai báo app với máy chủ (assetlinks)
+
+Bước này để app mở **toàn màn hình, không có thanh địa chỉ**. Mở file `assetlinks.json` trong zip bằng một app xem văn bản, sẽ thấy dạng:
+
+```json
+[{"relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {"namespace": "android_app", "package_name": "com.nuwngc.think",
+             "sha256_cert_fingerprints": ["AB:CD:EF:12:…:89"]}}]
+```
+
+**Trên Render:** vào service → **Environment** → thêm 2 biến, rồi lưu (Render tự khởi động lại):
+
+| Tên | Giá trị |
+|---|---|
+| `ANDROID_PACKAGE` | `com.nuwngc.think` (đúng như `package_name`) |
+| `ANDROID_SHA256` | nguyên dãy `AB:CD:EF:…` trong `sha256_cert_fingerprints`, giữ cả dấu hai chấm |
+
+Không chép file vào thư mục `data/` trên Render: ổ đĩa Render Free bị xóa mỗi lần khởi động lại, file sẽ mất.
+
+**Trên VPS:** chép file thành `data/assetlinks.json` (mở file, sao chép toàn bộ, chạy `nano data/assetlinks.json`, dán vào, lưu). Hoặc dùng 2 biến trên trong file `.env`.
+
+Kiểm tra: mở `https://ten-app.onrender.com/.well-known/assetlinks.json`, thấy đúng package và dãy SHA256 là được.
+
+### Bước 5. Cài lên điện thoại
+
+1. Gửi file `.apk` qua Zalo, Messenger hoặc Google Drive (gửi dạng **file**, không phải ảnh).
+2. Mở file. Android hỏi quyền **cài ứng dụng không rõ nguồn gốc**: bấm **Cài đặt**, bật quyền cho app đang mở file (Zalo, Files…), quay lại rồi bấm **Cài đặt**.
+3. Nếu **Play Protect** cảnh báo ứng dụng chưa được xác minh: bấm **Chi tiết** rồi **Vẫn cài đặt**. Cảnh báo này hiện với mọi APK không tải từ Google Play.
+4. Mở app Think, đăng nhập, rồi vào **Cá nhân → Thông báo → Bật thông báo**. Android 13 trở lên sẽ hỏi quyền thông báo, chọn **Cho phép**.
+
+### Bước 6. Kiểm tra
+
+- App mở **toàn màn hình, không có thanh địa chỉ**: thành công.
+- Lần đầu mở có thể hiện dòng nhỏ báo app chạy bằng Chrome: bình thường.
+- **Có thanh địa chỉ ở trên cùng:** hoặc bước 4 chưa đúng, hoặc lúc mở app Render đang ngủ nên xác minh bị lỡ. Mở link bằng Chrome cho máy chủ dậy, đóng hẳn app (vuốt khỏi đa nhiệm) rồi mở lại. Vẫn còn thì kiểm tra lại 2 biến ở bước 4, sau đó vào **Cài đặt → Ứng dụng → Chrome → Bộ nhớ → Xóa bộ nhớ đệm** và mở lại app.
+
+### Làm bản APK mới (đổi link, tên hoặc icon)
+
+Làm lại bước 1 và 2, nhưng:
+- **Giữ nguyên** Package ID.
+- Tăng **App version code** (1 → 2) và **App version** (1.0.0 → 1.0.1).
+- Signing key chọn **Mine**: tải lên `signing.keystore`, điền alias và các mật khẩu trong `signing-key-info.txt`.
+
+Bạn bè mở file APK mới là cài đè lên bản cũ, không mất đăng nhập hay tin nhắn đã lưu.
+
+### Lưu ý
+
+- **Máy không có dịch vụ Google** (Huawei đời mới như P50 Pro): không có Chrome thì APK không mở toàn màn hình được và **không nhận thông báo khi đóng app**. Nên dùng bản web: Chrome hoặc trình duyệt Huawei → menu → **Thêm vào màn hình chính**.
+- **iPhone** không cài được APK: dùng Safari → nút Chia sẻ → **Thêm vào MH chính** (mục 6).
+- **Đưa lên Google Play** (không bắt buộc): dùng file `.aab`, cần tài khoản nhà phát triển Google Play (phí đăng ký một lần). Google sẽ ký lại app, nên phải thêm dãy SHA-256 trong Play Console (App integrity) vào `ANDROID_SHA256`, nhiều dãy cách nhau bằng dấu phẩy.
 
 ## 8. Quên mật khẩu admin
 
@@ -269,6 +348,7 @@ git pull && npm install --omit=dev && pm2 restart think-chat
 | `TRUST_PROXY` | Đặt `1` nếu chạy sau proxy ở máy khác | tin proxy cùng máy |
 | `ANDROID_PACKAGE`, `ANDROID_SHA256` | Thay cho file `data/assetlinks.json` khi làm APK | trống |
 | `FIREBASE_SERVICE_ACCOUNT` | Nội dung file khóa Firebase, bật sao lưu lên Firestore (mục 4) | trống = không dùng |
+| `STORAGE_LIMIT_MB` | Giới hạn bộ nhớ máy chủ mặc định (admin vẫn đổi được trong app) | 900 khi có Firebase, còn lại theo ổ đĩa |
 | `RESET_ADMIN_PASSWORD` | Đặt lại mật khẩu admin khi khởi động (xóa đi sau khi dùng) | trống |
 | `FIREBASE_PREFIX` | Tiền tố tên bảng trên Firestore, đổi nếu chạy nhiều app chung một project | `think` |
 
@@ -282,7 +362,28 @@ Màu sắc nằm ở đầu file `public/app.css` (biến `--jade`, `--turmeric`
 - **Lỗi database trên Termux**: chuyển project ra khỏi `/sdcard`, để trong thư mục home (`~`).
 - **cloudflared báo `failed to dial to edge with quic` hoặc link chết**: dùng `npm run share` / `npm run tunnel` thay cho lệnh cloudflared tự gõ (mục 2). Muốn xem log đầy đủ: `TUNNEL_DEBUG=1 npm run tunnel`.
 - **Cổng đã có người dùng (EADDRINUSE)**: đổi `PORT` trong `.env`.
+- **Mở app thấy tin nhắn nhưng không gửi được, có dòng "đang xem bản lưu trên máy"**: máy chủ đang thức dậy hoặc mất mạng. App tự kết nối lại sau vài giây, không cần làm gì.
 - **App APK có thanh địa chỉ ở trên**: `assetlinks.json` thiếu hoặc sai (mục 7, bước 5). Sửa xong thì xóa dữ liệu Chrome của trang web đó trên điện thoại rồi mở lại app.
+
+## 12. Bộ nhớ máy chủ và lưu trên máy
+
+**Lưu trên máy (mọi người, mặc định bật)**: tab **Cá nhân → Lưu trên máy này**.
+
+- Tin nhắn được lưu trong trình duyệt của điện thoại. Ảnh đã xem, ảnh mình gửi và ảnh mới được giữ trong bộ nhớ đệm.
+- Mở app là thấy ngay tin nhắn, kể cả khi **Render đang thức dậy** hoặc **mất mạng**. Kết nối lại được thì app tự đồng bộ.
+- Máy chủ dọn tin hoặc ảnh cũ thì bản trên máy **vẫn còn**. Ai chưa lưu sẽ thấy dòng "Ảnh đã được dọn khỏi máy chủ".
+- **Tải lịch sử chat**: tải toàn bộ tin đã lưu thành một file `.html`, mở bằng trình duyệt nào cũng đọc được.
+- **Tải ảnh về máy**: mở ảnh, bấm nút tải ở góc trên (hoặc chạm giữ ảnh → Tải ảnh về máy). Trên iPhone sẽ mở bảng chia sẻ để lưu vào Ảnh.
+- Dữ liệu nằm trong trình duyệt của từng máy. Xóa dữ liệu Chrome hoặc gỡ app là mất. Mỗi tài khoản có kho riêng, người khác đăng nhập trên cùng máy không xem được.
+- **Tắt** hoặc **Xóa dữ liệu trên máy**: xóa sạch tin và ảnh đã lưu trên máy đó.
+
+**Bộ nhớ máy chủ (chỉ admin)**: tab **Quản trị → Bộ nhớ máy chủ**.
+
+- Thanh hiển thị phần trăm đã dùng và bảng chia theo loại: ảnh trong tin nhắn, tin nhắn, ảnh đại diện.
+- Giới hạn mặc định: **900 MB** khi dùng Firebase (Firestore miễn phí 1 GB), hoặc theo ổ đĩa khi chạy trên VPS/Termux. Đổi được ngay trong trang này.
+- **Tự dọn** (mặc định bật): khi đạt **90%**, máy chủ xóa **ảnh cũ nhất trước** (tin nhắn vẫn còn). Chưa đủ thì mới xóa **tin nhắn cũ nhất**, và dừng khi còn **75%**. Hai mức này chỉnh được. Admin đang mở app sẽ nhận thông báo mỗi lần tự dọn.
+- **Dọn thủ công**: chọn **Ảnh** hoặc **Tin nhắn**, chọn **Cũ hơn** (7 ngày … 1 năm, hoặc tất cả), bấm **Kiểm tra** để xem sẽ xóa bao nhiêu và giải phóng bao nhiêu, rồi mới bấm **Xóa ngay**.
+- Tin nhắn **mới nhất của mỗi cuộc trò chuyện luôn được giữ lại**, để danh sách chat không bị trống.
 
 ## Cấu trúc thư mục
 
@@ -291,11 +392,12 @@ start.js             Điểm khởi động (npm start): tải dữ liệu từ 
 server.js            Máy chủ: API, realtime (Socket.IO), gửi thông báo
 src/db.js            Database SQLite và bảng dữ liệu
 src/cloud.js         Sao lưu database, ảnh, khóa thông báo lên Firebase Firestore
+src/storage.js       Đo bộ nhớ máy chủ, tự dọn và dọn thủ công dữ liệu cũ
 src/auth.js          Mã hóa mật khẩu (scrypt), phiên đăng nhập
 src/push.js          Thông báo đẩy (Web Push / VAPID)
 scripts/admin.js     Công cụ dòng lệnh cho chủ server
 scripts/tunnel.js    Mở link HTTPS tạm thời (npm run share / npm run tunnel)
-public/              Giao diện: index.html, app.css, app.js, sw.js (service worker)
+public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu trên máy), sw.js (service worker)
 deploy/              Mẫu cấu hình Caddy và Nginx
 ```
 

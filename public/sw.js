@@ -1,9 +1,14 @@
 /* Service worker: lưu giao diện để mở nhanh + hiện thông báo đẩy kể cả khi đã đóng app */
-const CACHE = 'think-v3';
+const CACHE = 'think-v4';
+// Ảnh trong tin nhắn và ảnh đại diện đã xem được giữ lại trên máy (tên file không bao giờ đổi),
+// nên vẫn hiện được khi mất mạng hoặc khi máy chủ đã dọn ảnh cũ. Tắt "Lưu trên máy" thì không giữ nữa.
+const MEDIA = 'think-media';
+const MEDIA_OFF = '/__think/media-off';
 const SHELL = [
   '/',
   '/app.css',
   '/app.js',
+  '/localdb.js',
   '/manifest.webmanifest',
   '/socket.io/socket.io.min.js',
   '/icons/icon-192.png',
@@ -29,7 +34,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)));
+    await Promise.all(keys.filter((key) => key !== CACHE && key !== MEDIA).map((key) => caches.delete(key)));
     await self.clients.claim();
   })());
 });
@@ -40,10 +45,35 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/')) return;
+  if (url.pathname.startsWith('/api/')) return;
+  if (url.pathname.startsWith('/uploads/')) {
+    event.respondWith(mediaFirst(req));
+    return;
+  }
   if (url.pathname.startsWith('/socket.io/') && url.search) return;
   event.respondWith(networkFirst(req));
 });
+
+// Ảnh: có sẵn trên máy thì dùng luôn, chưa có thì tải về rồi cất lại
+async function mediaFirst(req) {
+  let cache = null;
+  try {
+    cache = await caches.open(MEDIA);
+    const hit = await cache.match(req.url);
+    if (hit) return hit;
+  } catch { /* bộ nhớ đệm lỗi thì tải thẳng */ }
+  let res;
+  try {
+    res = await fetch(req);
+  } catch {
+    return Response.error();
+  }
+  if (cache && res.ok && res.type === 'basic') {
+    const off = await cache.match(MEDIA_OFF).catch(() => null);
+    if (!off) cache.put(req.url, res.clone()).catch(() => {});
+  }
+  return res;
+}
 
 async function networkFirst(req) {
   try {

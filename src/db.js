@@ -108,13 +108,40 @@ function ensureColumn(table, column, ddl) {
 ensureColumn('messages', 'kind', "kind TEXT NOT NULL DEFAULT 'text'"); // 'text' hoặc 'system' (thông báo trong nhóm)
 ensureColumn('messages', 'reply_to', 'reply_to INTEGER');                 // trả lời tin nhắn nào
 ensureColumn('conversations', 'created_by', 'created_by INTEGER');       // trưởng nhóm
+ensureColumn('messages', 'image_purged', 'image_purged INTEGER NOT NULL DEFAULT 0'); // ảnh đã bị dọn khỏi máy chủ
+if (!db.prepare('PRAGMA table_info(messages)').all().some((c) => c.name === 'updated_at')) {
+  // Thời điểm tin nhắn thay đổi lần cuối (thu hồi, cảm xúc, dọn ảnh) để máy người dùng đồng bộ
+  db.exec('ALTER TABLE messages ADD COLUMN updated_at INTEGER');
+  db.exec('UPDATE messages SET updated_at = created_at');
+}
 db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_messages_updated ON messages(conversation_id, updated_at);
+  CREATE TRIGGER IF NOT EXISTS trg_messages_updated AFTER INSERT ON messages
+  WHEN NEW.updated_at IS NULL
+  BEGIN
+    UPDATE messages SET updated_at = NEW.created_at WHERE id = NEW.id;
+  END;
+
   CREATE TABLE IF NOT EXISTS reactions (
     message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     emoji TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     PRIMARY KEY (message_id, user_id)
+  );
+
+  -- Mọi file đã tải lên (ảnh tin nhắn, ảnh đại diện) và dung lượng, để đo bộ nhớ máy chủ
+  CREATE TABLE IF NOT EXISTS uploads (
+    path TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    size INTEGER NOT NULL DEFAULT 0,
+    user_id INTEGER,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
   );
 `);
 
@@ -159,4 +186,22 @@ run(
   GENERAL_ID
 );
 
-module.exports = { db, get, all, run, transaction, DATA_DIR, UPLOAD_DIR, AVATAR_DIR, IMAGE_DIR, GENERAL_ID };
+// Cài đặt dạng JSON lưu trong database (được sao lưu cùng dữ liệu)
+function getSetting(key, fallback = null) {
+  const row = get('SELECT value FROM settings WHERE key = ?', key);
+  if (!row) return fallback;
+  try {
+    return JSON.parse(row.value);
+  } catch {
+    return fallback;
+  }
+}
+function setSetting(key, value) {
+  run(
+    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    key,
+    JSON.stringify(value)
+  );
+}
+
+module.exports = { db, get, all, run, transaction, getSetting, setSetting, DATA_DIR, UPLOAD_DIR, AVATAR_DIR, IMAGE_DIR, GENERAL_ID };

@@ -68,6 +68,9 @@
     pushOn: false,
     sound: store.get('sound') !== 'off',
     replying: new Map(), // convId -> tin nhắn đang được trả lời
+    tab: 'chats', // tab đang mở ở thanh dưới: chats | me | admin
+    adminSeg: 'accounts', // mục đang mở trong trang Quản trị
+    offline: false, // đang xem dữ liệu lưu trên máy, chưa kết nối được máy chủ
   };
 
   /* =========================================================
@@ -273,6 +276,7 @@
   }
   function sessionEnded(reason) {
     if (!state.me) return;
+    forgetMe();
     showLogin(reason);
     history.replaceState(null, '', '#/');
   }
@@ -298,6 +302,9 @@
     $('#conn-status').hidden = true;
     document.body.classList.remove('in-chat');
     closeSheetNow();
+    state.offline = false;
+    showTab('chats');
+    if (window.LocalDB) LocalDB.close();
     updateBadge();
   }
 
@@ -322,12 +329,14 @@
     if (!(history.state && history.state.overlay === 'lightbox')) hideLightbox();
     closeMenu();
     if (!state.me || $('#view-main').hidden) return;
-    const hash = location.hash || '#/';
-    const sheet = { '#/settings': 'settings', '#/new': 'new', '#/admin': 'admin', '#/new-group': 'new-group', '#/group': 'group' }[hash] || null;
-    if (sheet === 'admin' && state.me.role !== 'admin') {
+    let hash = location.hash || '#/';
+    if (hash === '#/settings') hash = '#/me'; // đường dẫn cũ
+    const tab = hash === '#/me' ? 'me' : hash === '#/admin' ? 'admin' : 'chats';
+    if (tab === 'admin' && state.me.role !== 'admin') {
       navigate('#/', { replace: true });
       return;
     }
+    const sheet = { '#/new': 'new', '#/new-group': 'new-group', '#/group': 'group' }[hash] || null;
     if (sheet === 'group' && state.convs.get(state.currentId)?.type !== 'group') {
       navigate(state.currentId != null ? `#/c/${state.currentId}` : '#/', { replace: true });
       return;
@@ -335,10 +344,57 @@
     const match = /^#\/c\/(\d+)$/.exec(hash);
     if (match) openConversation(Number(match[1]));
     else if (!sheet) closeConversation();
+    showTab(tab);
     showSheet(sheet);
   }
   window.addEventListener('popstate', route);
   window.addEventListener('hashchange', route);
+
+  /* ----- Thanh điều hướng dưới: Tin nhắn / Cá nhân / Quản trị ----- */
+  function showTab(tab) {
+    const changed = state.tab !== tab;
+    state.tab = tab;
+    for (const page of $$('.tab-page')) page.hidden = page.id !== `page-${tab}`;
+    for (const btn of $$('.tab')) {
+      if (btn.dataset.tab === tab) btn.setAttribute('aria-current', 'page');
+      else btn.removeAttribute('aria-current');
+    }
+    $('#chat-empty').classList.toggle('is-quiet', tab !== 'chats');
+    if (!changed || !state.me) return;
+    if (tab === 'me') renderSettings();
+    if (tab === 'admin') renderAdmin();
+    const body = $(`#page-${tab} .page-body:not([hidden])`);
+    if (body) body.scrollTop = 0;
+  }
+
+  // Từ Tin nhắn sang tab khác thì thêm một bước lịch sử, để nút Back quay về Tin nhắn thay vì thoát app
+  function switchTab(tab) {
+    if (tab === state.tab) {
+      const scroller = tab === 'chats' ? $('#conv-list') : $(`#page-${tab} .page-body:not([hidden])`);
+      if (scroller) scroller.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' });
+      return;
+    }
+    if (tab === 'chats') {
+      if (history.state && history.state.tabPush) history.back();
+      else navigate('#/', { replace: true });
+      return;
+    }
+    const hash = `#/${tab}`;
+    if (state.tab === 'chats') history.pushState({ depth: navDepth() + 1, tabPush: true }, '', hash);
+    else history.replaceState({ ...(history.state || {}) }, '', hash);
+    route();
+  }
+  $('.tabbar').addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab');
+    if (btn) switchTab(btn.dataset.tab);
+  });
+
+  // Điện thoại: đang gõ trong trang Cá nhân / Quản trị thì ẩn thanh dưới cho đỡ chật
+  const TYPING_FIELDS = '.sidebar input:not([type=checkbox]):not([type=file]), .sidebar textarea, .sidebar select';
+  document.addEventListener('focusin', (e) => {
+    if (isTouch() && e.target.matches && e.target.matches(TYPING_FIELDS)) document.body.classList.add('typing');
+  });
+  document.addEventListener('focusout', () => document.body.classList.remove('typing'));
 
   let currentSheet = null;
   let sheetTimer = null;
@@ -362,9 +418,7 @@
     layer.hidden = false;
     void layer.offsetWidth; // chạy lại hiệu ứng trượt
     layer.classList.add('open');
-    if (name === 'settings') renderSettings();
     if (name === 'new') renderPeople();
-    if (name === 'admin') renderAdmin();
     if (name === 'new-group') renderNewGroup(true);
     if (name === 'group') {
       groupAdd.open = false;
@@ -414,6 +468,7 @@
     if (!list.length) {
       ul.append(h('li', { class: 'conv-empty', text: q ? 'Không có cuộc trò chuyện nào khớp.' : 'Chưa có cuộc trò chuyện nào.' }));
     }
+    saveSnapshot();
   }
 
   function convItem(c) {
@@ -466,6 +521,12 @@
     $('#group-info-btn').hidden = c.type !== 'group';
     $('.chat-title').classList.toggle('is-link', c.type === 'group');
     const status = $('#chat-status');
+    if (state.offline) {
+      // Mở app khi chưa kết nối được máy chủ: nói rõ đang xem bản lưu trên máy
+      status.textContent = 'Chưa kết nối máy chủ, đang xem bản lưu trên máy';
+      status.classList.remove('is-online');
+      return;
+    }
     if (isDm) {
       status.textContent = peer?.disabled ? 'Tài khoản này đã bị khóa' : lastSeenText(peer);
       status.classList.toggle('is-online', Boolean(peer?.online));
@@ -516,6 +577,21 @@
       clearNotifications(id);
     }
     const b = box(id);
+    if (!b.loaded && LocalDB.ready() && !b.localTried) {
+      // Hiện ngay tin nhắn đã lưu trên máy (không phải chờ máy chủ)
+      b.localTried = true;
+      let cached = [];
+      try {
+        cached = await LocalDB.latest(id, 50);
+      } catch { /* bỏ qua */ }
+      if (state.currentId !== id) return;
+      if (cached.length && !b.loaded) {
+        merge(b, cached);
+        b.loaded = true;
+        b.hasMore = true;
+        renderMessages({ toBottom: true });
+      }
+    }
     if (!b.loaded) {
       renderMessages({ toBottom: true });
       await loadMessages(id, { toBottom: true });
@@ -526,6 +602,7 @@
     if (isNearBottom()) markRead(id);
     reportVisibility();
     if (changed && !isTouch()) input.focus({ preventScroll: true });
+    syncConv(id).catch(() => {}); // lấy tin mới và các thay đổi từ máy chủ
   }
 
   function closeConversation() {
@@ -548,17 +625,33 @@
     }
     try {
       const firstId = b.list.find((m) => m.id)?.id;
-      const data = await api(`/api/conversations/${id}/messages?limit=40${older && firstId ? `&before=${firstId}` : ''}`);
-      if (!older) {
-        // Giữ lại tin đang gửi dở và tin mới đến trong lúc tải
-        const maxId = data.messages.length ? data.messages[data.messages.length - 1].id : 0;
-        b.list = b.list.filter((m) => !m.id || m.id > maxId);
+      let from = older ? firstId : 0;
+      let local = [];
+      if (older && firstId && LocalDB.ready()) {
+        try {
+          local = await LocalDB.before(id, firstId, 40);
+        } catch { /* bỏ qua */ }
+        if (local.length) {
+          merge(b, local);
+          from = local[0].id;
+        }
       }
-      merge(b, data.messages);
-      b.hasMore = data.hasMore;
+      if (!older || local.length < 40) {
+        if (older && b.olderFailedAt && Date.now() - b.olderFailedAt < 10000) throw new Error('offline');
+        try {
+          const data = await api(`/api/conversations/${id}/messages?limit=40${from ? `&before=${from}` : ''}`);
+          merge(b, data.messages); // gộp, không bỏ tin chỉ còn trên máy (máy chủ có thể đã dọn)
+          saveLocal(data.messages);
+          if (!older) markSynced(id, data);
+          b.hasMore = data.hasMore;
+          applyReads(id, data.reads);
+        } catch (err) {
+          if (older) b.olderFailedAt = Date.now();
+          if (!older || !local.length) throw err;
+        }
+      }
       b.loaded = true;
       b.error = null;
-      applyReads(id, data.reads);
     } catch (err) {
       if (!older) b.error = err.message;
     } finally {
@@ -570,7 +663,7 @@
   function merge(b, incoming) {
     const byId = new Map();
     for (const m of b.list) if (m.id) byId.set(m.id, m);
-    for (const m of incoming) byId.set(m.id, byId.has(m.id) ? { ...byId.get(m.id), ...m } : m);
+    for (const m of incoming) byId.set(m.id, LocalDB.mergeMessage(byId.get(m.id), m));
     const pending = b.list.filter((m) => !m.id);
     b.list = [...byId.values()].sort((x, y) => x.id - y.id).concat(pending);
   }
@@ -690,24 +783,34 @@
   function bubbleEl(m) {
     if (m.deleted) return h('div', { class: 'bubble is-deleted', text: 'Tin nhắn đã được thu hồi' });
     const hasImage = Boolean(m.image || m.localUrl);
+    const purged = !hasImage && Boolean(m.imagePurged); // ảnh đã bị dọn khỏi máy chủ, máy này cũng không có
+    const showsImage = hasImage || purged;
     const hasQuote = Boolean(m.replyTo);
-    const emoji = !hasImage && !hasQuote && isEmojiOnly(m.text);
+    const emoji = !showsImage && !hasQuote && isEmojiOnly(m.text);
     const cls = ['bubble'];
-    if (hasImage && !m.text && !hasQuote) cls.push('is-image');
-    else if (hasImage) cls.push('has-image');
+    if (showsImage && !m.text && !hasQuote) cls.push('is-image');
+    else if (showsImage) cls.push('has-image');
     if (emoji) cls.push('is-emoji');
     const b = h('div', { class: cls.join(' ') });
     if (hasQuote) b.append(quoteEl(m.replyTo));
     if (hasImage) b.append(imageEl(m));
+    else if (purged) b.append(goneImageEl(true));
     if (m.text) b.append(h('span', { class: 'bubble-text' }, linkify(m.text)));
     return b;
   }
 
   // Khung trích dẫn tin được trả lời, bấm vào để nhảy tới tin gốc
   function quoteEl(r) {
-    const who = r.senderId === state.me.id ? 'Bạn' : nameOf(r.senderId);
+    if (r.missing) {
+      // Tin gốc đã bị dọn khỏi máy chủ: dùng bản lưu trên máy nếu có
+      const orig = state.msgs.get(state.currentId)?.list.find((x) => x.id === r.id);
+      r = orig && !orig.deleted
+        ? { ...quoteOf(orig), missing: false }
+        : { ...r, text: 'Tin nhắn cũ đã được dọn khỏi máy chủ', gone: true };
+    }
+    const who = r.senderId == null ? 'Tin nhắn cũ' : r.senderId === state.me.id ? 'Bạn' : nameOf(r.senderId);
     const text = r.deleted ? 'Tin nhắn đã được thu hồi' : r.text || (r.image ? '📷 Ảnh' : '');
-    return h('button', { class: `quote${r.deleted ? ' is-gone' : ''}`, type: 'button', dataset: { reply: r.id }, 'aria-label': `Xem tin nhắn gốc của ${who}` },
+    return h('button', { class: `quote${r.deleted || r.gone ? ' is-gone' : ''}`, type: 'button', dataset: { reply: r.id }, 'aria-label': `Xem tin nhắn gốc của ${who}` },
       h('span', { class: 'quote-name', text: who }),
       h('span', { class: 'quote-text', text }));
   }
@@ -732,11 +835,26 @@
     const dims = m.w && m.h ? { w: m.w, h: m.h } : match ? { w: Number(match[1]), h: Number(match[2]) } : { w: 240, h: 180 };
     const scale = Math.min(1, 260 / dims.w, 320 / dims.h);
     const src = m.localUrl || m.image;
-    return h('img', {
+    const img = h('img', {
       class: 'msg-img', src, alt: 'Ảnh', loading: 'lazy', decoding: 'async',
       width: Math.max(1, Math.round(dims.w * scale)), height: Math.max(1, Math.round(dims.h * scale)),
       dataset: { full: src },
     });
+    img.addEventListener('error', () => {
+      const placeholder = goneImageEl(Boolean(m.imagePurged), () => placeholder.replaceWith(imageEl(m)));
+      img.replaceWith(placeholder);
+    }, { once: true });
+    return img;
+  }
+
+  // Chỗ ảnh không hiện được: đã bị dọn khỏi máy chủ, hoặc lỗi mạng (bấm để thử lại)
+  function goneImageEl(purged, retryLoad) {
+    if (purged || !retryLoad) {
+      return h('div', { class: 'img-gone', role: 'img', 'aria-label': 'Ảnh đã được dọn khỏi máy chủ' },
+        icon('image'), h('span', { text: 'Ảnh đã được dọn khỏi máy chủ' }));
+    }
+    return h('button', { class: 'img-gone', type: 'button', onclick: (e) => { e.stopPropagation(); retryLoad(); } },
+      icon('image'), h('span', { text: 'Không tải được ảnh. Chạm để thử lại' }));
   }
 
   function linkify(text) {
@@ -882,7 +1000,10 @@
       })));
     const items = [{ label: 'Trả lời', run: () => startReply(m) }];
     if (m.text) items.push({ label: 'Sao chép', run: () => copyText(m.text).then(() => toast('Đã sao chép tin nhắn.'), () => toast('Không sao chép được.')) });
-    if (m.image) items.push({ label: 'Xem ảnh', run: () => openLightbox(m.localUrl || m.image) });
+    if (m.image || m.localUrl) {
+      items.push({ label: 'Xem ảnh', run: () => openLightbox(m.localUrl || m.image) });
+      items.push({ label: 'Tải ảnh về máy', run: () => downloadImage(m.localUrl || m.image) });
+    }
     if (m.senderId === state.me.id) items.push({ label: 'Thu hồi', danger: true, run: () => recall(m) });
     placeMenu([bar, ...items.map((item) => h('button', {
       class: `menu-item${item.danger ? ' is-danger' : ''}`, type: 'button', role: 'menuitem', text: item.label,
@@ -928,6 +1049,7 @@
   }
 
   function onReactions({ conversationId, messageId, reactions }) {
+    LocalDB.patchMessage(messageId, { reactions }).catch(() => {});
     const m = state.msgs.get(conversationId)?.list.find((item) => item.id === messageId);
     if (!m) return;
     m.reactions = reactions;
@@ -1028,7 +1150,10 @@
     if (history.state && history.state.overlay === 'lightbox') history.back();
     else hideLightbox();
   }
-  $('#lightbox').addEventListener('click', closeLightbox);
+  $('#lightbox').addEventListener('click', (e) => {
+    if (e.target.closest('.lightbox-actions')) return;
+    closeLightbox();
+  });
 
   /* =========================================================
      Gửi tin nhắn
@@ -1072,6 +1197,7 @@
       merge(b, [msg]);
     }
     bumpConv(msg.conversationId, msg);
+    saveLocal([msg]);
     return isNew;
   }
 
@@ -1104,6 +1230,7 @@
       if (m.blob && !m.uploadedUrl) {
         const up = await api(`/api/upload?w=${m.w}&h=${m.h}`, { method: 'POST', raw: m.blob });
         m.uploadedUrl = up.url;
+        cacheOwnImage(up.url, m.blob); // giữ luôn ảnh mình gửi trên máy
       }
       const { message } = await api(`/api/conversations/${m.conversationId}/messages`, {
         method: 'POST',
@@ -1303,6 +1430,389 @@
   }
 
   /* =========================================================
+     Lưu trên máy người dùng (IndexedDB + bộ nhớ đệm ảnh)
+     ========================================================= */
+  const MEDIA_CACHE = 'think-media';
+  const ME_KEY = 'think:me';
+  const numFmt = new Intl.NumberFormat('vi-VN');
+  const decFmt = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 });
+  const fmtNum = (n) => numFmt.format(n || 0);
+  function fmtBytes(bytes) {
+    const b = Math.max(0, Number(bytes) || 0);
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) return `${decFmt.format(b / 1024)} KB`;
+    if (b < 1024 ** 3) return `${decFmt.format(b / 1024 ** 2)} MB`;
+    return `${decFmt.format(b / 1024 ** 3)} GB`;
+  }
+
+  function saveLocal(list) {
+    if (LocalDB.ready() && list && list.length) LocalDB.putMessages(list).catch(() => {});
+  }
+
+  // Ghi mốc đồng bộ lần đầu (sau đó chỉ cần hỏi máy chủ phần mới hơn mốc)
+  async function markSynced(convId, data) {
+    if (!LocalDB.ready()) return;
+    try {
+      if (await LocalDB.getMeta(`conv:${convId}`)) return;
+      const top = data.messages.length ? data.messages[data.messages.length - 1].id : 0;
+      await LocalDB.setMeta(`conv:${convId}`, { syncedTo: top, syncedAt: data.serverTime || 0 });
+    } catch { /* bỏ qua */ }
+  }
+
+  // Chỉ cập nhật tin đang hiện trên màn hình (không chèn tin cũ lẻ tẻ vào giữa)
+  function mergeUpdates(b, list) {
+    const known = new Set(b.list.filter((m) => m.id).map((m) => m.id));
+    const hit = list.filter((m) => known.has(m.id));
+    if (hit.length) merge(b, hit);
+    return hit.length;
+  }
+
+  // Đồng bộ một cuộc trò chuyện: tin mới sau mốc + tin cũ có thay đổi (thu hồi, cảm xúc, ảnh bị dọn)
+  const syncing = new Map();
+  function syncConv(convId) {
+    if (!LocalDB.ready() || state.offline || !state.me) return Promise.resolve([]);
+    if (syncing.has(convId)) return syncing.get(convId);
+    const job = (async () => {
+      const key = `conv:${convId}`;
+      const meta = await LocalDB.getMeta(key);
+      const fresh = [];
+      const changed = [];
+      if (!meta) {
+        const data = await api(`/api/conversations/${convId}/messages?limit=50`);
+        await LocalDB.putMessages(data.messages);
+        fresh.push(...data.messages);
+        const top = data.messages.length ? data.messages[data.messages.length - 1].id : 0;
+        await LocalDB.setMeta(key, { syncedTo: top, syncedAt: data.serverTime || 0 });
+        applyReads(convId, data.reads);
+      } else {
+        let after = meta.syncedTo || 0;
+        let since = meta.syncedAt || 0;
+        for (let page = 0; page < 200; page++) {
+          const data = await api(`/api/conversations/${convId}/sync?after=${after}&since=${since}`);
+          await LocalDB.putMessages([...data.messages, ...data.changed]);
+          fresh.push(...data.messages);
+          changed.push(...data.changed);
+          after = data.nextAfter;
+          since = data.nextSince;
+          await LocalDB.setMeta(key, { syncedTo: after, syncedAt: since });
+          if (!data.more) break;
+        }
+      }
+      const b = state.msgs.get(convId);
+      if (b && b.loaded && (fresh.length || changed.length)) {
+        if (fresh.length) merge(b, fresh);
+        mergeUpdates(b, changed);
+        if (state.currentId === convId) renderMessages();
+      }
+      prefetchImages(fresh);
+      return fresh;
+    })().finally(() => syncing.delete(convId));
+    syncing.set(convId, job);
+    return job;
+  }
+
+  // Đồng bộ tất cả cuộc trò chuyện (khi mở app, khi có mạng lại), cái mới hoạt động trước
+  let syncAllRunning = false;
+  async function syncAll() {
+    if (syncAllRunning || !LocalDB.ready()) return;
+    syncAllRunning = true;
+    try {
+      const list = [...state.convs.values()].sort((a, b) => lastActivity(b) - lastActivity(a));
+      for (const c of list) {
+        if (!state.me || state.offline || !LocalDB.ready()) return;
+        try {
+          await syncConv(c.id);
+        } catch (err) {
+          if (!err || err.status === 0) return; // mất mạng: để lần sau
+        }
+      }
+    } finally {
+      syncAllRunning = false;
+    }
+  }
+
+  // Tự tải ảnh mới về máy (bỏ qua khi bật tiết kiệm dữ liệu)
+  const imageQueue = [];
+  let imageBusy = false;
+  function prefetchImages(list) {
+    if (!LocalDB.autoImages() || !('caches' in window)) return;
+    if (navigator.connection && navigator.connection.saveData) return;
+    for (const m of list || []) {
+      if (m.image && !m.deleted && !imageQueue.includes(m.image)) imageQueue.push(m.image);
+    }
+    imageQueue.splice(0, Math.max(0, imageQueue.length - 300));
+    if (!imageBusy) runImageQueue();
+  }
+  async function runImageQueue() {
+    imageBusy = true;
+    try {
+      const cache = await caches.open(MEDIA_CACHE);
+      while (imageQueue.length && state.me && !state.offline && LocalDB.autoImages()) {
+        const url = imageQueue.shift();
+        if (await cache.match(url)) continue;
+        try {
+          const res = await fetch(url, { credentials: 'same-origin' });
+          // Trang chưa được service worker quản lý thì tự cất vào bộ nhớ đệm
+          if (res.ok && !navigator.serviceWorker?.controller) await cache.put(url, res);
+        } catch {
+          break;
+        }
+      }
+    } catch { /* bỏ qua */ } finally {
+      imageBusy = false;
+    }
+  }
+  async function cacheOwnImage(url, blob) {
+    if (!LocalDB.enabled() || !('caches' in window) || !blob) return;
+    try {
+      const cache = await caches.open(MEDIA_CACHE);
+      await cache.put(url, new Response(blob, { headers: { 'Content-Type': blob.type || 'image/jpeg' } }));
+    } catch { /* bỏ qua */ }
+  }
+
+  // Ảnh chụp danh sách chat + danh bạ, để lần sau mở app xem được ngay kể cả khi máy chủ đang ngủ
+  let snapshotTimer = null;
+  function saveSnapshot() {
+    if (!LocalDB.ready() || state.offline || !state.me) return;
+    clearTimeout(snapshotTimer);
+    snapshotTimer = setTimeout(() => {
+      if (!LocalDB.ready() || state.offline) return;
+      const convs = [...state.convs.values()].map(({ reads, ...c }) => c);
+      LocalDB.setMeta('convs', convs).catch(() => {});
+      LocalDB.setMeta('users', [...state.users.values()]).catch(() => {});
+    }, 800);
+  }
+
+  function cacheMe(user) {
+    if (!user || !LocalDB.enabled()) return;
+    const { id, username, displayName, avatar, role } = user;
+    store.set(ME_KEY, JSON.stringify({ id, username, displayName, avatar, role }));
+  }
+  function forgetMe() {
+    try { localStorage.removeItem(ME_KEY); } catch { /* bỏ qua */ }
+  }
+  function cachedMe() {
+    try {
+      const me = JSON.parse(store.get(ME_KEY) || 'null');
+      return me && me.id ? me : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function setOfflineStatus(on) {
+    const el = $('#conn-status');
+    el.textContent = on
+      ? 'Đang kết nối máy chủ… Bạn vẫn xem được tin nhắn đã lưu trên máy này.'
+      : 'Đang kết nối lại… Nếu app vừa ngủ, máy chủ cần khoảng 1 phút để thức dậy.';
+    el.hidden = !on;
+  }
+
+  // Mở app bằng dữ liệu trên máy trong lúc chờ máy chủ (Render Free ngủ cần ~1 phút để dậy)
+  async function openOffline(me) {
+    if (!(await LocalDB.open(me.id))) return false;
+    let convs = null;
+    let users = null;
+    try {
+      [convs, users] = await Promise.all([LocalDB.getMeta('convs'), LocalDB.getMeta('users')]);
+    } catch { /* bỏ qua */ }
+    if (!convs || !convs.length) return false;
+    state.me = { ...me, mustChangePassword: false };
+    state.users = new Map((users || []).map((u) => [u.id, { ...u, online: false }]));
+    state.users.set(me.id, { ...(state.users.get(me.id) || {}), ...state.me });
+    state.convs = new Map(convs.map((c) => [c.id, c]));
+    state.offline = true;
+    showScreen('view-main');
+    renderMe();
+    setOfflineStatus(true);
+    renderConvList();
+    updateBadge();
+    route();
+    return true;
+  }
+
+  /* ----- Mục "Lưu trên máy này" trong trang Cá nhân ----- */
+  async function renderLocal() {
+    const supported = LocalDB.supported();
+    const on = LocalDB.enabled();
+    $('#local-toggle').checked = on;
+    $('#local-toggle').disabled = !supported;
+    $('#local-images-toggle').checked = LocalDB.autoImages();
+    $('#local-images-toggle').disabled = !on;
+    $('#local-export').disabled = !on;
+    $('#local-clear').hidden = !on;
+    const stats = $('#local-stats');
+    if (!supported) {
+      stats.textContent = 'Trình duyệt này không hỗ trợ lưu dữ liệu trên máy.';
+      return;
+    }
+    if (!on) {
+      stats.textContent = 'Đang tắt. Tin nhắn chỉ nằm trên máy chủ.';
+      return;
+    }
+    const [count, est] = await Promise.all([LocalDB.count().catch(() => 0), LocalDB.estimate()]);
+    let text = `Đã lưu ${fmtNum(count)} tin nhắn`;
+    if (est.usage != null) text += `, đang dùng ${fmtBytes(est.usage)} bộ nhớ máy`;
+    text += '.';
+    if (est.persisted === true) text += ' Trình duyệt sẽ giữ dữ liệu này, không tự xóa.';
+    else if (est.persisted === false) text += ' Khi máy thiếu bộ nhớ, trình duyệt có thể tự xóa bớt.';
+    stats.textContent = text;
+  }
+
+  $('#local-toggle').addEventListener('change', async (e) => {
+    const on = e.target.checked;
+    if (!on && !window.confirm('Tắt lưu trên máy sẽ xóa các tin nhắn và ảnh đã lưu trên máy này. Tin nào đã bị dọn khỏi máy chủ sẽ không xem lại được nữa. Tiếp tục?')) {
+      e.target.checked = true;
+      return;
+    }
+    await LocalDB.setEnabled(on, state.me && state.me.id);
+    if (on) {
+      cacheMe(state.me);
+      LocalDB.persist();
+      saveSnapshot();
+      syncAll();
+      toast('Đã bật lưu trên máy. Đang tải tin nhắn về máy…');
+    } else {
+      forgetMe();
+      toast('Đã tắt lưu trên máy và xóa dữ liệu đã lưu.');
+    }
+    renderLocal();
+  });
+
+  $('#local-images-toggle').addEventListener('change', (e) => {
+    LocalDB.setAutoImages(e.target.checked);
+    if (e.target.checked) {
+      for (const b of state.msgs.values()) prefetchImages(b.list);
+    }
+  });
+
+  $('#local-clear').addEventListener('click', async (e) => {
+    if (!window.confirm('Xóa toàn bộ tin nhắn và ảnh đã lưu trên máy này? Tin nào đã bị dọn khỏi máy chủ sẽ không xem lại được nữa.')) return;
+    const btn = e.currentTarget;
+    await withBusy(btn, async () => {
+      await LocalDB.clear(state.me.id);
+      await LocalDB.open(state.me.id);
+      await LocalDB.syncMediaFlag();
+      for (const b of state.msgs.values()) b.localTried = true;
+      saveSnapshot();
+      toast('Đã xóa dữ liệu lưu trên máy.');
+    });
+    renderLocal();
+  });
+
+  // Tải toàn bộ lịch sử đã lưu thành một file .html đọc được bằng trình duyệt
+  $('#local-export').addEventListener('click', (e) => {
+    withBusy(e.currentTarget, async () => {
+      try {
+        const all = LocalDB.ready() ? await LocalDB.allMessages() : [];
+        if (!all.length) {
+          toast('Chưa có tin nhắn nào được lưu trên máy này.');
+          return;
+        }
+        const name = `think-lich-su-${new Date().toISOString().slice(0, 10)}.html`;
+        const blob = new Blob([buildExport(all)], { type: 'text/html;charset=utf-8' });
+        const a = h('a', { href: URL.createObjectURL(blob), download: name });
+        document.body.append(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        toast(`Đã tải ${fmtNum(all.length)} tin nhắn về máy (file ${name}).`);
+      } catch {
+        toast('Không tạo được file lịch sử chat.');
+      }
+    });
+  });
+
+  function buildExport(all) {
+    const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const groups = new Map();
+    for (const m of all) {
+      if (!groups.has(m.conversationId)) groups.set(m.conversationId, []);
+      groups.get(m.conversationId).push(m);
+    }
+    const convName = (id) => {
+      const c = state.convs.get(id);
+      return c ? convTitle(c) : 'Cuộc trò chuyện đã rời';
+    };
+    const order = [...groups.keys()].sort((a, b) => {
+      const la = groups.get(a).reduce((x, m) => Math.max(x, m.createdAt), 0);
+      const lb = groups.get(b).reduce((x, m) => Math.max(x, m.createdAt), 0);
+      return lb - la;
+    });
+    const sections = order.map((id) => {
+      const msgs = groups.get(id).sort((a, b) => a.id - b.id);
+      let day = '';
+      const rows = msgs.map((m) => {
+        let out = '';
+        const d = dayKey(m.createdAt);
+        if (d !== day) {
+          day = d;
+          out += `<p class="day">${esc(dayLabel(m.createdAt))}</p>`;
+        }
+        if (m.kind === 'system') return `${out}<p class="m s">${esc(hm(m.createdAt))} ${esc(systemText(m))}</p>`;
+        let body;
+        if (m.deleted) body = '<em>Tin nhắn đã được thu hồi</em>';
+        else {
+          const parts = [];
+          if (m.replyTo) {
+            const r = m.replyTo;
+            const who = r.senderId == null ? 'tin cũ' : r.senderId === state.me.id ? 'Bạn' : nameOf(r.senderId);
+            const t = r.deleted ? 'Tin nhắn đã được thu hồi' : r.missing ? 'tin nhắn cũ' : r.text || (r.image ? '[Ảnh]' : '');
+            parts.push(`<span class="q">Trả lời ${esc(who)}: ${esc(t)}</span>`);
+          }
+          if (m.image || m.imagePurged) parts.push('<span class="img">[Ảnh]</span>');
+          if (m.text) parts.push(esc(m.text).replace(/\n/g, '<br>'));
+          body = parts.join(' ');
+        }
+        const who = m.senderId === state.me.id ? 'Bạn' : nameOf(m.senderId);
+        return `${out}<p class="m"><span class="t">${esc(hm(m.createdAt))}</span><span class="n">${esc(who)}</span>${body}</p>`;
+      }).join('\n');
+      return `<section><h2>${esc(convName(id))}</h2>\n${rows}\n</section>`;
+    }).join('\n');
+    const when = new Date().toLocaleString('vi-VN');
+    return `<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lịch sử chat ${esc(state.appName)}</title>
+<style>
+body{font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;max-width:720px;margin:0 auto;padding:28px 16px 48px;color:#14201c;background:#fff}
+h1{font-size:26px;margin:0 0 6px}.sub{color:#62716b;margin:0 0 28px}
+section{margin:32px 0}h2{font-size:19px;margin:0 0 8px;padding-bottom:6px;border-bottom:2px solid #0e7c66}
+.day{color:#62716b;font-size:13px;font-weight:600;margin:18px 0 6px}.m{margin:4px 0;overflow-wrap:anywhere}
+.t{color:#62716b;font-size:12.5px;margin-right:8px}.n{font-weight:600;margin-right:8px}
+.q{display:block;color:#62716b;font-size:13.5px;border-left:3px solid #c9d3cf;padding-left:8px;margin:2px 0}
+.s{color:#62716b;font-style:italic}.img{color:#0e7c66}
+</style></head><body>
+<h1>Lịch sử chat ${esc(state.appName)}</h1>
+<p class="sub">Tài khoản ${esc(state.me.displayName)} (@${esc(state.me.username)}). Xuất lúc ${esc(when)}, gồm ${fmtNum(all.length)} tin nhắn đã lưu trên máy. Ảnh không nằm trong file này: mở ảnh trong app rồi bấm nút tải để lưu ảnh.</p>
+${sections}
+</body></html>`;
+  }
+
+  // Tải một ảnh về máy (iPhone: mở bảng chia sẻ để lưu vào Ảnh)
+  async function downloadImage(src) {
+    try {
+      const res = await fetch(src, { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('http');
+      const blob = await res.blob();
+      const ext = ((blob.type || 'image/jpeg').split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+      const name = `think-${new Date().toISOString().slice(0, 10)}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+      const file = new File([blob], name, { type: blob.type || 'image/jpeg' });
+      if (isIOS() && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file] }).catch(() => {});
+        return;
+      }
+      const a = h('a', { href: URL.createObjectURL(blob), download: name });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      toast('Đã tải ảnh về máy.');
+    } catch {
+      toast('Không tải được ảnh này.');
+    }
+  }
+
+  /* =========================================================
      Realtime (Socket.IO)
      ========================================================= */
   function connectSocket() {
@@ -1336,6 +1846,10 @@
     socket.on('presence', onPresence);
     socket.on('user:updated', onUserUpdated);
     socket.on('session:ended', (data) => sessionEnded((data && data.reason) || 'Bạn đã bị đăng xuất.'));
+    socket.on('storage:changed', (result) => {
+      if (state.tab === 'admin') loadStorage();
+      if (result && result.auto) toast(`Máy chủ sắp đầy nên đã tự dọn ${fmtNum(result.images)} ảnh và ${fmtNum(result.messages)} tin nhắn cũ nhất.`);
+    });
   }
 
   async function onMessageNew(msg) {
@@ -1412,6 +1926,7 @@
   function onMessageDeleted({ conversationId, messageId }) {
     const m = state.msgs.get(conversationId)?.list.find((item) => item.id === messageId);
     if (m) Object.assign(m, { deleted: true, text: null, image: null, localUrl: null });
+    LocalDB.patchMessage(messageId, { deleted: true, text: null, image: null, reactions: [] }).catch(() => {}); // tôn trọng thu hồi
     const c = state.convs.get(conversationId);
     if (c && c.lastMessage && c.lastMessage.id === messageId) {
       c.lastMessage = { ...c.lastMessage, deleted: true, text: null, image: null, localUrl: null };
@@ -1456,6 +1971,7 @@
       state.convs.delete(conversationId);
       state.msgs.delete(conversationId);
       state.replying.delete(conversationId);
+      LocalDB.deleteConversation(conversationId).catch(() => {});
       if (state.currentId === conversationId) {
         toast('Bạn không còn ở trong nhóm này.');
         navigate('#/', { replace: true });
@@ -1484,15 +2000,16 @@
     state.users.set(u.id, { ...(state.users.get(u.id) || {}), ...u });
     if (state.me && u.id === state.me.id) {
       Object.assign(state.me, u);
+      cacheMe(state.me);
       renderMe();
-      if (currentSheet === 'settings') renderSettingsProfile();
-      if (state.me.role !== 'admin' && currentSheet === 'admin') navigate('#/', { replace: true });
+      if (state.tab === 'me') renderSettingsProfile();
+      if (state.me.role !== 'admin' && state.tab === 'admin') navigate('#/', { replace: true });
     }
     renderConvList();
     renderChatHeader();
     if (state.currentId != null) renderMessages();
     if (currentSheet === 'new') renderPeople();
-    if (currentSheet === 'admin') loadAdminUsers();
+    if (state.tab === 'admin') loadAdminUsers();
     if (currentSheet === 'group') renderGroupInfo();
     if (currentSheet === 'new-group') renderNewGroup();
   }
@@ -1508,6 +2025,12 @@
       if (prev.get(c.id)?.reads) c.reads = prev.get(c.id).reads;
       return [c.id, c];
     }));
+    // Cuộc trò chuyện mình không còn tham gia: xóa bản lưu trên máy
+    if (LocalDB.ready()) {
+      LocalDB.getMeta('convs').then((saved) => {
+        for (const c of saved || []) if (!state.convs.has(c.id)) LocalDB.deleteConversation(c.id).catch(() => {});
+      }).catch(() => {});
+    }
     renderConvList();
     updateBadge();
   }
@@ -1527,6 +2050,7 @@
         if (document.visibilityState === 'visible' && isNearBottom()) markRead(state.currentId);
       }
       renderBanner();
+      syncAll();
     } catch {
       /* thử lại ở lần kết nối sau */
     }
@@ -1580,6 +2104,10 @@
   function updateBadge() {
     const total = [...state.convs.values()].reduce((sum, c) => sum + (c.unread || 0), 0);
     document.title = total ? `(${total}) ${state.appName}` : state.appName;
+    const badge = $('#tab-badge');
+    badge.hidden = !total;
+    badge.textContent = total > 99 ? '99+' : String(total);
+    $('.tab[data-tab="chats"]').setAttribute('aria-label', total ? `Tin nhắn, ${total} tin chưa đọc` : 'Tin nhắn');
     if ('setAppBadge' in navigator) {
       const p = total ? navigator.setAppBadge(total) : navigator.clearAppBadge();
       if (p && p.catch) p.catch(() => {});
@@ -1713,7 +2241,7 @@
       return false;
     } finally {
       renderBanner();
-      if (currentSheet === 'settings') renderNotify();
+      if (state.tab === 'me') renderNotify();
     }
   }
 
@@ -1811,12 +2339,12 @@
     e.preventDefault();
     state.installEvent = e;
     renderBanner();
-    if (currentSheet === 'settings') renderInstall();
+    if (state.tab === 'me') renderInstall();
   });
   window.addEventListener('appinstalled', () => {
     state.installEvent = null;
     renderBanner();
-    if (currentSheet === 'settings') renderInstall();
+    if (state.tab === 'me') renderInstall();
     toast('Đã cài app lên máy.');
   });
   async function promptInstall() {
@@ -1826,7 +2354,7 @@
     e.prompt();
     try { await e.userChoice; } catch { /* bỏ qua */ }
     renderBanner();
-    if (currentSheet === 'settings') renderInstall();
+    if (state.tab === 'me') renderInstall();
   }
   function renderInstall() {
     const hint = $('#install-hint');
@@ -1843,8 +2371,8 @@
      ========================================================= */
   function renderMe() {
     if (!state.me) return;
-    fillAvatar($('#me-avatar'), state.me, { dot: false });
-    $('#admin-btn').hidden = state.me.role !== 'admin';
+    fillAvatar($('#tab-avatar'), state.me, { dot: false });
+    $('#tab-admin').hidden = state.me.role !== 'admin';
   }
   function applyMe(user) {
     Object.assign(state.me, user);
@@ -1858,11 +2386,15 @@
   function renderSettingsProfile() {
     if (!state.me) return;
     fillAvatar($('#settings-avatar'), state.me, { dot: false });
+    $('#me-name').replaceChildren(
+      h('span', { text: state.me.displayName }),
+      state.me.role === 'admin' ? h('span', { class: 'tag tag-admin', text: 'Admin' }) : null);
     $('#settings-username').textContent = `Tên đăng nhập: ${state.me.username}`;
     $('#remove-avatar').hidden = !state.me.avatar;
   }
   function renderSettings() {
     renderSettingsProfile();
+    renderLocal();
     $('#name-form').elements.displayName.value = state.me.displayName;
     const pw = $('#password-form');
     pw.reset();
@@ -1959,6 +2491,7 @@
   });
 
   async function logout() {
+    forgetMe();
     const socket = state.socket;
     if (socket) {
       socket.removeAllListeners();
@@ -2189,6 +2722,7 @@
       await api(`/api/groups/${c.id}/members/${state.me.id}`, { method: 'DELETE' });
       state.convs.delete(c.id);
       state.msgs.delete(c.id);
+      LocalDB.deleteConversation(c.id).catch(() => {});
       state.replying.delete(c.id);
       navigate('#/', { replace: true });
       renderConvList();
@@ -2206,8 +2740,208 @@
     $('#credential').hidden = true;
     setFormError($('#create-form'), '');
     $('#admin-list').replaceChildren(h('li', { class: 'people-empty', text: 'Đang tải danh sách…' }));
-    await loadAdminUsers();
+    showAdminSeg(state.adminSeg);
+    await Promise.all([loadAdminUsers(), loadStorage()]);
   }
+
+  /* ----- Quản trị: chuyển mục Tài khoản / Bộ nhớ máy chủ ----- */
+  function showAdminSeg(seg) {
+    state.adminSeg = seg;
+    for (const btn of $$('.seg-btn')) {
+      const on = btn.dataset.seg === seg;
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      btn.tabIndex = on ? 0 : -1;
+    }
+    $('#admin-accounts').hidden = seg !== 'accounts';
+    $('#admin-storage').hidden = seg !== 'storage';
+  }
+  $('.seg').addEventListener('click', (e) => {
+    const btn = e.target.closest('.seg-btn');
+    if (!btn || btn.dataset.seg === state.adminSeg) return;
+    showAdminSeg(btn.dataset.seg);
+    $(`#admin-${btn.dataset.seg}`).scrollTop = 0;
+    if (btn.dataset.seg === 'storage') loadStorage();
+  });
+  $('.seg').addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const next = state.adminSeg === 'accounts' ? 'storage' : 'accounts';
+    showAdminSeg(next);
+    $(`#seg-${next}`).focus();
+    if (next === 'storage') loadStorage();
+  });
+
+  /* ----- Quản trị: bộ nhớ máy chủ ----- */
+  const LIMIT_SOURCE = {
+    firebase: 'Mặc định theo Firebase miễn phí (1 GB, chừa lại một ít cho an toàn).',
+    disk: 'Mặc định theo ổ đĩa máy chủ: phần app đang dùng cộng phần ổ đĩa còn trống.',
+    env: 'Đang lấy từ biến STORAGE_LIMIT_MB.',
+    custom: 'Đang dùng giới hạn bạn đặt.',
+    default: 'Giới hạn mặc định.',
+  };
+
+  function storageLevel(percent, cleanAt) {
+    if (percent >= cleanAt) return 'crit';
+    if (percent >= cleanAt - 15) return 'warn';
+    return 'good';
+  }
+
+  async function loadStorage() {
+    try {
+      renderStorage(await api('/api/admin/storage'));
+    } catch (err) {
+      if (err.status !== 403) $('#storage-view').replaceChildren(h('p', { class: 'form-error', text: err.message }));
+    }
+  }
+
+  function renderStorage({ usage: u, settings: st, lastClean }) {
+    const pct = Math.max(0, u.percent);
+    const shown = pct < 1 && u.total > 0 ? '<1' : decFmt.format(Math.min(pct, 999));
+    const level = storageLevel(pct, st.cleanAt);
+    const STATE = {
+      good: { icon: 'check', text: 'Còn nhiều chỗ trống.' },
+      warn: { icon: 'alert', text: `Sắp đầy. Khi đạt ${st.cleanAt}% ${st.autoClean ? 'máy chủ sẽ tự dọn ảnh và tin nhắn cũ nhất' : 'nên dọn bớt dữ liệu cũ (tự dọn đang tắt)'}.` },
+      crit: { icon: 'alert', text: st.autoClean ? 'Gần hết chỗ. Máy chủ đang tự dọn dữ liệu cũ nhất.' : 'Gần hết chỗ. Hãy dọn bớt dữ liệu cũ ở phần bên dưới.' },
+    }[level];
+    const width = Math.min(100, pct);
+    const tick = Math.min(100, st.cleanAt);
+    const rows = [
+      ['Ảnh trong tin nhắn', `${fmtNum(u.images.count)} ảnh`, u.images.bytes],
+      ['Tin nhắn', `${fmtNum(u.db.messages)} tin`, u.db.bytes],
+      ['Ảnh đại diện', `${fmtNum(u.avatars.count)} ảnh`, u.avatars.bytes],
+    ];
+    const meter = h('div', {
+      class: `meter is-${level}`, role: 'meter', 'aria-valuemin': '0', 'aria-valuemax': '100',
+      'aria-valuenow': String(Math.round(Math.min(pct, 100))),
+      'aria-label': `Đã dùng ${fmtBytes(u.total)} trên ${fmtBytes(u.limit)}`,
+      title: `Đã dùng ${fmtBytes(u.total)} trên ${fmtBytes(u.limit)} (${shown}%)`,
+    }, h('span', { class: 'meter-fill', style: `width:${width}%` }),
+    st.autoClean ? h('span', { class: 'meter-tick', style: `left:${tick}%`, 'aria-hidden': 'true' }) : null);
+    const scale = h('div', { class: 'meter-scale', 'aria-hidden': 'true' },
+      h('span', { style: 'left:0', text: '0' }),
+      st.autoClean && tick <= 88 ? h('span', { style: `left:${tick}%`, text: `tự dọn ${st.cleanAt}%` }) : null,
+      h('span', { style: 'left:100%;transform:translateX(-100%)', text: fmtBytes(u.limit) }));
+    const note = lastClean
+      ? `${lastClean.auto ? 'Tự dọn' : 'Dọn thủ công'} gần nhất lúc ${new Date(lastClean.at).toLocaleString('vi-VN')}: xóa ${fmtNum(lastClean.images || 0)} ảnh và ${fmtNum(lastClean.messages || 0)} tin nhắn, giải phóng khoảng ${fmtBytes(lastClean.bytes || 0)}.`
+      : 'Chưa dọn lần nào.';
+    $('#storage-view').replaceChildren(
+      h('p', { class: 'storage-figure' },
+        h('span', { class: 'storage-percent', text: `${shown}%` }),
+        h('span', { class: 'storage-amount', text: `đã dùng ${fmtBytes(u.total)} trên ${fmtBytes(u.limit)}` })),
+      meter,
+      scale,
+      h('p', { class: `storage-state is-${level}` }, icon(STATE.icon), h('span', { text: STATE.text })),
+      h('table', { class: 'storage-table' },
+        h('caption', { class: 'visually-hidden', text: 'Dung lượng theo loại dữ liệu' }),
+        h('tbody', null, rows.map(([label, count, bytes]) => h('tr', null,
+          h('th', { scope: 'row', text: label }),
+          h('td', { class: 'num-muted', text: count }),
+          h('td', { text: fmtBytes(bytes) })))),
+        h('tfoot', null, h('tr', null,
+          h('th', { scope: 'row', text: 'Tổng' }), h('td'), h('td', { text: fmtBytes(u.total) })))),
+      h('p', { class: 'storage-note', text: `${u.cloud ? 'Dữ liệu đang lưu trên Firebase.' : 'Dữ liệu đang lưu trên ổ đĩa máy chủ.'} ${note}` }));
+
+    // Cài đặt tự dọn
+    const form = $('#clean-settings');
+    if (!form.contains(document.activeElement)) {
+      form.elements.autoClean.checked = st.autoClean;
+      form.elements.cleanAt.value = String(st.cleanAt);
+      form.elements.cleanTo.value = String(st.cleanTo);
+      form.elements.limitMb.value = st.limitMb || '';
+      form.elements.limitMb.placeholder = `Mặc định: ${fmtNum(Math.round(u.defaultLimit / 1048576))} MB`;
+    }
+    $('#limit-hint').textContent = LIMIT_SOURCE[u.limitSource] || '';
+
+    // Nhắc ở mục Tài khoản khi sắp đầy
+    const alert = $('#storage-alert');
+    alert.replaceChildren();
+    if (level !== 'good') {
+      alert.append(h('div', { class: `storage-alert${level === 'crit' ? ' is-crit' : ''}`, role: 'status' },
+        icon('alert'),
+        h('span', { text: `Bộ nhớ máy chủ đã dùng ${shown}%.` }),
+        h('button', { type: 'button', text: 'Xem', onclick: () => { showAdminSeg('storage'); loadStorage(); } })));
+    }
+  }
+
+  $('#storage-refresh').addEventListener('click', (e) => withBusy(e.currentTarget, loadStorage));
+
+  $('#clean-settings').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const f = form.elements;
+    const body = {
+      autoClean: f.autoClean.checked,
+      cleanAt: Number(f.cleanAt.value),
+      cleanTo: Number(f.cleanTo.value),
+      limitMb: f.limitMb.value.trim() === '' ? null : Number(f.limitMb.value),
+    };
+    if (body.cleanTo >= body.cleanAt) {
+      setFormError(form, 'Mức "dọn cho đến khi còn" phải thấp hơn mức "bắt đầu dọn".');
+      return;
+    }
+    withBusy(form.querySelector('[type=submit]'), async () => {
+      try {
+        const data = await api('/api/admin/storage/settings', { method: 'PATCH', body });
+        setFormError(form, '');
+        document.activeElement.blur();
+        renderStorage(data);
+        toast('Đã lưu cài đặt bộ nhớ.');
+      } catch (err) {
+        setFormError(form, err.message);
+      }
+    });
+  });
+
+  // Dọn thủ công: bấm "Kiểm tra" để xem trước, rồi mới "Xóa ngay"
+  let cleanPlan = null;
+  function resetCleanPreview() {
+    cleanPlan = null;
+    $('#clean-preview').hidden = true;
+    $('#clean-run').hidden = true;
+  }
+  $('#clean-form').addEventListener('change', resetCleanPreview);
+  $('#clean-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = e.currentTarget.elements;
+    const plan = { kind: f.kind.value, olderThanDays: Number(f.olderThanDays.value) };
+    withBusy($('#clean-check'), async () => {
+      try {
+        const { result } = await api('/api/admin/storage/cleanup', { method: 'POST', body: { ...plan, dryRun: true } });
+        const what = plan.kind === 'images' ? 'ảnh' : 'tin nhắn';
+        const age = plan.olderThanDays ? `cũ hơn ${f.olderThanDays.selectedOptions[0].textContent}` : 'từ trước đến nay';
+        const preview = $('#clean-preview');
+        preview.hidden = false;
+        if (!result.count) {
+          cleanPlan = null;
+          $('#clean-run').hidden = true;
+          preview.replaceChildren(`Không có ${what} nào ${age}.`);
+          return;
+        }
+        cleanPlan = { ...plan, count: result.count };
+        preview.replaceChildren(
+          'Sẽ xóa ', h('strong', { text: `${fmtNum(result.count)} ${what}` }), ` ${age}, giải phóng khoảng `,
+          h('strong', { text: fmtBytes(result.bytes) }), '.');
+        $('#clean-run').hidden = false;
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+  });
+  $('#clean-run').addEventListener('click', (e) => {
+    if (!cleanPlan) return;
+    const plan = cleanPlan;
+    const what = plan.kind === 'images' ? 'ảnh' : 'tin nhắn';
+    if (!window.confirm(`Xóa vĩnh viễn ${fmtNum(plan.count)} ${what} khỏi máy chủ? Không hoàn tác được. Ai đã lưu trên máy vẫn xem lại được bản của họ.`)) return;
+    withBusy(e.currentTarget, async () => {
+      try {
+        const data = await api('/api/admin/storage/cleanup', { method: 'POST', body: { kind: plan.kind, olderThanDays: plan.olderThanDays } });
+        resetCleanPreview();
+        renderStorage(data);
+        toast(`Đã xóa ${fmtNum(data.result.count)} ${what}, giải phóng khoảng ${fmtBytes(data.result.bytes)}.`);
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+  });
   async function loadAdminUsers() {
     try {
       const { users } = await api('/api/admin/users');
@@ -2396,9 +3130,9 @@
     const el = e.target.closest('[data-action]');
     if (!el) return;
     switch (el.dataset.action) {
-      case 'settings': navigate('#/settings'); break;
+      case 'settings': switchTab('me'); break;
       case 'new': navigate('#/new'); break;
-      case 'admin': navigate('#/admin'); break;
+      case 'admin': switchTab('admin'); break;
       case 'close-sheet':
       case 'back': goBack(); break;
       case 'logout': logout(); break;
@@ -2406,6 +3140,7 @@
       case 'pick-avatar': $('#avatar-input').click(); break;
       case 'remove-avatar': removeAvatar(); break;
       case 'close-lightbox': closeLightbox(); break;
+      case 'download-image': downloadImage($('#lightbox img').src); break;
       case 'new-group': navigate('#/new-group', { replace: true }); break;
       case 'group-info': navigate('#/group'); break;
       case 'chat-title':
@@ -2455,8 +3190,10 @@
      Khởi động
      ========================================================= */
   async function enterApp() {
+    state.offline = false;
     showScreen('view-main');
     renderMe();
+    await LocalDB.open(state.me.id);
     try {
       await Promise.all([loadUsers(), loadConvs()]);
     } catch (err) {
@@ -2464,38 +3201,69 @@
       toast(err.message);
     }
     if (!state.me) return;
+    setOfflineStatus(false);
     connectSocket();
     renderBanner();
     route();
     syncPush();
+    if (LocalDB.ready()) {
+      cacheMe(state.me);
+      LocalDB.persist();
+      LocalDB.syncMediaFlag();
+      syncAll();
+    }
   }
 
   async function boot() {
     setupViewport();
     registerServiceWorker();
-    // Máy chủ miễn phí (Render Free) ngủ khi không ai dùng: báo cho người dùng biết là đang chờ
-    const slowHint = setTimeout(() => { $('#boot-hint').hidden = false; }, 3500);
-    try {
-      const config = await api('/api/config');
-      state.appName = config.appName || state.appName;
-      state.vapidKey = config.vapidPublicKey || null;
-    } catch {
-      /* dùng mặc định */
+    // Có dữ liệu lưu trên máy: mở app xem ngay, không phải chờ máy chủ thức dậy
+    const saved = cachedMe();
+    let offline = false;
+    if (saved && LocalDB.enabled()) {
+      try {
+        offline = await openOffline(saved);
+      } catch {
+        offline = false;
+      }
     }
+    // Máy chủ miễn phí (Render Free) ngủ khi không ai dùng: báo cho người dùng biết là đang chờ
+    const slowHint = offline ? null : setTimeout(() => { $('#boot-hint').hidden = false; }, 3500);
+    await connectServer(slowHint);
+  }
+
+  async function loadConfig() {
+    if (state.configLoaded) return;
+    const config = await api('/api/config');
+    state.appName = config.appName || state.appName;
+    state.vapidKey = config.vapidPublicKey || null;
+    state.configLoaded = true;
     $$('[data-appname]').forEach((el) => { el.textContent = state.appName; });
-    document.title = state.appName;
+    updateBadge();
+  }
+
+  async function connectServer(slowHint) {
     try {
+      await loadConfig().catch((err) => {
+        if (err.status === 0) throw err;
+      });
       const { user } = await api('/api/me');
       clearTimeout(slowHint);
       if (!user) {
+        forgetMe();
         showLogin();
         return;
       }
+      if (state.offline && state.me && state.me.id !== user.id) teardown();
       state.me = user;
       if (user.mustChangePassword) showForce();
       else await enterApp();
     } catch (err) {
       clearTimeout(slowHint);
+      if (state.offline && err.status === 0) {
+        setTimeout(() => connectServer(null), 8000); // vẫn đang xem bản trên máy, thử lại sau
+        return;
+      }
       showLogin(err.status === 0 ? err.message : '');
     }
   }

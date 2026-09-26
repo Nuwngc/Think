@@ -19,7 +19,8 @@ if ((process.env.FIREBASE_SERVICE_ACCOUNT || process.env.THINK_FAKE_FIRESTORE) &
   console.error('❌ Đã cấu hình Firebase nhưng server không được chạy qua start.js. Hãy dùng lệnh: npm start');
   process.exit(1);
 }
-const { db, get, all, run, transaction, DATA_DIR, UPLOAD_DIR, AVATAR_DIR, IMAGE_DIR, GENERAL_ID } = require('./src/db');
+const { db, get, all, run, transaction, getSetting, DATA_DIR, AVATAR_DIR, IMAGE_DIR, GENERAL_ID } = require('./src/db');
+const storage = require('./src/storage');
 const auth = require('./src/auth');
 const push = require('./src/push');
 
@@ -108,12 +109,8 @@ function sniffImage(buf) {
   return null;
 }
 
-function removeUpload(url) {
-  const m = /^\/uploads\/(avatars|img)\/([\w.-]+)$/.exec(url || '');
-  if (!m) return;
-  fs.unlink(path.join(UPLOAD_DIR, m[1], m[2]), () => {});
-  cloud.removeFile(`uploads/${m[1]}/${m[2]}`);
-}
+// Xóa file trên máy chủ, trên Firebase và khỏi bảng đo dung lượng
+const removeUpload = (url) => storage.removeUpload(url);
 
 /* ---------------- Trạng thái online ---------------- */
 
@@ -173,14 +170,17 @@ function serializeMessage(m, reactions) {
     replyTo: null,
     reactions: reactions || [],
   };
+  if (m.image_purged && !m.deleted && !m.image) out.imagePurged = true; // ảnh đã bị dọn khỏi máy chủ
   if (m.reply_to && !m.deleted) {
-    const gone = m.r_sender_id == null || Boolean(m.r_deleted);
+    const missing = m.r_sender_id == null; // tin gốc đã bị dọn khỏi máy chủ
+    const gone = !missing && Boolean(m.r_deleted);
     out.replyTo = {
       id: m.reply_to,
       senderId: m.r_sender_id ?? null,
       deleted: gone,
-      text: gone ? null : snippet(m.r_text),
-      image: !gone && Boolean(m.r_image),
+      missing,
+      text: gone || missing ? null : snippet(m.r_text),
+      image: !gone && !missing && (Boolean(m.r_image) || Boolean(m.r_image_purged)),
     };
   }
   return out;
@@ -188,8 +188,25 @@ function serializeMessage(m, reactions) {
 
 // Tin nhắn kèm thông tin tin được trả lời
 const MSG_SELECT = `
-  SELECT m.*, r.sender_id AS r_sender_id, r.text AS r_text, r.image AS r_image, r.deleted AS r_deleted
+  SELECT m.*, r.sender_id AS r_sender_id, r.text AS r_text, r.image AS r_image, r.deleted AS r_deleted,
+         r.image_purged AS r_image_purged
     FROM messages m LEFT JOIN messages r ON r.id = m.reply_to`;
+
+// Cảm xúc của một danh sách tin nhắn bất kỳ
+function reactionsFor(ids) {
+  const map = new Map();
+  for (let i = 0; i < ids.length; i += 500) {
+    const part = ids.slice(i, i + 500);
+    const rows = db
+      .prepare(`SELECT message_id, user_id, emoji FROM reactions WHERE message_id IN (${part.map(() => '?').join(',')}) ORDER BY created_at`)
+      .all(...part);
+    for (const r of rows) {
+      if (!map.has(r.message_id)) map.set(r.message_id, []);
+      map.get(r.message_id).push({ userId: r.user_id, emoji: r.emoji });
+    }
+  }
+  return map;
+}
 
 const reactionsOf = (messageId) =>
   all('SELECT user_id, emoji FROM reactions WHERE message_id = ? ORDER BY created_at', messageId)
@@ -529,6 +546,7 @@ app.post('/api/me/avatar', requireAuth, requireReady, rawImage, (req, res) => {
   const name = `${req.user.id}-${crypto.randomBytes(6).toString('hex')}.${kind}`;
   fs.writeFileSync(path.join(AVATAR_DIR, name), req.body);
   cloud.saveFile(`uploads/avatars/${name}`);
+  storage.recordUpload(`/uploads/avatars/${name}`, 'avatar', req.body.length, req.user.id);
   run('UPDATE users SET avatar = ? WHERE id = ?', `/uploads/avatars/${name}`, req.user.id);
   removeUpload(req.user.avatar);
   const user = get('SELECT * FROM users WHERE id = ?', req.user.id);
@@ -583,6 +601,7 @@ app.post('/api/conversations/dm', requireAuth, requireReady, (req, res) => {
 app.get('/api/conversations/:id/messages', requireAuth, requireReady, (req, res) => {
   const convId = Number(req.params.id);
   if (!membership(convId, req.user.id)) return res.status(404).json({ error: 'Không tìm thấy cuộc trò chuyện.' });
+  const serverTime = Date.now();
   const limit = clampInt(req.query.limit, 1, 100) || 40;
   const before = clampInt(req.query.before, 1, Number.MAX_SAFE_INTEGER) || Number.MAX_SAFE_INTEGER;
   const rows = all(`${MSG_SELECT} WHERE m.conversation_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`, convId, before, limit).reverse();
@@ -592,6 +611,32 @@ app.get('/api/conversations/:id/messages', requireAuth, requireReady, (req, res)
     messages: rows.map((m) => serializeMessage(m, reacts.get(m.id))),
     hasMore: rows.length === limit,
     reads: reads.map((r) => ({ userId: r.user_id, lastReadId: r.last_read_id })),
+    serverTime,
+  });
+});
+
+// Đồng bộ cho bản lưu trên máy người dùng: tin mới sau "after" + tin cũ có thay đổi sau "since"
+// (thu hồi, cảm xúc, ảnh bị dọn). Tin đã bị dọn khỏi máy chủ không gửi lại, máy người dùng giữ bản của mình.
+const SYNC_LIMIT = 300;
+app.get('/api/conversations/:id/sync', requireAuth, requireReady, (req, res) => {
+  const convId = Number(req.params.id);
+  if (!membership(convId, req.user.id)) return res.status(404).json({ error: 'Không tìm thấy cuộc trò chuyện.' });
+  const serverTime = Date.now();
+  const after = clampInt(req.query.after, 0, Number.MAX_SAFE_INTEGER) ?? 0;
+  const since = clampInt(req.query.since, 0, Number.MAX_SAFE_INTEGER) ?? 0;
+  const fresh = all(`${MSG_SELECT} WHERE m.conversation_id = ? AND m.id > ? ORDER BY m.id LIMIT ?`, convId, after, SYNC_LIMIT);
+  const changed = since > 0
+    ? all(`${MSG_SELECT} WHERE m.conversation_id = ? AND m.id <= ? AND m.updated_at > ? ORDER BY m.updated_at LIMIT ?`,
+      convId, after, since, SYNC_LIMIT)
+    : [];
+  const reacts = reactionsFor([...fresh, ...changed].map((m) => m.id));
+  res.json({
+    messages: fresh.map((m) => serializeMessage(m, reacts.get(m.id))),
+    changed: changed.map((m) => serializeMessage(m, reacts.get(m.id))),
+    nextAfter: fresh.length ? fresh[fresh.length - 1].id : after,
+    nextSince: changed.length === SYNC_LIMIT ? changed[changed.length - 1].updated_at : serverTime,
+    more: fresh.length === SYNC_LIMIT || changed.length === SYNC_LIMIT,
+    serverTime,
   });
 });
 
@@ -607,6 +652,7 @@ app.post('/api/upload', requireAuth, requireReady, rawImage, (req, res) => {
   fs.writeFileSync(path.join(IMAGE_DIR, name), req.body);
   cloud.saveFile(`uploads/img/${name}`);
   const url = `/uploads/img/${name}`;
+  storage.recordUpload(url, 'img', req.body.length, req.user.id);
   pendingUploads.set(url, { userId: req.user.id, at: Date.now() });
   res.json({ url });
 });
@@ -702,7 +748,7 @@ app.delete('/api/messages/:id', requireAuth, requireReady, (req, res) => {
   const msg = get('SELECT * FROM messages WHERE id = ?', Number(req.params.id));
   if (!msg || msg.sender_id !== req.user.id || msg.kind === 'system') return res.status(404).json({ error: 'Không tìm thấy tin nhắn.' });
   if (!msg.deleted) {
-    run('UPDATE messages SET deleted = 1, text = NULL, image = NULL WHERE id = ?', msg.id);
+    run('UPDATE messages SET deleted = 1, text = NULL, image = NULL, updated_at = ? WHERE id = ?', Date.now(), msg.id);
     run('DELETE FROM reactions WHERE message_id = ?', msg.id);
     removeUpload(msg.image);
     for (const uid of memberIds(msg.conversation_id)) {
@@ -736,6 +782,7 @@ app.post('/api/messages/:id/reactions', requireAuth, requireReady, (req, res) =>
       msg.id, req.user.id, emoji, Date.now()
     );
   }
+  run('UPDATE messages SET updated_at = ? WHERE id = ?', Date.now(), msg.id);
   const payload = { conversationId: msg.conversation_id, messageId: msg.id, reactions: reactionsOf(msg.id) };
   for (const uid of memberIds(msg.conversation_id)) io.to(`user:${uid}`).emit('message:reactions', payload);
   res.json(payload);
@@ -1004,6 +1051,34 @@ admin.post('/users/:id/role', (req, res) => {
   res.json({ user: adminUser(fresh) });
 });
 
+// Bộ nhớ máy chủ: xem dung lượng, cài đặt tự dọn, dọn thủ công
+const storagePayload = () => ({
+  usage: storage.usage(),
+  settings: storage.settings(),
+  lastClean: getSetting('storage_last_clean', null),
+});
+
+admin.get('/storage', (req, res) => res.json(storagePayload()));
+
+admin.patch('/storage/settings', (req, res) => {
+  try {
+    storage.saveSettings(req.body || {});
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    throw err;
+  }
+  res.json(storagePayload());
+});
+
+admin.post('/storage/cleanup', (req, res) => {
+  const kind = ['images', 'messages'].includes(req.body?.kind) ? req.body.kind : null;
+  if (!kind) return res.status(400).json({ error: 'Chọn loại dữ liệu cần dọn: ảnh hoặc tin nhắn.' });
+  const days = clampInt(req.body?.olderThanDays, 0, 3650);
+  if (days === null) return res.status(400).json({ error: 'Chọn khoảng thời gian cần dọn.' });
+  const result = storage.cleanup(kind, days, { dryRun: Boolean(req.body?.dryRun) });
+  res.json({ result, ...storagePayload() });
+});
+
 app.use('/api/admin', admin);
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Không tìm thấy đường dẫn API này.' }));
@@ -1086,6 +1161,11 @@ setInterval(() => {
   cloud.attach(db); // bắt đầu tự sao lưu lên Firebase (nếu có cấu hình)
   await bootstrapAdmin();
   await resetAdminFromEnv();
+  storage.init({
+    onChange(result) {
+      for (const a of all("SELECT id FROM users WHERE role = 'admin'")) io.to(`user:${a.id}`).emit('storage:changed', result);
+    },
+  });
   server.listen(PORT, HOST, () => {
     console.log(`✅ ${APP_NAME} đang chạy tại http://localhost:${PORT}`);
   });
