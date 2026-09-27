@@ -11,7 +11,7 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - Thanh điều hướng dưới cùng: **Tin nhắn**, **Cá nhân** (đổi tên, mật khẩu, ảnh đại diện, thông báo, lưu trên máy) và **Quản trị** (chỉ admin thấy).
 - **Lưu trên máy người dùng**: tin nhắn và ảnh được giữ lại trên điện thoại, mở app là xem được ngay kể cả khi mất mạng hay máy chủ đang thức dậy. Tải lịch sử chat thành file, tải ảnh về máy.
 - **Bộ nhớ máy chủ**: thanh hiển thị dung lượng đã dùng, **tự dọn ảnh và tin nhắn cũ nhất khi sắp đầy**, dọn thủ công có xem trước.
-- **App Android có bong bóng chat** (Android 11+): tin nhắn mới hiện thành bong bóng nổi như Messenger, chạm vào để trả lời ngay; thông báo có ảnh từng người gửi, ô **Trả lời** và nút **Đã đọc**. Tải app ngay trên web (Cá nhân → Cài app lên máy).
+- **App Android có bong bóng chat** (Android 8 trở lên): tin nhắn mới hiện thành bong bóng nổi như Messenger, chạm vào để trả lời ngay; thông báo có ảnh từng người gửi, ô **Trả lời** và nút **Đã đọc**. Tải app ngay trên web (Cá nhân → Cài app lên máy).
 - **Trả lời tin nhắn** (chạm giữ → Trả lời, hoặc vuốt ngang tin nhắn) và **thả cảm xúc** ❤️ 😆 😮 😢 😡 👍, xem được ai đã thả.
 - Realtime: đang nhập…, đang hoạt động / hoạt động X phút trước, "Đã xem" (nhóm hiện ảnh người đã xem), thu hồi tin nhắn.
 - Thông báo đầy đủ:
@@ -215,7 +215,9 @@ Trên iPhone, thông báo **chỉ chạy trong app đã thêm vào màn hình ch
 
 App Think cho Android (thư mục `android/`, file cài `public/download/think.apk`) mở web Think toàn màn hình bằng Chrome, giống APK làm bằng PWABuilder, và có thêm:
 
-- **Bong bóng chat** (Android 11 trở lên): tin nhắn mới hiện thành bong bóng nổi trên màn hình như Messenger. Chạm vào bong bóng là mở khung chat nhỏ, đọc và trả lời ngay, không cần mở app.
+- **Bong bóng chat** (Android 8 trở lên): tin nhắn mới hiện thành bong bóng nổi trên màn hình như Messenger. Chạm vào bong bóng là mở khung chat nhỏ, đọc và trả lời ngay, không cần mở app.
+  - Android 11 trở lên: dùng bong bóng có sẵn của Android.
+  - Android 8, 9, 10: app tự vẽ bong bóng đè lên màn hình (cần quyền **Hiển thị trên ứng dụng khác**). Kéo bong bóng đi đâu cũng được, kéo xuống dấu ✕ để ẩn. Trong lúc có bong bóng, Android bắt buộc hiện thêm thông báo nhỏ "Bong bóng chat đang bật".
 - Thông báo kiểu hội thoại: tên và ảnh từng người gửi, các tin chưa đọc, ô **Trả lời** gõ ngay trong thông báo, nút **Đã đọc**.
 - Tự báo khi có bản app mới.
 
@@ -233,11 +235,11 @@ App vẫn chạy bản web mới nhất trên máy chủ: sửa tính năng rồ
 1. Trong app: **Cá nhân → Thông báo → Bật thông báo** (nếu chưa bật).
 2. **Cá nhân → Bong bóng chat → Bật bong bóng chat**. App hiện hộp thoại và hướng dẫn tiếp:
    - **Cho phép thông báo** (Android 13+).
-   - **Cho phép bong bóng**: trong trang cài đặt mở ra, chọn **Tất cả cuộc trò chuyện đều có thể hiện bong bóng**.
-   - **Máy Samsung**: vào thêm **Cài đặt → Thông báo → Cài đặt nâng cao → Thông báo nổi → Bong bóng**.
+   - Android 11 trở lên, **Cho phép bong bóng**: trong trang cài đặt mở ra, chọn **Tất cả cuộc trò chuyện đều có thể hiện bong bóng**. Máy Samsung vào thêm **Cài đặt → Thông báo → Cài đặt nâng cao → Thông báo nổi → Bong bóng**.
+   - Android 8, 9, 10, **Cho phép hiển thị trên ứng dụng khác**: bật cho Think rồi bấm quay lại, sau đó bấm **Xem thử** để thấy bong bóng. Máy Xiaomi bật thêm **Hiển thị cửa sổ bật lên khi chạy nền** (Cài đặt → Ứng dụng → Think → Quyền khác).
 3. Nhờ ai đó nhắn thử khi bạn đang ở màn hình chính: tin nhắn hiện thành bong bóng.
 
-Bấm "Bật bong bóng chat" là web đưa cho app một mã dùng một lần để app tự đăng nhập cho bong bóng và ô Trả lời (hai phần này không dùng chung đăng nhập với Chrome). Đổi mật khẩu thì phải bấm lại nút này. Android 10 trở xuống không có bong bóng, nhưng vẫn trả lời được ngay trong thông báo.
+Bấm "Bật bong bóng chat" là web đưa cho app một mã dùng một lần để app tự đăng nhập cho bong bóng và ô Trả lời (hai phần này không dùng chung đăng nhập với Chrome). Đổi mật khẩu thì phải bấm lại nút này. Android 7 không có bong bóng, nhưng vẫn trả lời được ngay trong thông báo. Muốn tắt bong bóng trên Android 8–10: bấm **Tắt bong bóng** trong thông báo "Bong bóng chat đang bật".
 
 ### Kiểm tra khi có trục trặc
 

@@ -1,5 +1,5 @@
 {
-  "versionCode": 2,
-  "versionName": "2.0.0",
-  "notes": "Có bong bóng chat và ô Trả lời nhanh trong thông báo."
+  "versionCode": 3,
+  "versionName": "2.1.0",
+  "notes": "Bong bóng chat chạy được cả trên Android 8, 9, 10."
 }

@@ -83,6 +83,17 @@ final class Avatars {
         return Icon.createWithBitmap(out);
     }
 
+    /** Ảnh tròn của cuộc trò chuyện cho bong bóng nổi (Android 8–10): nhóm dùng chữ cái đầu như trên web. */
+    static Bitmap conversationCircle(Context context, boolean isGroup, String avatarPath, String name, long id, int size) {
+        Bitmap out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(out);
+        RectF dst = new RectF(0, 0, size, size);
+        Bitmap photo = isGroup ? null : photo(context, avatarPath, false);
+        if (photo != null) drawCircle(canvas, photo, dst);
+        else drawLetterCircle(canvas, name, isGroup ? colorOf(id + 3) : colorOf(id), dst);
+        return out;
+    }
+
     /** Ảnh cho bong bóng và lối tắt của cuộc trò chuyện (adaptive icon, máy tự cắt hình tròn). */
     static Icon conversationIcon(Context context, boolean isGroup, String avatarPath, String name, long id, boolean network) {
         Bitmap out = Bitmap.createBitmap(ADAPTIVE, ADAPTIVE, Bitmap.Config.ARGB_8888);

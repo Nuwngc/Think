@@ -15,6 +15,7 @@ final class Prefs {
     private static final String KEY_ASKED_NOTIFY = "asked_notify";
     private static final String KEY_UPDATE_CHECK = "update_check";
     private static final String KEY_UPDATE_SEEN = "update_seen";
+    private static final String KEY_HEADS = "chat_heads";
 
     private Prefs() {}
 
@@ -72,6 +73,15 @@ final class Prefs {
 
     static String meAvatar(Context context) {
         return get(context).getString(KEY_ME_AVATAR, null);
+    }
+
+    /* ---- Bong bóng nổi (Android 8–10) ---- */
+    static boolean headsOn(Context context) {
+        return get(context).getBoolean(KEY_HEADS, true);
+    }
+
+    static void setHeadsOn(Context context, boolean on) {
+        get(context).edit().putBoolean(KEY_HEADS, on).apply();
     }
 
     /* ---- Trình duyệt đã mở app lần gần nhất (Chrome) ---- */

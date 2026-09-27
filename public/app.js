@@ -50,6 +50,8 @@
   // App Think cho Android mở web kèm ?app=android&v=<bản app>; bong bóng chat mở web kèm ?bubble=1
   const NATIVE = window.ThinkApp || null; // cầu nối tới app, chỉ có trong bong bóng chat
   const IN_BUBBLE = new URLSearchParams(location.search).get('bubble') === '1';
+  // Bong bóng nổi của Android 8–10 (?overlay=1): vẫn cho quay lại danh sách để chuyển cuộc trò chuyện
+  const IN_OVERLAY = IN_BUBBLE && new URLSearchParams(location.search).get('overlay') === '1';
   (() => {
     const q = new URLSearchParams(location.search);
     if (q.get('app') === 'android') store.set('android-app', q.get('v') || '1');
@@ -61,6 +63,7 @@
     }
   })();
   if (IN_BUBBLE) document.documentElement.classList.add('bubble-mode');
+  if (IN_OVERLAY) document.documentElement.classList.add('overlay-mode');
   const inAndroidApp = () => !IN_BUBBLE && Boolean(store.get('android-app')) && isStandalone();
   const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -350,6 +353,12 @@
     if (hash === '#/settings') hash = '#/me'; // đường dẫn cũ
     const tab = hash === '#/me' ? 'me' : hash === '#/admin' ? 'admin' : 'chats';
     if (tab === 'admin' && state.me.role !== 'admin') {
+      navigate('#/', { replace: true });
+      return;
+    }
+    // Trong bong bóng chỉ nhắn tin; trang Cá nhân / Quản trị mở bằng app đầy đủ
+    if (IN_BUBBLE && tab !== 'chats') {
+      if (NATIVE && NATIVE.openApp) NATIVE.openApp(hash);
       navigate('#/', { replace: true });
       return;
     }

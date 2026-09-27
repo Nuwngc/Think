@@ -292,9 +292,7 @@ public class LinkActivity extends Activity {
             return;
         }
         if (Build.VERSION.SDK_INT < 30) {
-            message.setText(intro + " Máy bạn dùng Android 10 trở xuống nên chưa có bong bóng chat.");
-            hint.setText("Bạn vẫn trả lời được ngay trong thông báo: kéo thông báo xuống, bấm \"Trả lời\".");
-            action.setVisibility(View.GONE);
+            showOverlaySteps(intro);
             return;
         }
         if (!bubblesAllowedForAll()) {
@@ -315,6 +313,52 @@ public class LinkActivity extends Activity {
         if (samsung) h = "Máy Samsung: nếu chưa thấy bong bóng, vào Cài đặt → Thông báo → Cài đặt nâng cao → Thông báo nổi → chọn Bong bóng.";
         hint.setText(h);
         action.setVisibility(View.GONE);
+    }
+
+    /** Android 8–10: bong bóng nổi, cần quyền "Hiển thị trên ứng dụng khác". */
+    private void showOverlaySteps(String intro) {
+        String maker = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.toLowerCase(java.util.Locale.ROOT);
+        if (!ChatHeads.supported(this)) {
+            message.setText(intro + (Build.VERSION.SDK_INT < 26
+                ? " Máy bạn dùng Android 7 nên chưa hiện được bong bóng chat."
+                : " Máy bạn dùng bản Android Go, không cho app hiện bong bóng nổi."));
+            hint.setText("Bạn vẫn trả lời được ngay trong thông báo: kéo thông báo xuống, bấm \"Trả lời\".");
+            action.setVisibility(View.GONE);
+            return;
+        }
+        if (!ChatHeads.canDraw(this)) {
+            message.setText(intro + " Bước cuối: cho Think hiện trên ứng dụng khác, để bong bóng nổi được trên màn hình.");
+            String h = "Trong trang cài đặt sắp mở, bật \"Cho phép hiển thị trên ứng dụng khác\" cho Think rồi bấm quay lại.";
+            if (maker.contains("xiaomi") || maker.contains("redmi") || maker.contains("poco")) {
+                h += "\n\nMáy Xiaomi: vào thêm Cài đặt → Ứng dụng → Think → Quyền khác → bật \"Hiển thị cửa sổ bật lên khi chạy nền\".";
+            }
+            hint.setText(h);
+            setAction("Cho phép", new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    try {
+                        startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+                    } catch (Exception e) {
+                        openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                    }
+                }
+            });
+            return;
+        }
+        Prefs.setHeadsOn(this, true);
+        message.setText(intro + " Xong rồi! Tin nhắn mới sẽ hiện thành bong bóng nổi trên màn hình, chạm vào để đọc và trả lời.");
+        String h = "Kéo bong bóng xuống dấu ✕ để ẩn. Trong lúc có bong bóng, Android 8–10 bắt buộc hiện thêm thông báo nhỏ \"Bong bóng chat đang bật\".";
+        if (maker.contains("xiaomi") || maker.contains("redmi") || maker.contains("poco")) {
+            h += "\n\nMáy Xiaomi: nếu bong bóng không hiện, vào Cài đặt → Ứng dụng → Think → Quyền khác → bật \"Hiển thị cửa sổ bật lên khi chạy nền\".";
+        }
+        hint.setText(h);
+        setAction("Xem thử", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                ChatHeads.demo(LinkActivity.this);
+                finish();
+            }
+        });
     }
 
     private void setAction(String label, View.OnClickListener listener) {

@@ -387,6 +387,8 @@ final class Notifier {
                 }
                 if (Build.VERSION.SDK_INT < 28) {
                     repost(context, nm, tag, platformId, n, CH_MESSAGES, convId, true);
+                    // Android 8: thông báo giữ như Chrome gửi; lấy thêm tên/ảnh để hiện bong bóng nổi
+                    if (ChatHeads.enabled(context)) showConversation(context, convId, tag, platformId, n, seq);
                     return;
                 }
                 try {
@@ -472,6 +474,7 @@ final class Notifier {
             public void run() {
                 NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
                 StatusBarNotification active = findActive(nm, tag, platformId);
+                if (convId > 0) ChatHeads.onRead(context, convId);
                 if (convId > 0 && active != null && isBubble(active.getNotification())) {
                     Conv c = load(context, convId);
                     if (c != null) {
@@ -513,6 +516,9 @@ final class Notifier {
         if (c.messages.isEmpty()) return;
         save(context, c);
         post(context, c, alert, false);
+        // Android 8–10: bong bóng nổi (Android 11+ dùng bong bóng của hệ thống trong post)
+        if (alert) ChatHeads.onMessage(context, c.id);
+        else ChatHeads.onUpdate(context, c.id);
     }
 
     private static void post(Context context, Conv c, boolean alert, boolean suppress) {
@@ -677,7 +683,7 @@ final class Notifier {
             public void run() {
                 afterReplyNow(context, convId, text, error);
             }
-        }, 3000);
+        }, 1500);
     }
 
     private static void afterReplyNow(Context context, int convId, String text, String error) {
@@ -715,10 +721,11 @@ final class Notifier {
             public void run() {
                 dismissNow(context, convId);
             }
-        }, 3000);
+        }, 1500);
     }
 
     private static void dismissNow(Context context, int convId) {
+        ChatHeads.onRead(context, convId);
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         StatusBarNotification active = findConversation(nm, convId);
         PendingIntent chromeDelete;

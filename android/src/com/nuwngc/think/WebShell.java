@@ -2,18 +2,24 @@ package com.nuwngc.think;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.JsResult;
 import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -28,19 +34,36 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Khung web dùng cho bong bóng chat (và bản dự phòng khi máy không có Chrome).
- * Đăng nhập được giữ trong cookie của app, nên app và bong bóng dùng chung một lần đăng nhập.
+ * Khung web dùng cho bong bóng chat: trong Activity (Android 11+ và bản dự phòng khi máy không có Chrome)
+ * hoặc trong cửa sổ nổi (bong bóng Android 8–10, xem {@link ChatHeadService}).
+ * Đăng nhập được giữ trong cookie của app, nên mọi khung web của app dùng chung một lần đăng nhập.
  */
 final class WebShell {
     static final int REQUEST_FILE = 41;
-    private final Activity activity;
+
+    /** Nơi chứa khung web. */
+    interface Host {
+        /** Mở màn hình chọn ảnh; kết quả trả qua callback. Trả false nếu không mở được. */
+        boolean pickFiles(Intent pickIntent, ValueCallback<Uri[]> callback);
+
+        /** Sắp mở app khác (hoặc app Think toàn màn hình): bong bóng nổi thì thu gọn lại. */
+        void beforeLeave();
+
+        /** Khung web nằm trong cửa sổ nổi (không có Activity), hộp thoại phải tự vẽ. */
+        boolean isOverlay();
+    }
+
+    private final Context context;
+    private final Host host;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private AlertDialog openDialog;
     final WebView web;
-    private ValueCallback<Uri[]> pendingFiles;
 
     @SuppressLint({ "SetJavaScriptEnabled", "AddJavascriptInterface" })
-    WebShell(Activity activity) {
-        this.activity = activity;
-        web = new WebView(activity);
+    WebShell(Context context, Host host) {
+        this.context = context;
+        this.host = host;
+        web = new WebView(context);
         web.setBackgroundColor(Color.TRANSPARENT);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -50,28 +73,32 @@ final class WebShell {
         s.setAllowFileAccess(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         s.setSupportMultipleWindows(false);
-        s.setUserAgentString(s.getUserAgentString() + " ThinkApp/" + Config.versionName(activity));
+        s.setUserAgentString(s.getUserAgentString() + " ThinkApp/" + Config.versionName(context));
         CookieManager.getInstance().setAcceptCookie(true);
         web.setWebViewClient(new Client());
         web.setWebChromeClient(new Chrome());
-        web.addJavascriptInterface(new Bridge(activity.getApplicationContext()), "ThinkApp");
+        web.addJavascriptInterface(new Bridge(context.getApplicationContext()), "ThinkApp");
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
     }
 
-    /** Tạo khung web; nếu máy đang cập nhật hoặc đã tắt Android System WebView thì hiện lời nhắn và trả về null. */
+    /** Tạo khung web trong Activity; nếu máy đang cập nhật hoặc đã tắt Android System WebView thì báo và trả về null. */
     static WebShell tryCreate(Activity activity) {
         try {
-            return new WebShell(activity);
+            return new WebShell(activity, new ActivityHost(activity));
         } catch (RuntimeException e) {
             TextView msg = new TextView(activity);
             int pad = Math.round(24 * activity.getResources().getDisplayMetrics().density);
             msg.setPadding(pad, pad, pad, pad);
             msg.setTextAppearance(android.R.style.TextAppearance_Material_Subhead);
-            msg.setText("Không mở được khung chat vì Android System WebView đang cập nhật hoặc bị tắt. "
-                + "Vào CH Play cập nhật \"Android System WebView\" rồi thử lại.");
+            msg.setText(webViewMissingText());
             activity.setContentView(msg);
             return null;
         }
+    }
+
+    static String webViewMissingText() {
+        return "Không mở được khung chat vì Android System WebView đang cập nhật hoặc bị tắt. "
+            + "Vào CH Play cập nhật \"Android System WebView\" rồi thử lại.";
     }
 
     void load(String url) {
@@ -88,7 +115,7 @@ final class WebShell {
 
     void onPause() {
         web.onPause();       // trang biết là đang ẩn: máy chủ sẽ gửi thông báo cho tin mới
-        syncSession(activity);
+        syncSession(context);
         CookieManager.getInstance().flush();
     }
 
@@ -97,7 +124,20 @@ final class WebShell {
     }
 
     void destroy() {
+        dismissDialog();
         web.destroy();
+    }
+
+    /** Đóng hộp thoại xác nhận đang mở (bong bóng nổi thu gọn thì không để nó lơ lửng). */
+    void dismissDialog() {
+        if (openDialog != null) {
+            try {
+                openDialog.dismiss(); // coi như bấm Hủy
+            } catch (RuntimeException ignored) {
+                // đã đóng
+            }
+            openDialog = null;
+        }
     }
 
     /** Người dùng đăng nhập/đăng xuất ngay trong bong bóng: chép phiên sang cho ô Trả lời nhanh dùng. */
@@ -121,28 +161,66 @@ final class WebShell {
         else if ((token == null || token.isEmpty()) && saved != null) Prefs.clearSession(context);
     }
 
-    /* ---- Chọn ảnh để gửi ---- */
+    /** Activity chứa khung web chuyển kết quả chọn ảnh vào đây. */
     boolean onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode != REQUEST_FILE) return false;
-        ValueCallback<Uri[]> cb = pendingFiles;
-        pendingFiles = null;
-        if (cb == null) return true;
-        Uri[] result = null;
-        if (resultCode == Activity.RESULT_OK && data != null) {
-            ClipData clip = data.getClipData();
-            if (clip != null && clip.getItemCount() > 0) {
-                List<Uri> uris = new ArrayList<>();
-                for (int i = 0; i < clip.getItemCount(); i++) {
-                    Uri u = clip.getItemAt(i).getUri();
-                    if (u != null) uris.add(u);
-                }
-                result = uris.toArray(new Uri[0]);
-            } else if (data.getData() != null) {
-                result = new Uri[] { data.getData() };
+        if (!(host instanceof ActivityHost)) return false;
+        return ((ActivityHost) host).onResult(requestCode, resultCode, data);
+    }
+
+    /** Đọc danh sách ảnh đã chọn từ kết quả trả về. */
+    static Uri[] parseResult(int resultCode, Intent data) {
+        if (resultCode != Activity.RESULT_OK || data == null) return null;
+        ClipData clip = data.getClipData();
+        if (clip != null && clip.getItemCount() > 0) {
+            List<Uri> uris = new ArrayList<>();
+            for (int i = 0; i < clip.getItemCount(); i++) {
+                Uri u = clip.getItemAt(i).getUri();
+                if (u != null) uris.add(u);
+            }
+            return uris.isEmpty() ? null : uris.toArray(new Uri[0]);
+        }
+        return data.getData() != null ? new Uri[] { data.getData() } : null;
+    }
+
+    /** Khung web trong Activity: chọn ảnh bằng startActivityForResult như bình thường. */
+    private static final class ActivityHost implements Host {
+        private final Activity activity;
+        private ValueCallback<Uri[]> pending;
+
+        ActivityHost(Activity activity) {
+            this.activity = activity;
+        }
+
+        @Override
+        public boolean pickFiles(Intent pickIntent, ValueCallback<Uri[]> callback) {
+            if (pending != null) pending.onReceiveValue(null);
+            pending = callback;
+            try {
+                activity.startActivityForResult(pickIntent, REQUEST_FILE);
+                return true;
+            } catch (ActivityNotFoundException e) {
+                pending = null;
+                return false;
             }
         }
-        cb.onReceiveValue(result);
-        return true;
+
+        boolean onResult(int requestCode, int resultCode, Intent data) {
+            if (requestCode != REQUEST_FILE) return false;
+            ValueCallback<Uri[]> cb = pending;
+            pending = null;
+            if (cb != null) cb.onReceiveValue(parseResult(resultCode, data));
+            return true;
+        }
+
+        @Override
+        public void beforeLeave() {
+            // Activity tự lùi xuống khi app khác mở lên
+        }
+
+        @Override
+        public boolean isOverlay() {
+            return false;
+        }
     }
 
     private final class Client extends WebViewClient {
@@ -159,53 +237,140 @@ final class WebShell {
                 intent.addCategory(Intent.CATEGORY_BROWSABLE);
                 intent.setComponent(null);
                 intent.setSelector(null);
-                activity.startActivity(intent);
+                host.beforeLeave();
+                context.startActivity(intent);
             } catch (Exception e) {
-                Toast.makeText(activity, "Không mở được liên kết này.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(context, "Không mở được liên kết này.", Toast.LENGTH_SHORT).show();
             }
             return true;
         }
 
         @Override
         public void onPageFinished(WebView view, String url) {
-            syncSession(activity);
+            syncSession(context);
         }
     }
 
     private final class Chrome extends WebChromeClient {
         @Override
         public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
-            if (pendingFiles != null) pendingFiles.onReceiveValue(null);
-            pendingFiles = callback;
             Intent intent = params.createIntent();
             if (params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
             try {
-                activity.startActivityForResult(intent, REQUEST_FILE);
-                return true;
-            } catch (ActivityNotFoundException e) {
-                pendingFiles = null;
+                return host.pickFiles(intent, callback);
+            } catch (RuntimeException e) {
                 return false;
             }
         }
+
+        // Cửa sổ nổi không có Activity: hộp thoại xác nhận của web phải tự vẽ dạng cửa sổ nổi
+        @Override
+        public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
+            if (!host.isOverlay()) return super.onJsAlert(view, url, message, result);
+            return showOverlayDialog(message, result, false);
+        }
+
+        @Override
+        public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
+            if (!host.isOverlay()) return super.onJsConfirm(view, url, message, result);
+            return showOverlayDialog(message, result, true);
+        }
+    }
+
+    /** Trả lời hộp thoại của web đúng một lần (bấm nút, bấm ra ngoài, hay bị đóng khi thu gọn). */
+    private static final class Answer {
+        private final JsResult result;
+        private boolean done;
+
+        Answer(JsResult result) {
+            this.result = result;
+        }
+
+        void yes() {
+            if (done) return;
+            done = true;
+            result.confirm();
+        }
+
+        void no() {
+            if (done) return;
+            done = true;
+            result.cancel();
+        }
+    }
+
+    private boolean showOverlayDialog(String message, JsResult result, boolean withCancel) {
+        final Answer answer = new Answer(result);
+        try {
+            int theme = isNight(context)
+                ? android.R.style.Theme_Material_Dialog_Alert
+                : android.R.style.Theme_Material_Light_Dialog_Alert;
+            AlertDialog.Builder b = new AlertDialog.Builder(context, theme)
+                .setMessage(message)
+                .setPositiveButton("Đồng ý", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        answer.yes();
+                    }
+                });
+            if (withCancel) {
+                b.setNegativeButton("Hủy", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        answer.no();
+                    }
+                });
+            }
+            dismissDialog();
+            AlertDialog dialog = b.create();
+            dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+                @Override
+                public void onDismiss(DialogInterface d) {
+                    answer.no(); // đóng mà chưa bấm Đồng ý thì coi như Hủy
+                }
+            });
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setType(Build.VERSION.SDK_INT >= 26
+                    ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    : WindowManager.LayoutParams.TYPE_PHONE);
+            }
+            dialog.show();
+            openDialog = dialog;
+            return true;
+        } catch (RuntimeException e) {
+            answer.no();
+            return true;
+        }
+    }
+
+    static boolean isNight(Context context) {
+        int mode = context.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        return mode == android.content.res.Configuration.UI_MODE_NIGHT_YES;
     }
 
     /** Hàm web gọi được: window.ThinkApp.openApp('#/c/1'), window.ThinkApp.download(url). */
-    static final class Bridge {
-        private final Context context;
+    final class Bridge {
+        private final Context app;
 
-        Bridge(Context context) {
-            this.context = context;
+        Bridge(Context app) {
+            this.app = app;
         }
 
         @JavascriptInterface
         public void openApp(String hash) {
             String h = hash == null ? "" : hash.trim();
             if (!h.startsWith("#")) h = "";
-            Intent intent = new Intent(context, LauncherActivity.class)
+            final Intent intent = new Intent(app, LauncherActivity.class)
                 .setAction(Intent.ACTION_VIEW)
                 .setData(Uri.parse(Config.ORIGIN + "/" + h))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            context.startActivity(intent);
+            main.post(new Runnable() {
+                @Override
+                public void run() {
+                    host.beforeLeave();
+                    app.startActivity(intent);
+                }
+            });
         }
 
         @JavascriptInterface
@@ -217,25 +382,29 @@ final class WebShell {
                 if (!name.startsWith("think-")) name = "think-" + name;
                 DownloadManager.Request req = new DownloadManager.Request(uri)
                     .setTitle(name)
-                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                    .setDestinationInExternalPublicDir(Environment.DIRECTORY_PICTURES, "Think/" + name);
+                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                // Android 10+: lưu thẳng vào Ảnh/Think. Android 9 trở xuống cần quyền bộ nhớ, nên để
+                // Trình quản lý tải xuống tự chọn chỗ (xem trong app Tải xuống).
+                if (Build.VERSION.SDK_INT >= 29) {
+                    req.setDestinationInExternalPublicDir(Environment.DIRECTORY_PICTURES, "Think/" + name);
+                }
                 String cookie = CookieManager.getInstance().getCookie(Config.ORIGIN);
                 if (cookie != null) req.addRequestHeader("Cookie", cookie);
-                DownloadManager dm = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
+                DownloadManager dm = (DownloadManager) app.getSystemService(Context.DOWNLOAD_SERVICE);
                 dm.enqueue(req);
             } catch (Exception e) {
-                // Android 9 trở xuống cần quyền lưu tệp: bỏ qua
+                // không tải được thì thôi
             }
         }
 
         @JavascriptInterface
         public int version() {
-            return Config.versionCode(context);
+            return Config.versionCode(app);
         }
 
         @JavascriptInterface
         public boolean isBubble() {
-            return Build.VERSION.SDK_INT >= 30;
+            return true;
         }
     }
 }

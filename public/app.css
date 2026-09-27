@@ -677,8 +677,8 @@ button.img-gone { cursor: pointer; }
 /* ===== App Android: bong bóng chat ===== */
 html:not(.bubble-mode) .bubble-only { display: none; }
 .bubble-mode .tabbar { display: none; }
-.bubble-mode .back-btn { display: none; }
-.bubble-mode .chat-head { padding-left: 14px; }
+.bubble-mode:not(.overlay-mode) .back-btn { display: none; }
+.bubble-mode:not(.overlay-mode) .chat-head { padding-left: 14px; }
 .bubble-mode #view-login .auth-note.bubble-only { margin-top: 18px; color: var(--x-text, #E7E9EA); }
 a.btn { text-decoration: none; }
 a.btn[aria-disabled="true"] { opacity: .55; cursor: progress; }

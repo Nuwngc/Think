@@ -2,13 +2,16 @@
 <!-- App Think cho Android. Phiên bản app: sửa versionCode/versionName ở đây, rồi chạy android/build.sh -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.nuwngc.think"
-    android:versionCode="2"
-    android:versionName="2.0.0">
+    android:versionCode="3"
+    android:versionName="2.1.0">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Bong bóng nổi cho Android 8–10: vẽ đè lên màn hình + dịch vụ chạy nền có thông báo -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <!-- Android 11+: phải khai báo thì mới thấy được Chrome và các trình duyệt khác -->
     <queries>
@@ -95,6 +98,24 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:theme="@style/Theme.Think.Invisible" />
+
+        <!-- Bong bóng nổi (Android 8–10) -->
+        <service android:name=".ChatHeadService" android:exported="false" />
+
+        <!-- Chọn ảnh gửi từ bong bóng nổi -->
+        <activity
+            android:name=".PickerActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Think.Invisible" />
+
+        <!-- Ảnh vừa chọn, chỉ khung chat trong app đọc -->
+        <provider
+            android:name=".PickedFileProvider"
+            android:authorities="com.nuwngc.think.picked"
+            android:exported="false" />
 
         <!-- Nút Trả lời / Đã đọc trong thông báo -->
         <receiver android:name=".ReplyReceiver" android:exported="false" />
