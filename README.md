@@ -13,7 +13,7 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - **Bộ nhớ máy chủ**: thanh hiển thị dung lượng đã dùng, **tự dọn ảnh và tin nhắn cũ nhất khi sắp đầy**, dọn thủ công có xem trước.
 - **App Android có bong bóng chat** (Android 8 trở lên): tin nhắn mới hiện thành bong bóng nổi như Messenger, chạm vào để trả lời ngay; thông báo có ảnh từng người gửi, ô **Trả lời** và nút **Đã đọc**. Tải app ngay trên web (Cá nhân → Cài app lên máy).
 - **App Think Beta** (thư mục `native/`): app thật viết bằng React Native, không phải trang web trong khung. GitHub tự build file APK mỗi lần sửa code (mục 13).
-- **Cờ vua** (mục 14): thách đấu bạn bè, chọn thời gian (1+0 … 30+0 hoặc không giới hạn), đồng hồ do máy chủ giữ, **điểm ELO và bảng xếp hạng**, chơi với 8 máy cờ mã nguồn mở (có Stockfish). Có trên cả web lẫn App Think Beta.
+- **Cờ vua** (mục 14): thách đấu bạn bè, chọn thời gian (1+0 … 30+0 hoặc không giới hạn), đồng hồ do máy chủ giữ, **điểm ELO và bảng xếp hạng**, chơi với 8 máy cờ mã nguồn mở (có Stockfish), **xem lại ván**, **Stockfish phân tích ván** (độ chính xác, nước sai lầm), bật/tắt chỉ dẫn, âm thanh quân cờ. Có trên cả web lẫn App Think Beta.
 - **Trả lời tin nhắn** (chạm giữ → Trả lời, hoặc vuốt ngang tin nhắn) và **thả cảm xúc** ❤️ 😆 😮 😢 😡 👍, xem được ai đã thả.
 - Realtime: đang nhập…, đang hoạt động / hoạt động X phút trước, "Đã xem" (nhóm hiện ảnh người đã xem), thu hồi tin nhắn.
 - Thông báo đầy đủ:
@@ -378,6 +378,15 @@ Tab **Cờ vua** có trên bản web và App Think Beta (cùng dữ liệu, chơ
   | Stockfish · Dễ / Vừa / Khó / Mạnh nhất | ~1300 → ~3000 | [Stockfish 11](https://github.com/official-stockfish/Stockfish) (bản WebAssembly của [stockfish.js](https://github.com/nmrugg/stockfish.js)) | GPL-3.0 |
 
   Máy cờ chạy trong một luồng riêng, lần lượt từng ván, nên Render Free (0,1 CPU) vẫn chịu được; máy mạnh nhất nghĩ khoảng 1,5 giây mỗi nước.
+- **Xem lại ván**: mọi ván đã xong nằm trong **Lịch sử** (nút ở mục "Ván gần đây"). Mở một ván để xem từng nước (nút ‹ ›, trên máy tính dùng phím ← → Home End) hoặc bấm **Xem lại từ đầu** để tự chạy mỗi giây một nước.
+- **Phân tích ván** (ván đã xong): bấm **Phân tích bằng Stockfish**. Máy chủ chấm từng nước (khoảng 1 phút, xong có thông báo), rồi hiện:
+  - **độ chính xác** của mỗi bên (cách tính giống lichess) và số nước **thiếu chính xác ?!**, **sai lầm ?**, **sai lầm nghiêm trọng ??**;
+  - **biểu đồ** thế trận qua từng nước (bấm vào để nhảy tới nước đó), ký hiệu ?! ? ?? ngay trong danh sách nước đi;
+  - nhận xét cho từng nước kèm **nước tốt nhất**, và **mũi tên xanh** chỉ nước máy gợi ý trên bàn cờ.
+
+  Nước đã đi được chấm cùng thế cờ gốc với nước tốt nhất (lệnh `searchmoves` của Stockfish) nên không bị "báo sai" vì độ sâu tìm kiếm khác nhau. Mỗi ván chỉ phân tích một lần rồi lưu lại; máy chủ phân tích lần lượt từng ván, xen kẽ với lượt đi của máy cờ nên ván đang chơi không bị chậm. Ván đang chơi thì không phân tích được (tránh gian lận).
+- **Tùy chọn bàn cờ** (nút ⚙ trên đầu tab Cờ vua và trong ván): bật/tắt **chỉ dẫn nước đi** (chấm ở ô đi được), **tô màu nước vừa đi**, **tọa độ bàn cờ**, **mũi tên gợi ý khi phân tích**, **âm thanh**. Lưu riêng trên từng máy.
+- **Âm thanh**: tiếng quân cờ khi đi, ăn quân, nhập thành, chiếu tướng, bắt đầu và kết thúc ván. Các tiếng này tự tổng hợp bằng `scripts/chess-sounds.py` (không lấy của ai), dùng chung cho web (`public/chess/sounds/`) và app (`native/assets/sounds/`).
 - Luật cờ dùng [chess.js](https://github.com/jhlywa/chess.js) (BSD-2-Clause) ở cả máy chủ, web và app. Hình quân cờ là bộ **cburnett** của Colin M.L. Burnett (GPLv2+, xem `public/chess/pieces/LICENSE.txt`).
 
 ## Cấu trúc thư mục
@@ -393,11 +402,13 @@ src/push.js          Thông báo đẩy (Web Push / VAPID)
 src/fcm.js           Thông báo đẩy cho App Think Beta (Firebase Cloud Messaging)
 src/chess.js         Cờ vua: thách đấu, đồng hồ, ELO, bảng xếp hạng, API /api/chess
 src/chess-engine.js  Hàng đợi gửi việc cho máy cờ; src/chess-worker.js chạy máy cờ trong luồng riêng
+src/chess-analysis.js Phân tích ván đã xong bằng Stockfish (độ chính xác, xếp loại nước đi)
 src/engines/         GarboChess-JS (giữ nguyên giấy phép BSD ở đầu file)
 scripts/admin.js     Công cụ dòng lệnh cho chủ server
 scripts/tunnel.js    Mở link HTTPS tạm thời (npm run share / npm run tunnel)
+scripts/chess-sounds.py Tạo lại âm thanh cờ vua (cần Python + numpy)
 public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu trên máy), sw.js (service worker),
-                     chess-ui.js (tab Cờ vua), chess/pieces/ (hình quân cờ)
+                     chess-ui.js (tab Cờ vua), chess/pieces/ (hình quân cờ), chess/sounds/ (âm thanh)
 public/download/     File cài app Android (think.apk) và version.json
 android/             Mã app Android: mở web bằng Chrome, bong bóng chat, trả lời trong thông báo (build.sh để build)
 native/              App Think Beta (React Native / Expo), xem native/README.md

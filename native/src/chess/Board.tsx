@@ -1,7 +1,7 @@
 import { Chess, type Move, type Square } from "chess.js";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { SvgXml } from "react-native-svg";
+import Svg, { Line, Polygon, SvgXml } from "react-native-svg";
 
 import { PIECES } from "./pieces";
 import type { Color } from "./types";
@@ -88,9 +88,56 @@ export type BoardProps = {
   /** Nước vừa đi (dạng e2e4) để tô màu */
   lastMove?: string | null;
   onMove?: (uci: string) => void;
+  /** Hiện chấm ở các ô đi được khi chọn quân */
+  hints?: boolean;
+  /** Tô màu nước vừa đi */
+  showLast?: boolean;
+  /** Hiện chữ và số ở mép bàn cờ */
+  coords?: boolean;
+  /** Mũi tên gợi ý (dạng e2e4), vd nước tốt nhất máy tìm được */
+  arrow?: string | null;
 };
 
-export function Board({ fen, size, orientation, movable, lastMove, onMove }: BoardProps) {
+const ARROW = "rgba(21,120,90,0.78)";
+
+/** Tâm của một ô trên bàn cờ (theo chiều đang xem) */
+function center(sq: string, cell: number, orientation: Color) {
+  const f = FILES.indexOf(sq[0]);
+  const r = Number(sq[1]) - 1;
+  const x = (orientation === "w" ? f : 7 - f) * cell + cell / 2;
+  const y = (orientation === "w" ? 7 - r : r) * cell + cell / 2;
+  return { x, y };
+}
+
+function Arrow({ uci, cell, orientation }: { uci: string; cell: number; orientation: Color }) {
+  const a = center(uci.slice(0, 2), cell, orientation);
+  const b = center(uci.slice(2, 4), cell, orientation);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const head = cell * 0.42;
+  const w = cell * 0.17;
+  // Thân mũi tên dừng trước đầu mũi tên
+  const ex = b.x - ux * head;
+  const ey = b.y - uy * head;
+  const px = -uy;
+  const py = ux;
+  const pts = [
+    `${b.x},${b.y}`,
+    `${ex + px * head * 0.6},${ey + py * head * 0.6}`,
+    `${ex - px * head * 0.6},${ey - py * head * 0.6}`,
+  ].join(" ");
+  return (
+    <Svg width={cell * 8} height={cell * 8} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Line x1={a.x + ux * cell * 0.15} y1={a.y + uy * cell * 0.15} x2={ex} y2={ey} stroke={ARROW} strokeWidth={w} strokeLinecap="round" />
+      <Polygon points={pts} fill={ARROW} />
+    </Svg>
+  );
+}
+
+export function Board({ fen, size, orientation, movable, lastMove, onMove, hints = true, showLast = true, coords = true, arrow }: BoardProps) {
   const cell = Math.floor(size / 8);
   const chess = useMemo(() => {
     try {
@@ -161,9 +208,10 @@ export function Board({ fen, size, orientation, movable, lastMove, onMove }: Boa
             const sq = `${FILES[f]}${8 - r}` as Square;
             const p = rows[r][f];
             const code = p ? `${p.color}${p.type.toUpperCase()}` : null;
-            const mark = sq === selected ? "sel" : sq === checkSq ? "check" : sq === lf || sq === lt ? "last" : null;
-            const hint = targets.has(sq) ? (p ? "ring" : "dot") : null;
-            const label = `${sq}${p ? `, ${NAMES[p.type]} ${p.color === "w" ? "trắng" : "đen"}` : ""}${hint ? ", đi được" : ""}`;
+            const mark = sq === selected ? "sel" : sq === checkSq ? "check" : showLast && (sq === lf || sq === lt) ? "last" : null;
+            const hint = hints && targets.has(sq) ? (p ? "ring" : "dot") : null;
+            // Trình đọc màn hình vẫn báo ô đi được kể cả khi tắt chấm chỉ dẫn
+            const label = `${sq}${p ? `, ${NAMES[p.type]} ${p.color === "w" ? "trắng" : "đen"}` : ""}${targets.has(sq) ? ", đi được" : ""}`;
             return (
               <SquareView
                 key={sq}
@@ -173,8 +221,8 @@ export function Board({ fen, size, orientation, movable, lastMove, onMove }: Boa
                 size={cell}
                 mark={mark}
                 hint={hint}
-                fileLabel={ri === 7 ? FILES[f] : null}
-                rankLabel={fi === 0 ? String(8 - r) : null}
+                fileLabel={coords && ri === 7 ? FILES[f] : null}
+                rankLabel={coords && fi === 0 ? String(8 - r) : null}
                 label={label}
                 onPress={press}
               />
@@ -182,6 +230,7 @@ export function Board({ fen, size, orientation, movable, lastMove, onMove }: Boa
           })}
         </View>
       ))}
+      {arrow && /^[a-h][1-8][a-h][1-8]/.test(arrow) ? <Arrow uci={arrow} cell={cell} orientation={orientation} /> : null}
       {promo ? (
         <View style={[StyleSheet.absoluteFill, styles.promoWrap]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setPromo(null)} accessibilityLabel="Hủy phong cấp" />

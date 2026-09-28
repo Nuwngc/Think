@@ -5,7 +5,7 @@ import { create } from "zustand";
 
 import { api, ApiError, setAuthHandlers } from "./api";
 import { clearSnapshot, loadSnapshot, saveSnapshot } from "./cache";
-import { bindChess, closeGame, loadChess, onChessEvent, openGame, resetChess, useChess } from "./chess/store";
+import { bindChess, closeGame, loadChess, onAnalysisEvent, onChessEvent, openGame, resetChess, useChess } from "./chess/store";
 import { API_URL } from "./config";
 import { convTitle, previewText, type Names } from "./format";
 import type { PreparedImage } from "./images";
@@ -835,6 +835,7 @@ function connectSocket() {
   s.on("storage:changed", () => set((st) => ({ storageVersion: st.storageVersion + 1 })));
   s.on("chess:game", (data) => onChessEvent("chess:game", data));
   s.on("chess:challenge", (data) => onChessEvent("chess:challenge", data));
+  s.on("chess:analysis", onAnalysisEvent);
 }
 
 export function reportVisibility() {

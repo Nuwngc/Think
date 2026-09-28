@@ -76,13 +76,15 @@ function sfUntil(prefix, timeoutMs) {
     };
   });
 }
+async function ensureStockfish() {
+  if (sf) return;
+  startStockfish();
+  const ok = sfUntil('uciok', 20000);
+  sfSend('uci');
+  await ok;
+}
 async function runStockfish({ moves, skill, movetime }) {
-  if (!sf) {
-    startStockfish();
-    const ok = sfUntil('uciok', 20000);
-    sfSend('uci');
-    await ok;
-  }
+  await ensureStockfish();
   sfSend(`setoption name Skill Level value ${Math.max(0, Math.min(20, skill | 0))}`);
   sfSend(`position startpos${moves && moves.length ? ` moves ${moves.join(' ')}` : ''}`);
   const ready = sfUntil('readyok', 10000);
@@ -96,10 +98,63 @@ async function runStockfish({ moves, skill, movetime }) {
   return move;
 }
 
+// Chấm điểm một thế cờ (phân tích ván): nước tốt nhất và điểm đánh giá, tính theo bên đang đi
+async function evalStockfish({ fen, moves, movetime, depth, fresh, searchmoves }) {
+  await ensureStockfish();
+  sfSend('setoption name Skill Level value 20');
+  if (fresh) sfSend('ucinewgame');
+  // Có danh sách nước từ đầu ván thì gửi cả lịch sử, để máy biết thế cờ lặp lại (hòa 3 lần)
+  sfSend(Array.isArray(moves) ? `position startpos${moves.length ? ` moves ${moves.join(' ')}` : ''}` : `position fen ${fen}`);
+  const ready = sfUntil('readyok', 10000);
+  sfSend('isready');
+  await ready;
+  let last = null;
+  const done = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      sfWaiter = null;
+      reject(new Error('Stockfish không trả lời (phân tích)'));
+    }, Math.max(5000, movetime * 4 + 5000));
+    sfWaiter = (text) => {
+      if (text.startsWith('info') && / score /.test(text) && !/ multipv [2-9]/.test(text)) last = text;
+      else if (text.startsWith('bestmove')) {
+        clearTimeout(timer);
+        sfWaiter = null;
+        resolve(text);
+      }
+    };
+  });
+  // searchmoves: chỉ xét các nước này (để chấm đúng nước đã đi, cùng thế cờ gốc với nước tốt nhất)
+  const only = Array.isArray(searchmoves) && searchmoves.length ? ` searchmoves ${searchmoves.filter((m) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m)).join(' ')}` : '';
+  sfSend(`go${depth ? ` depth ${depth | 0}` : ''} movetime ${Math.max(30, movetime | 0)}${only}`);
+  const line = await done;
+  const best = line.split(/\s+/)[1];
+  const out = { move: best && best !== '(none)' ? best : null, cp: null, mate: null, depth: 0, pv: [] };
+  if (last) {
+    const cp = / score cp (-?\d+)/.exec(last);
+    const mate = / score mate (-?\d+)/.exec(last);
+    const depth = / depth (\d+)/.exec(last);
+    const pv = / pv (.+)$/.exec(last);
+    if (cp) out.cp = Number(cp[1]);
+    if (mate) out.mate = Number(mate[1]);
+    if (depth) out.depth = Number(depth[1]);
+    if (pv) {
+      // Bản Stockfish này ghi thêm "bmc ..." sau dãy nước: chỉ lấy các nước đi hợp lệ ở đầu
+      const list = pv[1].trim().split(/\s+/);
+      const end = list.findIndex((m) => !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m));
+      out.pv = (end < 0 ? list : list.slice(0, end)).slice(0, 6);
+    }
+  }
+  return out;
+}
+
 /* ---------------- Nhận việc từ máy chủ ---------------- */
 
 parentPort.on('message', async (job) => {
   try {
+    if (job.engine === 'stockfish-eval') {
+      parentPort.postMessage({ id: job.id, result: await evalStockfish(job) });
+      return;
+    }
     let move;
     if (job.engine === 'jce') move = runJce(job);
     else if (job.engine === 'garbo') move = runGarbo(job);

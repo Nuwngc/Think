@@ -5,6 +5,9 @@ const api = vi.hoisted(() => ({
   chess: vi.fn(),
   chessMove: vi.fn(),
   chessGame: vi.fn(),
+  chessHistory: vi.fn(),
+  chessAnalysis: vi.fn(),
+  chessAnalyze: vi.fn(),
 }));
 
 vi.mock("../src/api", () => {
@@ -21,8 +24,18 @@ vi.mock("../src/api", () => {
 });
 
 import { ApiError } from "../src/api";
-import { clockText, material, outcomeFor, replay, resultTitle, tcLabel } from "../src/chess/format";
-import { bindChess, chessBadge, onChessEvent, playMove, resetChess, useChess } from "../src/chess/store";
+import { clockText, evalText, material, moveComment, outcomeFor, replay, resultTitle, tcLabel } from "../src/chess/format";
+import {
+  bindChess,
+  chessBadge,
+  loadHistory,
+  onAnalysisEvent,
+  onChessEvent,
+  playMove,
+  requestAnalysis,
+  resetChess,
+  useChess,
+} from "../src/chess/store";
 import type { ChessGame } from "../src/chess/types";
 
 const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -179,5 +192,60 @@ describe("đi quân", () => {
       game: game({ id: 9, status: "challenge", challengerId: 2, opponentId: 1, whiteId: null, blackId: null }),
     });
     expect(toasts[0]).toContain("Minh thách bạn một ván 5+2");
+  });
+});
+
+describe("phân tích và lịch sử", () => {
+  const toasts: { text: string; gameId?: number }[] = [];
+  beforeEach(() => {
+    resetChess();
+    toasts.length = 0;
+    bindChess({
+      meId: () => 1,
+      nameOf: () => "Minh",
+      toast: (text, extra) => toasts.push({ text, gameId: extra?.chessGameId }),
+      onTab: () => false,
+      showChess: () => undefined,
+    });
+  });
+
+  it("ghi điểm đánh giá dễ đọc", () => {
+    expect(evalText({ cp: 134, mate: null, wp: 60 })).toBe("+1.3");
+    expect(evalText({ cp: -50, mate: null, wp: 45 })).toBe("−0.5");
+    expect(evalText({ cp: null, mate: 3, wp: 100 })).toBe("#3");
+    expect(evalText({ cp: null, mate: -2, wp: 0 })).toBe("#-2");
+    expect(evalText({ cp: null, mate: null, wp: 0, end: "checkmate" })).toBe("0-1");
+    expect(evalText({ cp: 0, mate: null, wp: 50, end: "draw" })).toBe("½-½");
+  });
+
+  it("nhận xét nước đi", () => {
+    const before = { cp: 20, mate: null, wp: 52, best: "d8e7", bestSan: "Qe7" };
+    expect(moveComment({ ply: 6, uci: "g8f6", san: "Nf6", color: "b", cls: "blunder", loss: 48, accuracy: 3 }, before)).toBe(
+      "3… Nf6??: sai lầm nghiêm trọng. Nước tốt nhất là Qe7.",
+    );
+    expect(moveComment({ ply: 1, uci: "e2e4", san: "e4", color: "w", cls: "best", loss: 0, accuracy: 100 }, before)).toBe("1. e4: nước tốt nhất.");
+  });
+
+  it("kết quả phân tích không bị tin tiến độ cũ đè lên, xong thì báo", async () => {
+    onAnalysisEvent({ gameId: 5, analysis: { status: "running", progress: 1, total: 8 } });
+    onAnalysisEvent({ gameId: 5, analysis: { status: "done", progress: 8, total: 8, result: { engine: "Stockfish 11" } as any } });
+    onAnalysisEvent({ gameId: 5, analysis: { status: "running", progress: 7, total: 8 } });
+    expect(useChess.getState().analyses[5].status).toBe("done");
+    expect(toasts.at(-1)).toEqual({ text: "Đã phân tích xong ván cờ. Chạm để xem.", gameId: 5 });
+    api.chessAnalyze.mockRejectedValue(new Error("Máy đang bận"));
+    await requestAnalysis(9);
+    expect(toasts.at(-1)?.text).toBe("Máy đang bận");
+  });
+
+  it("tải lịch sử theo trang", async () => {
+    api.chessHistory.mockResolvedValueOnce({ games: [game({ id: 30, status: "finished", endedAt: 300 }), game({ id: 29, status: "finished", endedAt: 290 })], hasMore: true });
+    await loadHistory();
+    expect(useChess.getState().history).toMatchObject({ ids: [30, 29], hasMore: true, loaded: true });
+    api.chessHistory.mockResolvedValueOnce({ games: [game({ id: 28, status: "finished", endedAt: 280 })], hasMore: false });
+    await loadHistory(true);
+    expect(api.chessHistory).toHaveBeenLastCalledWith(290, 29);
+    expect(useChess.getState().history.ids).toEqual([30, 29, 28]);
+    await loadHistory(true); // hết trang: không gọi nữa
+    expect(api.chessHistory).toHaveBeenCalledTimes(2);
   });
 });

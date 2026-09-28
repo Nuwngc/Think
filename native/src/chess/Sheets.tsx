@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Linking, Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 
@@ -7,7 +7,9 @@ import { showToast, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Button, FormError, Icon, Sheet, useStyles } from "../ui";
 import { BotAvatar, ColorPicker, TimePicker, type ColorPref } from "./parts";
-import { loadLeaderboard, sendChallenge, startBotGame, useChess } from "./store";
+import { setPref, usePrefs, type ChessPrefs } from "./prefs";
+import { loadHistory, loadLeaderboard, sendChallenge, startBotGame, useChess } from "./store";
+import type { ChessGame } from "./types";
 
 /* =========================================================
    Thách đấu một người
@@ -263,3 +265,69 @@ const makeStyles = (c: Colors) =>
     switchRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 4 },
     switchTitle: { color: c.text, fontSize: 15, fontWeight: "700" },
   });
+
+/* =========================================================
+   Tùy chọn bàn cờ: chỉ dẫn, tô nước vừa đi, tọa độ, mũi tên gợi ý, âm thanh
+   ========================================================= */
+
+const PREF_ROWS: { key: keyof ChessPrefs; title: string; hint: string }[] = [
+  { key: "hints", title: "Chỉ dẫn nước đi", hint: "Chạm vào quân thì hiện chấm ở các ô đi được." },
+  { key: "lastMove", title: "Tô màu nước vừa đi", hint: "Tô vàng ô đi và ô đến của nước gần nhất." },
+  { key: "coords", title: "Tọa độ bàn cờ", hint: "Chữ a–h và số 1–8 ở mép bàn cờ." },
+  { key: "arrows", title: "Mũi tên gợi ý khi phân tích", hint: "Khi xem lại ván đã phân tích, vẽ mũi tên nước tốt nhất của máy." },
+  { key: "sound", title: "Âm thanh", hint: "Tiếng quân cờ khi đi, ăn quân, chiếu tướng, bắt đầu và kết thúc ván." },
+];
+
+export function PrefsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const c = useColors();
+  const s = useStyles(makeStyles);
+  const prefs = usePrefs();
+  return (
+    <Sheet visible={visible} onClose={onClose} title="Tùy chọn bàn cờ">
+      {PREF_ROWS.map((row) => (
+        <Pressable
+          key={row.key}
+          onPress={() => setPref(row.key, !prefs[row.key])}
+          style={s.switchRow}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: prefs[row.key] }}
+          accessibilityLabel={row.title}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={s.switchTitle}>{row.title}</Text>
+            <Text style={s.hint}>{row.hint}</Text>
+          </View>
+          <Switch
+            value={prefs[row.key]}
+            onValueChange={(v) => setPref(row.key, v)}
+            trackColor={{ true: c.jade, false: c.line }}
+            thumbColor="#fff"
+          />
+        </Pressable>
+      ))}
+    </Sheet>
+  );
+}
+
+/* =========================================================
+   Lịch sử ván đấu (tất cả ván đã xong, tải dần)
+   ========================================================= */
+
+export function HistorySheet({ visible, onClose, renderRow }: { visible: boolean; onClose: () => void; renderRow: (g: ChessGame) => ReactNode }) {
+  const s = useStyles(makeStyles);
+  const history = useChess((st) => st.history);
+  const games = useChess((st) => st.games);
+  useEffect(() => {
+    if (visible) loadHistory();
+  }, [visible]);
+  const list = history.ids.map((id) => games[id]).filter((g): g is ChessGame => Boolean(g));
+  return (
+    <Sheet visible={visible} onClose={onClose} title="Lịch sử ván đấu">
+      <Text style={s.hint}>Chạm vào một ván để xem lại từng nước và nhờ Stockfish phân tích.</Text>
+      <View style={{ marginHorizontal: -12 }}>{list.map((g) => <View key={g.id}>{renderRow(g)}</View>)}</View>
+      {history.loaded && list.length === 0 ? <Text style={s.hint}>Bạn chưa chơi xong ván nào.</Text> : null}
+      {!history.loaded || history.loading ? <Text style={s.hint}>Đang tải…</Text> : null}
+      {history.hasMore && !history.loading ? <Button title="Tải thêm" kind="secondary" onPress={() => loadHistory(true)} /> : null}
+    </Sheet>
+  );
+}

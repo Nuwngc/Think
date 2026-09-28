@@ -14,7 +14,7 @@ App có tên **Think Beta** (mã gói `com.nuwngc.think.beta`), cài **song song
 - Quản trị (admin): tạo tài khoản (hiện mật khẩu tạm để gửi), đặt lại mật khẩu, khóa / mở khóa, cấp quyền admin, xem bộ nhớ máy chủ, tự dọn / dọn thủ công.
 - **Thông báo đẩy** khi đóng app, bấm **Trả lời** hoặc **Đã đọc** ngay trong thông báo (cần bước 3 bên dưới).
 - **Lưu trên máy**: mở app là thấy ngay tin nhắn cũ kể cả khi máy chủ đang ngủ hoặc mất mạng, tự kết nối lại.
-- **Cờ vua** (tab Cờ vua): thách đấu bạn bè có chọn thời gian, đồng hồ, **điểm ELO**, **bảng xếp hạng**, chơi với 8 máy cờ (có Stockfish), thông báo khi có người thách hoặc tới lượt đi. Trong chat riêng có nút quân mã để thách nhanh. Chơi chéo được với người dùng bản web. Chi tiết ở mục 14 của README chính.
+- **Cờ vua** (tab Cờ vua): thách đấu bạn bè có chọn thời gian, đồng hồ, **điểm ELO**, **bảng xếp hạng**, chơi với 8 máy cờ (có Stockfish), thông báo khi có người thách hoặc tới lượt đi, **lịch sử và xem lại ván** (tự chạy), **Stockfish phân tích ván** (độ chính xác, ?! ? ??, biểu đồ, mũi tên gợi ý), **bật/tắt chỉ dẫn** và **âm thanh** quân cờ. Trong chat riêng có nút quân mã để thách nhanh. Chơi chéo được với người dùng bản web. Chi tiết ở mục 14 của README chính.
 - Giao diện sáng / tối theo máy. Chạy từ Android 7 trở lên.
 
 Chưa có (so với app bong bóng chat hiện tại): **bong bóng chat nổi** kiểu Messenger. Muốn bong bóng thì vẫn dùng app Think cũ.

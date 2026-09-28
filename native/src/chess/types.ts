@@ -54,3 +54,45 @@ export type ChessRating = {
   losses: number;
   provisional: boolean;
 };
+
+/** Xếp loại một nước đi khi phân tích */
+export type MoveClass = "best" | "good" | "inaccuracy" | "mistake" | "blunder";
+
+/** Một thế cờ đã được máy chấm (điểm theo góc nhìn của Trắng) */
+export type AnalysedPosition = {
+  cp: number | null;
+  mate: number | null;
+  /** Khả năng thắng của Trắng 0–100 */
+  wp: number;
+  best: string | null;
+  bestSan: string | null;
+  end?: "checkmate" | "draw";
+};
+
+export type AnalysedMove = {
+  ply: number;
+  uci: string;
+  san: string;
+  color: Color;
+  cls: MoveClass;
+  loss: number;
+  accuracy: number;
+};
+
+export type AnalysisResult = {
+  engine: string;
+  positions: AnalysedPosition[];
+  moves: AnalysedMove[];
+  accuracy: { w: number | null; b: number | null };
+  counts: Record<Color, { best: number; inaccuracy: number; mistake: number; blunder: number }>;
+};
+
+export type ChessAnalysis = {
+  status: "none" | "queued" | "running" | "done" | "error";
+  progress: number;
+  total: number;
+  /** Thứ tự trong hàng đợi */
+  position?: number;
+  error?: string;
+  result?: AnalysisResult;
+};

@@ -4,6 +4,7 @@
 const { Chess } = require('chess.js');
 const { get, all, run, transaction } = require('./db');
 const engine = require('./chess-engine');
+const { setupAnalysis } = require('./chess-analysis');
 
 const START_FEN = new Chess().fen();
 // Chỉ dùng khi chạy kiểm thử tự động: thu nhỏ mọi mốc thời gian (vd 0.01 = 1 phút thành 0,6 giây)
@@ -519,6 +520,27 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
   app.get('/api/chess/games/:id', ...auth, handle((req, res) => {
     res.json({ game: serialize(mine(req, req.params.id)) });
   }));
+
+  // Lịch sử các ván đã xong của tôi, mới nhất trước (?before=<endedAt>&limit=30)
+  app.get('/api/chess/history', ...auth, handle((req, res) => {
+    const uid = req.user.id;
+    const before = Number(req.query.before) > 0 ? Number(req.query.before) : Number.MAX_SAFE_INTEGER;
+    // Nhiều ván xong cùng một lúc: dùng thêm id để trang sau không bỏ sót ván nào
+    // (không gửi beforeId thì lấy các ván xong trước hẳn mốc thời gian đó, như bản app cũ)
+    const beforeId = Number(req.query.beforeId) > 0 ? Number(req.query.beforeId) : 0;
+    const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 30));
+    const rows = all(
+      `SELECT * FROM chess_games WHERE status IN ('finished', 'aborted') AND (white_id = ? OR black_id = ?)
+         AND (ended_at < ? OR (ended_at = ? AND id < ?))
+        ORDER BY ended_at DESC, id DESC LIMIT ?`,
+      uid, uid, before, before, beforeId, limit + 1
+    );
+    const now = Date.now();
+    res.json({ games: rows.slice(0, limit).map((g) => serialize(g, now)), hasMore: rows.length > limit });
+  }));
+
+  // Phân tích ván đã xong bằng Stockfish (src/chess-analysis.js)
+  setupAnalysis({ app, auth, handle, mine, ChessError, emitTo, humanIds, movesOf });
 
   // Gửi lời thách đấu
   function createChallenge(uid, body) {

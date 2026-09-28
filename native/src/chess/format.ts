@@ -1,7 +1,7 @@
 // Chữ hiển thị cho cờ vua (dùng chung ý với bản web)
 import { Chess } from "chess.js";
 
-import type { ChessGame, Color } from "./types";
+import type { AnalysedMove, AnalysedPosition, ChessGame, Color, MoveClass } from "./types";
 
 /** Các mức thời gian hay dùng: phút + giây cộng thêm mỗi nước */
 export const TIME_CONTROLS: { base: number; inc: number; label: string; kind: string }[] = [
@@ -113,4 +113,35 @@ export function material(fen: string) {
     score += (count.w[t] - count.b[t]) * VALUE[t];
   }
   return { captured, lead: { w: Math.max(0, score), b: Math.max(0, -score) } };
+}
+
+/* ---------------- Phân tích ván ---------------- */
+
+/** Ký hiệu và tên của từng loại nước đi (giống ký hiệu quốc tế: ?! ? ??) */
+export const MOVE_CLASS: Record<MoveClass, { symbol: string; label: string; color: string }> = {
+  best: { symbol: "★", label: "Nước tốt nhất", color: "#1E9E7C" },
+  good: { symbol: "", label: "Nước tốt", color: "#6B7C75" },
+  inaccuracy: { symbol: "?!", label: "Thiếu chính xác", color: "#D99A0B" },
+  mistake: { symbol: "?", label: "Sai lầm", color: "#E07B24" },
+  blunder: { symbol: "??", label: "Sai lầm nghiêm trọng", color: "#D1402F" },
+};
+
+/** Điểm đánh giá dễ đọc: +1.3 (Trắng hơn), -0.5, #3 (chiếu hết sau 3 nước), 1-0 khi đã chiếu hết */
+export function evalText(p: Pick<AnalysedPosition, "cp" | "mate" | "wp" | "end"> | undefined) {
+  if (!p) return "";
+  if (p.end === "checkmate") return p.wp >= 50 ? "1-0" : "0-1";
+  if (p.end === "draw") return "½-½";
+  if (p.mate != null) return `#${p.mate > 0 ? "" : "-"}${Math.abs(p.mate)}`;
+  const v = (p.cp || 0) / 100;
+  return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}`;
+}
+
+/** Nhận xét cho một nước đã đi (dùng dưới bàn cờ khi xem lại) */
+export function moveComment(m: AnalysedMove | undefined, before: AnalysedPosition | undefined) {
+  if (!m) return "";
+  const info = MOVE_CLASS[m.cls];
+  const no = `${Math.ceil(m.ply / 2)}${m.color === "w" ? "." : "…"} ${m.san}${info.symbol && m.cls !== "best" ? info.symbol : ""}`;
+  if (m.cls === "best") return `${no}: nước tốt nhất.`;
+  if (m.cls === "good") return `${no}: nước tốt.${before?.bestSan ? ` Máy thích ${before.bestSan} hơn một chút.` : ""}`;
+  return `${no}: ${info.label.toLowerCase()}.${before?.bestSan ? ` Nước tốt nhất là ${before.bestSan}.` : ""}`;
 }

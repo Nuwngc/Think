@@ -26,7 +26,7 @@ function ensureWorker() {
     clearTimeout(p.timer);
     pending.delete(msg.id);
     if (msg.error) p.reject(new Error(msg.error));
-    else p.resolve(msg.move);
+    else p.resolve(msg.result !== undefined ? msg.result : msg.move);
   });
   // Luồng cũ (đã bị dừng vì treo) báo lỗi / thoát muộn: không được làm hỏng việc của luồng mới
   w.on('error', (err) => {
@@ -68,9 +68,14 @@ function bestMove(job) {
   return result;
 }
 
+/** Chấm điểm một thế cờ bằng Stockfish mạnh nhất: { move, cp, mate, depth, pv } (điểm theo bên đang đi) */
+function evaluate({ fen, moves, movetime, depth, fresh, searchmoves }) {
+  return bestMove({ engine: 'stockfish-eval', fen, moves, movetime, depth, fresh, searchmoves });
+}
+
 function stop() {
   if (worker) worker.terminate().catch(() => {});
   worker = null;
 }
 
-module.exports = { bestMove, stop };
+module.exports = { bestMove, evaluate, stop };

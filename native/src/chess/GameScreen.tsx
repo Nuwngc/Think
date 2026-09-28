@@ -5,9 +5,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { hideToast, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Button, confirm, Icon, IconButton, useStyles } from "../ui";
+import { AnalysisPanel } from "./Analysis";
 import { Board, PieceImage } from "./Board";
-import { clockText, material, myColor, opponentColor, outcomeFor, reasonText, replay, resultTitle, tcLabel } from "./format";
+import { clockText, material, MOVE_CLASS, myColor, opponentColor, outcomeFor, reasonText, replay, resultTitle, tcLabel } from "./format";
 import { SideAvatar, useNow, useSide } from "./parts";
+import { loadPrefs, usePrefs } from "./prefs";
+import { PrefsSheet } from "./Sheets";
+import { playSound, preloadSounds, soundForSan } from "./sound";
 import { abort, answerChallenge, closeGame, draw, playMove, rematch, resign, useChess } from "./store";
 import type { ChessGame, Color } from "./types";
 
@@ -76,6 +80,16 @@ function Game({ g }: { g: ChessGame }) {
   const [flip, setFlip] = useState(false);
   const [viewPly, setViewPly] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const prefs = usePrefs();
+  const analysis = useChess((st) => st.analyses[g.id]);
+  const result = analysis?.status === "done" ? analysis.result : undefined;
+
+  useEffect(() => {
+    loadPrefs();
+    preloadSounds();
+  }, []);
 
   const mine = myColor(g, meId);
   const bottom: Color = flip ? opponentColor(mine ?? "w") : (mine ?? "w");
@@ -102,6 +116,41 @@ function Game({ g }: { g: ChessGame }) {
   useEffect(() => {
     if (live) setTimeout(() => movesRef.current?.scrollToEnd({ animated: true }), 50);
   }, [total, live]);
+
+  // Âm thanh: mỗi khi bàn cờ tiến thêm đúng một nước (đi quân, đối thủ đi, xem lại từng nước)
+  const lastPly = useRef(ply);
+  useEffect(() => {
+    const before = lastPly.current;
+    lastPly.current = ply;
+    if (ply === before + 1) playSound(soundForSan(san[ply - 1]));
+  }, [ply, san]);
+  // Bắt đầu / kết thúc ván
+  const lastStatus = useRef(g.status);
+  useEffect(() => {
+    const before = lastStatus.current;
+    lastStatus.current = g.status;
+    if (before === "active" && g.status !== "active") playSound("end");
+  }, [g.status]);
+  useEffect(() => {
+    // Chỉ khi vừa mở ván; chờ đọc xong tùy chọn (có thể đã tắt âm thanh)
+    if (g.status === "active" && g.moves.length === 0) loadPrefs().then(() => playSound("start"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Tự chạy lại ván: mỗi giây một nước, tới nước cuối thì dừng
+  useEffect(() => {
+    if (!playing) return;
+    if (ply >= total) {
+      setPlaying(false);
+      return;
+    }
+    const t = setTimeout(() => setViewPly(ply + 1 >= total ? null : ply + 1), 1000);
+    return () => clearTimeout(t);
+  }, [playing, ply, total]);
+  const jump = (p: number | null) => {
+    setPlaying(false);
+    setViewPly(p == null || p >= total ? null : p);
+  };
 
   const opp = useSide(g, mine ? opponentColor(mine) : "b");
   const title = mine ? `Với ${opp.name}` : "Ván cờ";
@@ -146,43 +195,66 @@ function Game({ g }: { g: ChessGame }) {
       <Header
         title={title}
         sub={modeText(g)}
-        right={<IconButton name="swap-vert" label="Xoay bàn cờ" onPress={() => setFlip((v) => !v)} color={c.text2} />}
+        right={
+          <>
+            <IconButton name="tune" label="Tùy chọn bàn cờ" onPress={() => setPrefsOpen(true)} color={c.text2} />
+            <IconButton name="swap-vert" label="Xoay bàn cờ" onPress={() => setFlip((v) => !v)} color={c.text2} />
+          </>
+        }
       />
 
       <PlayerBar g={g} color={top} elapsed={elapsed} captured={mat.captured[top]} lead={mat.lead[top]} />
       <View style={{ alignItems: "center" }}>
-        <Board fen={fen} size={size} orientation={bottom} movable={movable} lastMove={lastMove} onMove={(uci) => playMove(g.id, uci)} />
+        <Board
+          fen={fen}
+          size={size}
+          orientation={bottom}
+          movable={movable}
+          lastMove={lastMove}
+          onMove={(uci) => playMove(g.id, uci)}
+          hints={prefs.hints}
+          showLast={prefs.lastMove}
+          coords={prefs.coords}
+          arrow={!active && prefs.arrows && result && ply < total ? result.positions[ply]?.best : null}
+        />
       </View>
       <PlayerBar g={g} color={bottom} elapsed={elapsed} captured={mat.captured[bottom]} lead={mat.lead[bottom]} />
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 12) + 8 }}>
         {/* Danh sách nước đi + nút xem lại */}
         <View style={s.movesRow}>
-          <IconButton name="first-page" label="Về đầu ván" onPress={() => setViewPly(0)} disabled={ply === 0} size={22} />
-          <IconButton name="chevron-left" label="Nước trước" onPress={() => setViewPly(Math.max(0, ply - 1))} disabled={ply === 0} size={24} />
+          <IconButton name="first-page" label="Về đầu ván" onPress={() => jump(0)} disabled={ply === 0} size={22} />
+          <IconButton name="chevron-left" label="Nước trước" onPress={() => jump(Math.max(0, ply - 1))} disabled={ply === 0} size={24} />
           <ScrollView ref={movesRef} horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={s.moves}>
             {san.length === 0 ? <Text style={s.muted}>Chưa có nước đi nào</Text> : null}
-            {san.map((m, i) => (
-              <View key={i} style={s.moveItem}>
-                {i % 2 === 0 ? <Text style={s.moveNo}>{i / 2 + 1}.</Text> : null}
-                <Pressable
-                  onPress={() => setViewPly(i + 1 === total ? null : i + 1)}
-                  style={[s.move, ply === i + 1 && { backgroundColor: c.jadeWash }]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Xem nước ${m}`}
-                >
-                  <Text style={[s.moveText, ply === i + 1 && { color: c.accent }]}>{m}</Text>
-                </Pressable>
-              </View>
-            ))}
+            {san.map((m, i) => {
+              const cls = result?.moves[i]?.cls;
+              const mark = cls && cls !== "best" && cls !== "good" ? MOVE_CLASS[cls] : null;
+              return (
+                <View key={i} style={s.moveItem}>
+                  {i % 2 === 0 ? <Text style={s.moveNo}>{i / 2 + 1}.</Text> : null}
+                  <Pressable
+                    onPress={() => jump(i + 1)}
+                    style={[s.move, ply === i + 1 && { backgroundColor: c.jadeWash }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Xem nước ${m}${mark ? `, ${mark.label}` : ""}`}
+                  >
+                    <Text style={[s.moveText, ply === i + 1 && { color: c.accent }, mark && { color: mark.color }]}>
+                      {m}
+                      {mark ? mark.symbol : ""}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })}
           </ScrollView>
-          <IconButton name="chevron-right" label="Nước sau" onPress={() => setViewPly(ply + 1 >= total ? null : ply + 1)} disabled={live} size={24} />
-          <IconButton name="last-page" label="Nước mới nhất" onPress={() => setViewPly(null)} disabled={live} size={22} />
+          <IconButton name="chevron-right" label="Nước sau" onPress={() => jump(ply + 1)} disabled={live} size={24} />
+          <IconButton name="last-page" label="Nước mới nhất" onPress={() => jump(null)} disabled={live} size={22} />
         </View>
 
         <View style={s.body}>
-          {!live ? (
-            <Pressable onPress={() => setViewPly(null)} style={[s.banner, { backgroundColor: c.turmericWash }]} accessibilityRole="button">
+          {!live && active ? (
+            <Pressable onPress={() => jump(null)} style={[s.banner, { backgroundColor: c.turmericWash }]} accessibilityRole="button">
               <Icon name="history" size={18} color={c.text2} />
               <Text style={s.bannerText}>
                 Đang xem lại nước {ply}/{total}. <Text style={{ color: c.accent, fontWeight: "800" }}>Về thế cờ hiện tại</Text>
@@ -208,6 +280,31 @@ function Game({ g }: { g: ChessGame }) {
           ) : null}
 
           {!active ? <Result g={g} mine={mine} /> : null}
+
+          {!active && total > 0 ? (
+            <View style={s.actions}>
+              <Button
+                title={playing ? "Dừng" : ply >= total ? "Xem lại từ đầu" : "Tự chạy tiếp"}
+                icon={playing ? "pause" : "play-arrow"}
+                kind="secondary"
+                small
+                style={{ flex: 1 }}
+                onPress={() => {
+                  if (playing) {
+                    setPlaying(false);
+                    return;
+                  }
+                  if (ply >= total) setViewPly(0);
+                  setPlaying(true);
+                }}
+              />
+              <Text style={[s.muted, { alignSelf: "center" }]}>
+                Nước {ply}/{total}
+              </Text>
+            </View>
+          ) : null}
+
+          {!active ? <AnalysisPanel g={g} ply={ply} onJump={(p) => jump(p)} /> : null}
 
           {active && mine ? (
             <View style={s.actions}>
@@ -269,6 +366,7 @@ function Game({ g }: { g: ChessGame }) {
           ) : null}
         </View>
       </ScrollView>
+      <PrefsSheet visible={prefsOpen} onClose={() => setPrefsOpen(false)} />
     </View>
   );
 }

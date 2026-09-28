@@ -1900,6 +1900,7 @@ ${sections}
     if (chess) {
       socket.on('chess:game', (data) => chess.onEvent('chess:game', data));
       socket.on('chess:challenge', (data) => chess.onEvent('chess:challenge', data));
+      socket.on('chess:analysis', (data) => chess.onAnalysis(data));
     }
     socket.on('storage:changed', (result) => {
       if (state.tab === 'admin') loadStorage();
@@ -3273,6 +3274,7 @@ ${sections}
         break;
       }
       case 'chess-board': if (chess) chess.openLeaderboard(); break;
+      case 'chess-prefs': if (chess) chess.openPrefs(); break;
       case 'open-app': if (NATIVE && NATIVE.openApp) NATIVE.openApp(location.hash || '#/'); break;
       case 'chat-title':
         if (state.convs.get(state.currentId)?.type === 'group') navigate('#/group');

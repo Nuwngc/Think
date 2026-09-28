@@ -9,6 +9,7 @@ import { AppState, Platform, View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { loadPrefs } from "./src/chess/prefs";
 import { prepareImage, recoverPick } from "./src/images";
 import { parseResponse, runQuickAction, setupNotifications, watchPushToken, type NotificationAction } from "./src/notifications";
 import { BootScreen } from "./src/screens/BootScreen";
@@ -66,6 +67,7 @@ export default function App() {
   useEffect(() => {
     startLifecycle();
     boot();
+    loadPrefs();
     setupNotifications();
     checkForUpdate();
     if (Platform.OS === "web") return;

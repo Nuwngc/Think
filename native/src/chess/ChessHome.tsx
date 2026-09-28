@@ -9,7 +9,7 @@ import { useColors, type Colors } from "../theme";
 import { Avatar, Button, Icon, IconButton, Sheet, useStyles, type IconName } from "../ui";
 import { clockText, myColor, opponentColor, outcomeFor, reasonText, tcLabel } from "./format";
 import { SideAvatar, useNow, useSide } from "./parts";
-import { BotSheet, ChallengeSheet } from "./Sheets";
+import { BotSheet, ChallengeSheet, HistorySheet, PrefsSheet } from "./Sheets";
 import { answerChallenge, loadChess, loadLeaderboard, openGame, useChess } from "./store";
 import type { ChessGame, ChessRating } from "./types";
 
@@ -26,6 +26,8 @@ export function ChessHome() {
   const [challengeOpen, setChallengeOpen] = useState(false);
   const [botOpen, setBotOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     if (!useChess.getState().loaded) loadChess();
@@ -57,6 +59,7 @@ export function ChessHome() {
           <Text style={s.brand}>Cờ vua</Text>
           <Text style={s.kicker}>Thách đấu bạn bè, leo bảng xếp hạng</Text>
         </View>
+        <IconButton name="tune" label="Tùy chọn bàn cờ" onPress={() => setPrefsOpen(true)} color={c.text} />
         <IconButton name="leaderboard" label="Bảng xếp hạng" onPress={() => setBoardOpen(true)} color={c.text} />
       </View>
 
@@ -141,7 +144,7 @@ export function ChessHome() {
         </Section>
 
         {recent.length ? (
-          <Section title="Ván gần đây">
+          <Section title="Ván gần đây" action={{ label: "Lịch sử", onPress: () => setHistoryOpen(true) }}>
             {recent.map((g) => (
               <RecentRow key={g.id} g={g} meId={meId} />
             ))}
@@ -157,6 +160,12 @@ export function ChessHome() {
       <ChallengeSheet visible={challengeOpen} onClose={() => setChallengeOpen(false)} />
       <BotSheet visible={botOpen} onClose={() => setBotOpen(false)} />
       <LeaderboardSheet visible={boardOpen} onClose={() => setBoardOpen(false)} />
+      <PrefsSheet visible={prefsOpen} onClose={() => setPrefsOpen(false)} />
+      <HistorySheet
+        visible={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        renderRow={(g) => <RecentRow g={g} meId={meId} onOpen={() => setHistoryOpen(false)} />}
+      />
     </View>
   );
 }
@@ -266,7 +275,7 @@ function GameRow({ g, meId }: { g: ChessGame; meId: number }) {
   );
 }
 
-function RecentRow({ g, meId }: { g: ChessGame; meId: number }) {
+function RecentRow({ g, meId, onOpen }: { g: ChessGame; meId: number; onOpen?: () => void }) {
   const c = useColors();
   const s = useStyles(makeStyles);
   const mine = myColor(g, meId)!;
@@ -277,7 +286,14 @@ function RecentRow({ g, meId }: { g: ChessGame; meId: number }) {
   const label = o === "win" ? "Thắng" : o === "loss" ? "Thua" : o === "draw" ? "Hòa" : "Hủy";
   const tint = o === "win" ? c.accent : o === "loss" ? c.danger : c.muted;
   return (
-    <Pressable onPress={() => openGame(g.id)} style={({ pressed }) => [s.row, pressed && { backgroundColor: c.field }]} accessibilityRole="button">
+    <Pressable
+      onPress={() => {
+        onOpen?.();
+        openGame(g.id);
+      }}
+      style={({ pressed }) => [s.row, pressed && { backgroundColor: c.field }]}
+      accessibilityRole="button"
+    >
       <SideAvatar g={g} color={oppColor} size={40} />
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={s.rowTitle} numberOfLines={1}>

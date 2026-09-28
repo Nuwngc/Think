@@ -1,7 +1,7 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 
-import type { ChessBot, ChessGame, ChessRating } from "./chess/types";
+import type { ChessAnalysis, ChessBot, ChessGame, ChessRating } from "./chess/types";
 import { API_URL } from "./config";
 import { getToken } from "./session";
 import type {
@@ -249,6 +249,15 @@ export const api = {
     request<{ game: ChessGame }>(`/api/chess/games/${id}/draw`, { method: "POST", body: { action } }),
 
   chessRematch: (id: number) => request<{ game: ChessGame }>(`/api/chess/games/${id}/rematch`, { method: "POST", body: {} }),
+
+  chessHistory: (before?: number, beforeId?: number) =>
+    request<{ games: ChessGame[]; hasMore: boolean }>(
+      `/api/chess/history?limit=30${before ? `&before=${before}` : ""}${beforeId ? `&beforeId=${beforeId}` : ""}`,
+    ),
+
+  chessAnalysis: (id: number) => request<{ analysis: ChessAnalysis }>(`/api/chess/games/${id}/analysis`),
+
+  chessAnalyze: (id: number) => request<{ analysis: ChessAnalysis }>(`/api/chess/games/${id}/analysis`, { method: "POST", body: {} }),
 
   /* ---------------- Quản trị ---------------- */
 

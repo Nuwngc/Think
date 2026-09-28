@@ -76,6 +76,8 @@ const config: ExpoConfig = {
       },
     ],
     "expo-secure-store",
+    // Chỉ phát tiếng quân cờ, không ghi âm
+    ["expo-audio", { microphonePermission: false, recordAudioAndroid: false }],
     [
       "expo-build-properties",
       { android: { minSdkVersion: 24, buildArchs: ["armeabi-v7a", "arm64-v8a"] } },

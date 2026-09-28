@@ -4,6 +4,7 @@
    app.js gọi ThinkChess.create(host) rồi chuyển cho nó đường dẫn #/chess và các sự kiện realtime. */
 window.ThinkChess = (() => {
   const FILES = 'abcdefgh';
+  const SVG = 'http://www.w3.org/2000/svg';
   const NAMES = { k: 'Vua', q: 'Hậu', r: 'Xe', b: 'Tượng', n: 'Mã', p: 'Tốt' };
   const TIME_CONTROLS = [
     { base: 1, inc: 0, label: '1+0', kind: 'Chớp nhoáng' },
@@ -112,6 +113,39 @@ window.ThinkChess = (() => {
     }
     return { captured, lead: { w: Math.max(0, score), b: Math.max(0, -score) } };
   }
+  // Xếp loại nước đi khi phân tích (ký hiệu quốc tế ?! ? ??)
+  const MOVE_CLASS = {
+    best: { symbol: '★', label: 'Nước tốt nhất', color: '#1E9E7C' },
+    good: { symbol: '', label: 'Nước tốt', color: '' },
+    inaccuracy: { symbol: '?!', label: 'Thiếu chính xác', color: '#D99A0B' },
+    mistake: { symbol: '?', label: 'Sai lầm', color: '#E07B24' },
+    blunder: { symbol: '??', label: 'Sai lầm nghiêm trọng', color: '#D1402F' },
+  };
+  function evalText(p) {
+    if (!p) return '';
+    if (p.end === 'checkmate') return p.wp >= 50 ? '1-0' : '0-1';
+    if (p.end === 'draw') return '½-½';
+    if (p.mate != null) return `#${p.mate > 0 ? '' : '-'}${Math.abs(p.mate)}`;
+    const v = (p.cp || 0) / 100;
+    return `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}`;
+  }
+  function moveComment(m, before) {
+    if (!m) return '';
+    const info = MOVE_CLASS[m.cls] || MOVE_CLASS.good;
+    const no = `${Math.ceil(m.ply / 2)}${m.color === 'w' ? '.' : '…'} ${m.san}${info.symbol && m.cls !== 'best' ? info.symbol : ''}`;
+    if (m.cls === 'best') return `${no}: nước tốt nhất.`;
+    if (m.cls === 'good') return `${no}: nước tốt.${before && before.bestSan ? ` Máy thích ${before.bestSan} hơn một chút.` : ''}`;
+    return `${no}: ${info.label.toLowerCase()}.${before && before.bestSan ? ` Nước tốt nhất là ${before.bestSan}.` : ''}`;
+  }
+  // Tiếng quân cờ (tự tổng hợp bằng scripts/chess-sounds.py)
+  function soundForSan(san) {
+    if (!san) return 'move';
+    if (/[+#]/.test(san)) return 'check';
+    if (san.includes('x')) return 'capture';
+    if (san.startsWith('O-O')) return 'castle';
+    return 'move';
+  }
+
   function botTint(elo) {
     if (elo < 900) return '#5DA271';
     if (elo < 1500) return '#3E8FB0';
@@ -140,8 +174,43 @@ window.ThinkChess = (() => {
       sending: new Set(),
       tab: false, // đang ở tab Cờ vua
     };
-    // Trạng thái xem ván đang mở
-    const V = { ply: null, flip: false, selected: null, promo: null, rulesError: false };
+    S.analyses = new Map(); // id ván -> { status, progress, total, result }
+    S.history = { ids: [], hasMore: false, loading: false, loaded: false };
+    // Trạng thái xem ván đang mở (lastPly/lastStatus: để phát tiếng đúng lúc)
+    const V = { ply: null, flip: false, selected: null, promo: null, rulesError: false, playing: false, playTimer: null, lastId: null, lastPly: null, lastStatus: null };
+
+    /* ---------------- Tùy chọn bàn cờ (lưu trên máy này) ---------------- */
+    const PREF_KEY = 'chess-prefs';
+    const DEFAULT_PREFS = { hints: true, lastMove: true, coords: true, arrows: true, sound: true };
+    const P = { ...DEFAULT_PREFS };
+    try {
+      const saved = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
+      for (const k of Object.keys(DEFAULT_PREFS)) if (typeof saved[k] === 'boolean') P[k] = saved[k];
+    } catch { /* dùng mặc định */ }
+    function setPref(key, value) {
+      P[key] = value;
+      try { localStorage.setItem(PREF_KEY, JSON.stringify(P)); } catch { /* chế độ ẩn danh */ }
+      if (S.openId != null) renderGame();
+    }
+
+    /* ---------------- Âm thanh ---------------- */
+    const sounds = new Map();
+    function playSound(name) {
+      if (!P.sound) return;
+      try {
+        let a = sounds.get(name);
+        if (!a) {
+          a = new Audio(`/chess/sounds/${name}.wav`);
+          a.preload = 'auto';
+          sounds.set(name, a);
+        } else if (!a.paused) {
+          a = a.cloneNode(); // tiếng trước chưa hết thì phát chồng lên
+        }
+        a.currentTime = 0;
+        const p = a.play();
+        if (p && p.catch) p.catch(() => {});
+      } catch { /* trình duyệt chặn âm thanh */ }
+    }
     const meId = () => (state.me ? state.me.id : 0);
     const myColor = (g) => (g.whiteId === meId() ? 'w' : g.blackId === meId() ? 'b' : null);
     const isBotSide = (g, color) => g.bot != null && g.botColor === color;
@@ -176,7 +245,8 @@ window.ThinkChess = (() => {
           const data = await api('/api/chess');
           // Giữ các ván không có trong danh sách trả về chỉ khi đang mở (vd ván cũ xem từ thông báo)
           const fresh = new Set([...data.challenges, ...data.active, ...data.recent].map((g) => g.id));
-          for (const id of [...S.games.keys()]) if (!fresh.has(id) && id !== S.openId) S.games.delete(id);
+          const keep = new Set(S.history.ids);
+          for (const id of [...S.games.keys()]) if (!fresh.has(id) && id !== S.openId && !keep.has(id)) S.games.delete(id);
           S.rating = data.rating;
           S.bots = data.bots || [];
           upsert([...data.challenges, ...data.active, ...data.recent]);
@@ -221,6 +291,9 @@ window.ThinkChess = (() => {
       S.openId = null;
       S.sending.clear();
       S.tab = false;
+      S.analyses.clear();
+      S.history = { ids: [], hasMore: false, loading: false, loaded: false };
+      stopPlaying();
       const pane = $('#chess-pane');
       if (pane) {
         pane.hidden = true;
@@ -274,7 +347,11 @@ window.ThinkChess = (() => {
           V.flip = false;
           V.selected = null;
           V.promo = null;
+          V.lastId = null;
+          stopPlaying();
           hideToastsFor(gameId);
+          const g0 = S.games.get(gameId);
+          if (g0 && g0.status === 'active' && g0.moves.length === 0) playSound('start');
         }
         document.body.classList.add('in-chat');
         $('#chat-empty').hidden = true;
@@ -294,6 +371,7 @@ window.ThinkChess = (() => {
       if (S.openId != null || !pane.hidden) {
         S.openId = null;
         stopTicker();
+        stopPlaying();
         pane.hidden = true;
         pane.replaceChildren();
         if (state.currentId == null) {
@@ -346,13 +424,19 @@ window.ThinkChess = (() => {
     }
     // Liên kết mở ván: vẫn là thẻ <a> (mở tab mới được), bấm thường thì đi qua navigate
     function gameLink(id, ...children) {
+      const onOpen = typeof children[0] === 'function' ? children.shift() : null;
       return h('a', {
         class: 'chess-row-main',
         href: openGameHash(id),
         onclick: (e) => {
           if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
           e.preventDefault();
-          openGame(id);
+          if (onOpen) onOpen();
+          // Bảng lịch sử vừa đóng: thay bước lịch sử của bảng bằng ván cờ
+          if (history.state && history.state.chessSheet) {
+            history.replaceState({ depth: history.state.depth || 0 }, '', openGameHash(id));
+            navigate(openGameHash(id), { replace: true });
+          } else openGame(id);
         },
       }, ...children);
     }
@@ -438,6 +522,136 @@ window.ThinkChess = (() => {
       }
       refresh();
     }
+
+    /* ---------------- Phân tích ván (Stockfish trên máy chủ) ---------------- */
+    function setAnalysis(id, a) {
+      const prev = S.analyses.get(id);
+      if (prev && prev.status === 'done' && a.status !== 'done' && a.status !== 'error') return;
+      S.analyses.set(id, a);
+      if (S.openId !== id) return;
+      // Đang chạy: chỉ cập nhật thanh tiến độ tại chỗ
+      const panel = document.querySelector('#chess-pane .chess-analysis.is-running');
+      if (panel && (a.status === 'running' || a.status === 'queued')) {
+        const pct = a.total ? Math.round((a.progress / a.total) * 100) : 0;
+        panel.querySelector('.chess-an-pct').textContent = `${pct}%`;
+        const bar = panel.querySelector('.chess-progress');
+        bar.setAttribute('aria-valuenow', String(pct));
+        bar.firstElementChild.style.width = `${Math.max(3, pct)}%`;
+        panel.querySelector('.hint').textContent = runningText(a);
+        return;
+      }
+      renderGame();
+    }
+    const runningText = (a) => (a.status === 'queued' && a.position > 1
+      ? `Đang chờ tới lượt (thứ ${a.position}). Bạn cứ làm việc khác, xong sẽ có thông báo.`
+      : `Stockfish đang chấm thế cờ ${a.progress}/${a.total}. Bạn cứ làm việc khác, xong sẽ có thông báo.`);
+    async function loadAnalysis(id) {
+      try {
+        const { analysis } = await api(`/api/chess/games/${id}/analysis`);
+        setAnalysis(id, analysis);
+      } catch {
+        // Không tải được (mất mạng…): hiện nút để bấm phân tích / thử lại
+        const cur = S.analyses.get(id);
+        if (!cur || cur.status === 'loading') setAnalysis(id, { status: 'none', progress: 0, total: 0 });
+      }
+    }
+    async function requestAnalysis(id) {
+      try {
+        const { analysis } = await api(`/api/chess/games/${id}/analysis`, { method: 'POST', body: {} });
+        setAnalysis(id, analysis);
+      } catch (err) {
+        toast(err.message);
+      }
+    }
+    function onAnalysis(data) {
+      if (!data || !data.analysis) return;
+      const id = Number(data.gameId);
+      const before = S.analyses.get(id);
+      setAnalysis(id, data.analysis);
+      if (data.analysis.status === 'done' && before && before.status !== 'done' && S.openId !== id && document.visibilityState === 'visible') {
+        chessToast('Đã phân tích xong ván cờ. Bấm để xem.', { title: '♟ Phân tích ván đấu', gameId: id });
+      }
+    }
+
+    /* ---------------- Lịch sử ván đã xong ---------------- */
+    async function loadHistory(more = false) {
+      const hs = S.history;
+      if (hs.loading || (more && !hs.hasMore)) return;
+      hs.loading = true;
+      drawHistory();
+      try {
+        const last = more ? S.games.get(hs.ids[hs.ids.length - 1]) : null;
+        const data = await api(`/api/chess/history?limit=30${last && last.endedAt ? `&before=${last.endedAt}&beforeId=${last.id}` : ''}`);
+        upsert(data.games);
+        const ids = data.games.map((g) => g.id);
+        hs.ids = more ? [...hs.ids, ...ids.filter((id) => !hs.ids.includes(id))] : ids;
+        hs.hasMore = data.hasMore;
+        hs.loaded = true;
+      } catch (err) {
+        toast(err.message);
+      } finally {
+        hs.loading = false;
+        drawHistory();
+      }
+    }
+    let drawHistory = () => {};
+
+    /* ---------------- Tự chạy lại ván ---------------- */
+    function stopPlaying() {
+      V.playing = false;
+      clearTimeout(V.playTimer);
+      V.playTimer = null;
+    }
+    function stepPlaying() {
+      clearTimeout(V.playTimer);
+      const g = S.games.get(S.openId);
+      if (!V.playing || !g) return;
+      const total = g.moves.length;
+      const ply = V.ply == null ? total : V.ply;
+      if (ply >= total) {
+        stopPlaying();
+        renderGame();
+        return;
+      }
+      V.playTimer = setTimeout(() => {
+        if (!V.playing) return;
+        V.ply = ply + 1 >= total ? null : ply + 1;
+        V.selected = null;
+        renderGame();
+        stepPlaying();
+      }, 1000);
+    }
+    function togglePlaying() {
+      const g = S.games.get(S.openId);
+      if (!g) return;
+      if (V.playing) {
+        stopPlaying();
+        renderGame();
+        return;
+      }
+      if (V.ply == null || V.ply >= g.moves.length) V.ply = 0;
+      V.playing = true;
+      renderGame();
+      stepPlaying();
+    }
+    // Phím mũi tên để xem lại từng nước (khi đang mở ván, không gõ chữ)
+    document.addEventListener('keydown', (e) => {
+      if (S.openId == null || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (layer && layer.classList.contains('open')) return; // đang mở bảng chọn
+      const g = S.games.get(S.openId);
+      if (!g || g.status === 'challenge') return;
+      const total = g.moves.length;
+      const ply = V.ply == null ? total : V.ply;
+      let next;
+      if (e.key === 'ArrowLeft') next = Math.max(0, ply - 1);
+      else if (e.key === 'ArrowRight') next = ply + 1;
+      else if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = total;
+      else return;
+      e.preventDefault();
+      setPly(next >= total ? null : next);
+    });
 
     /* ---------------- Gửi yêu cầu ---------------- */
     async function act(url, body) {
@@ -559,7 +773,10 @@ window.ThinkChess = (() => {
             ? [h('li', { class: 'people-empty', text: 'Chưa ai chơi ván xếp hạng. Thách đấu một người để mở màn!' })]
             : S.leaderboard.slice(0, 5).map((x, i) => rankRow(x, i + 1)),
         S.leaderboard && S.leaderboard.length > 5 ? h('button', { class: 'chess-more', type: 'button', onclick: openLeaderboard, text: 'Xem tất cả' }) : null));
-      if (recent.length) parts.push(section('Ván gần đây', recent.map(recentRow)));
+      if (recent.length) {
+        parts.push(section('Ván gần đây', recent.map((g) => recentRow(g)),
+          h('button', { class: 'chess-more', type: 'button', onclick: openHistory, text: 'Lịch sử' })));
+      }
       parts.push(h('p', {
         class: 'chess-credit',
         text: 'Luật cờ: chess.js (BSD-2). Máy cờ: js-chess-engine (MIT), GarboChess-JS (BSD), Stockfish 11 (GPL-3.0). Quân cờ: bộ cburnett của Colin M.L. Burnett (GPLv2+).',
@@ -622,14 +839,14 @@ window.ThinkChess = (() => {
           h('span', { class: `chess-pill${myTurn ? ' is-turn' : ''}`, text: myTurn ? 'Lượt bạn' : 'Chờ' })));
     }
 
-    function recentRow(g) {
+    function recentRow(g, onOpen) {
       const mine = myColor(g);
       const opp = other(mine);
       const o = outcomeFor(g, mine);
       const delta = g.deltas[mine];
       const label = o === 'win' ? 'Thắng' : o === 'loss' ? 'Thua' : o === 'draw' ? 'Hòa' : 'Hủy';
       return h('li', { class: 'chess-row' },
-        gameLink(g.id,
+        gameLink(g.id, onOpen,
           sideAvatar(g, opp),
           h('span', { class: 'person-main' },
             h('span', { class: 'person-name', text: sideName(g, opp) }),
@@ -674,6 +891,10 @@ window.ThinkChess = (() => {
         return;
       }
       const focusSq = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.sq : null;
+      // Nút đang được chọn bằng bàn phím: vẽ lại xong thì chọn lại nút tương ứng
+      const focusKey = document.activeElement && document.activeElement.closest && document.activeElement.closest('#chess-pane')
+        ? document.activeElement.dataset.focus || null
+        : null;
       const mine = myColor(g);
       const bottom = V.flip ? other(mine || 'w') : mine || 'w';
       const top = other(bottom);
@@ -688,15 +909,32 @@ window.ThinkChess = (() => {
       const mat = material(fen);
       const oppColor = mine ? other(mine) : 'b';
       const oppName = sideName(g, oppColor);
+      const analysis = S.analyses.get(g.id);
+      const result = analysis && analysis.status === 'done' ? analysis.result : null;
+      if (!active && g.status === 'finished' && total >= 2 && !analysis) {
+        S.analyses.set(g.id, { status: 'loading' });
+        loadAnalysis(g.id);
+      }
+
+      // Âm thanh: bàn cờ tiến thêm đúng một nước (đi quân, đối thủ đi, xem lại), hoặc ván vừa kết thúc
+      if (V.lastId === g.id) {
+        if (V.lastStatus === 'active' && g.status !== 'active') playSound('end');
+        else if (V.lastPly != null && ply === V.lastPly + 1) playSound(soundForSan(san[ply - 1]));
+      }
+      V.lastId = g.id;
+      V.lastPly = ply;
+      V.lastStatus = g.status;
 
       const head = h('header', { class: 'chat-head' },
         back,
         h('div', { class: 'chat-title' },
           h('h2', { text: mine ? `Với ${oppName}` : 'Ván cờ' }),
           h('p', { text: `${tcLabel(g)} · ${g.bot ? 'Chơi với máy' : g.rated ? 'Tính điểm ELO' : 'Giao hữu'}` })),
-        h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Xoay bàn cờ', onclick: () => { V.flip = !V.flip; renderGame(); } }, icon('flip')));
+        h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Tùy chọn bàn cờ', onclick: openPrefs }, icon('tune')),
+        h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Xoay bàn cờ', dataset: { focus: 'flip' }, onclick: () => { V.flip = !V.flip; renderGame(); } }, icon('flip')));
 
-      const board = renderBoard({ fen, orientation: bottom, movable, lastMove });
+      const arrow = !active && P.arrows && result && ply < total && result.positions[ply] ? result.positions[ply].best : null;
+      const board = renderBoard({ fen, orientation: bottom, movable, lastMove, arrow });
 
       const side = [];
       // Danh sách nước đi
@@ -704,8 +942,8 @@ window.ThinkChess = (() => {
       for (let i = 0; i < san.length; i += 2) {
         moveList.append(h('li', {},
           h('span', { class: 'chess-move-no', text: `${i / 2 + 1}.` }),
-          moveBtn(san[i], i + 1, ply, total),
-          san[i + 1] ? moveBtn(san[i + 1], i + 2, ply, total) : null));
+          moveBtn(san[i], i + 1, ply, total, result),
+          san[i + 1] ? moveBtn(san[i + 1], i + 2, ply, total, result) : null));
       }
       if (!san.length) moveList.append(h('li', { class: 'chess-moves-empty', text: 'Chưa có nước đi nào' }));
       side.push(h('div', { class: 'chess-nav' },
@@ -715,7 +953,7 @@ window.ThinkChess = (() => {
         navBtn('next', 'Nước sau', live, () => setPly(ply + 1 >= total ? null : ply + 1)),
         navBtn('last', 'Nước mới nhất', live, () => setPly(null))));
 
-      if (!live) {
+      if (!live && active) {
         side.push(h('button', { class: 'chess-banner', type: 'button', onclick: () => setPly(null) },
           `Đang xem lại nước ${ply}/${total}. `, h('strong', { text: 'Về thế cờ hiện tại' })));
       }
@@ -733,6 +971,14 @@ window.ThinkChess = (() => {
         side.push(h('p', { class: 'chess-note', text: `Bạn đã mời hòa, chờ ${oppName} trả lời.` }));
       }
       if (!active) side.push(resultCard(g, mine));
+      if (!active && total > 0) {
+        side.push(h('div', { class: 'chess-replay' },
+          h('button', { class: 'btn btn-sm', type: 'button', dataset: { focus: 'replay' }, onclick: togglePlaying },
+            icon(V.playing ? 'pause' : 'play'), V.playing ? 'Dừng' : ply >= total ? 'Xem lại từ đầu' : 'Tự chạy tiếp'),
+          h('span', { class: 'chess-note', text: `Nước ${ply}/${total}` }),
+          h('span', { class: 'chess-keys', text: 'Phím ← → để xem từng nước' })));
+      }
+      if (!active && g.status === 'finished' && total >= 2) side.push(analysisPanel(g, ply, analysis));
 
       if (active && mine) {
         const canAbort = total < 2;
@@ -781,6 +1027,11 @@ window.ThinkChess = (() => {
       if (live) list.scrollLeft = list.scrollWidth;
       if (V.promo) pane.querySelector('.chess-promo-row button')?.focus({ preventScroll: true });
       else if (focusSq) pane.querySelector(`.sq[data-sq="${focusSq}"]`)?.focus({ preventScroll: true });
+      else if (focusKey) {
+        // Nút cũ không còn (vd tới nước cuối thì nút "Nước sau" bị tắt): chọn nút tự chạy / danh sách nước
+        const el = pane.querySelector(`[data-focus="${focusKey}"]:not([disabled])`) || pane.querySelector('[data-focus="replay"], [data-focus="nav-prev"]');
+        if (el) el.focus({ preventScroll: true });
+      }
 
       // Đồng hồ chạy
       stopTicker();
@@ -788,19 +1039,113 @@ window.ThinkChess = (() => {
       tick();
     }
 
-    function moveBtn(text, n, ply, total) {
-      return h('button', {
-        class: `chess-move${ply === n ? ' is-current' : ''}`,
+    function moveBtn(text, n, ply, total, result) {
+      const cls = result && result.moves[n - 1] ? result.moves[n - 1].cls : null;
+      const mark = cls && cls !== 'best' && cls !== 'good' ? MOVE_CLASS[cls] : null;
+      const el = h('button', {
+        class: `chess-move${ply === n ? ' is-current' : ''}${mark ? ` is-${cls}` : ''}`,
         type: 'button',
-        'aria-label': `Xem nước ${text}`,
+        dataset: { focus: `move-${n}` },
+        'aria-label': `Xem nước ${text}${mark ? `, ${mark.label}` : ''}`,
         onclick: () => setPly(n === total ? null : n),
-        text,
+        text: `${text}${mark ? mark.symbol : ''}`,
       });
+      return el;
+    }
+
+    /* ---------------- Bảng phân tích ---------------- */
+    function analysisPanel(g, ply, a) {
+      const head = (title, extra) => h('div', { class: 'chess-an-head' }, icon('chart'), h('h3', { text: title }), extra || null);
+      if (!a || a.status === 'loading') return h('div', { class: 'chess-analysis' }, head('Phân tích ván đấu'), h('p', { class: 'hint', text: 'Đang tải…' }));
+      if (a.status === 'none' || a.status === 'error') {
+        return h('div', { class: 'chess-analysis' },
+          head('Phân tích ván đấu'),
+          h('p', {
+            class: 'hint',
+            text: a.status === 'error'
+              ? a.error || 'Phân tích bị lỗi.'
+              : 'Máy Stockfish trên máy chủ sẽ chấm từng nước: nước hay, thiếu chính xác, sai lầm, và độ chính xác của mỗi bên. Mất khoảng 1 phút.',
+          }),
+          h('button', { class: 'btn btn-primary', type: 'button', dataset: { focus: 'analyze' }, onclick: (e) => withBusy(e.currentTarget, () => requestAnalysis(g.id)) },
+            icon('chart'), a.status === 'error' ? 'Thử lại' : 'Phân tích bằng Stockfish'));
+      }
+      if (a.status === 'queued' || a.status === 'running') {
+        const pct = a.total ? Math.round((a.progress / a.total) * 100) : 0;
+        return h('div', { class: 'chess-analysis is-running' },
+          head('Đang phân tích…', h('strong', { class: 'chess-an-pct', text: `${pct}%` })),
+          h('div', { class: 'chess-progress', role: 'progressbar', 'aria-label': 'Tiến độ phân tích', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct) },
+            h('span', { style: `width:${Math.max(3, pct)}%` })),
+          h('p', { class: 'hint', text: runningText(a) }));
+      }
+      const r = a.result;
+      const move = ply > 0 ? r.moves[ply - 1] : null;
+      const pos = r.positions[ply];
+      const sideCard = (color) => {
+        const n = r.counts[color];
+        return h('div', { class: 'chess-acc' },
+          h('div', { class: 'chess-acc-name' }, h('span', { class: `chess-swatch is-${color}` }), h('span', { text: sideName(g, color) })),
+          h('strong', { text: `${r.accuracy[color] ?? '—'}%` }),
+          h('small', { text: 'độ chính xác' }),
+          h('div', { class: 'chess-acc-counts' },
+            [['inaccuracy', 'thiếu chính xác'], ['mistake', 'sai lầm'], ['blunder', 'sai lầm nghiêm trọng']].map(([k, label]) =>
+              h('span', { 'aria-label': `${n[k]} ${label}` }, h('b', { class: `is-${k}`, text: MOVE_CLASS[k].symbol }), String(n[k])))));
+      };
+      const good = pos && pos.wp >= 50;
+      return h('div', { class: 'chess-analysis' },
+        head('Phân tích ván đấu', h('span', { class: 'chess-an-engine', text: r.engine })),
+        h('div', { class: 'chess-acc-row' }, sideCard('w'), sideCard('b')),
+        evalGraph(r, ply),
+        h('div', { class: 'chess-comment' },
+          h('span', { class: `chess-eval${good ? ' is-white' : ''}`, text: evalText(pos) }),
+          h('p', {
+            class: move && move.cls !== 'good' && move.cls !== 'best' ? `is-${move.cls}` : '',
+            text: move ? moveComment(move, r.positions[ply - 1]) : 'Thế cờ ban đầu. Bấm vào biểu đồ hoặc dùng nút ‹ › (phím ← →) để xem từng nước.',
+          })),
+        pos && pos.bestSan && ply < g.moves.length ? h('p', { class: 'hint', text: `Máy gợi ý đi tiếp: ${pos.bestSan}${P.arrows ? ' (mũi tên xanh trên bàn cờ)' : ''}.` }) : null);
+    }
+
+    // Biểu đồ khả năng thắng của Trắng qua từng nước; bấm để nhảy tới nước đó
+    function evalGraph(r, ply) {
+      const W = 300;
+      const H = 80;
+      const n = r.positions.length - 1;
+      const x = (i) => (n ? (i / n) * W : 0);
+      const y = (wp) => H - (wp / 100) * H;
+      let line = '';
+      r.positions.forEach((p, i) => { line += `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.wp).toFixed(1)}`; });
+      const svg = document.createElementNS(SVG, 'svg');
+      svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      svg.setAttribute('preserveAspectRatio', 'none');
+      svg.setAttribute('class', 'chess-graph');
+      svg.setAttribute('role', 'img');
+      svg.setAttribute('aria-label', 'Biểu đồ đánh giá ván cờ. Bấm để xem nước đi đó.');
+      const add = (tag, attrs) => {
+        const el = document.createElementNS(SVG, tag);
+        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+        svg.append(el);
+        return el;
+      };
+      add('rect', { x: 0, y: 0, width: W, height: H, fill: '#26302C' });
+      add('path', { d: `${line}L${W},${H}L0,${H}Z`, fill: '#F4F4F0' });
+      add('line', { x1: 0, y1: H / 2, x2: W, y2: H / 2, stroke: 'rgba(128,128,128,.6)', 'stroke-width': 1, 'stroke-dasharray': '4 4', 'vector-effect': 'non-scaling-stroke' });
+      for (const m of r.moves) {
+        if (m.cls !== 'mistake' && m.cls !== 'blunder') continue;
+        add('line', { x1: x(m.ply), y1: 0, x2: x(m.ply), y2: H, stroke: MOVE_CLASS[m.cls].color, 'stroke-width': 1.5, opacity: 0.75, 'vector-effect': 'non-scaling-stroke' });
+      }
+      add('line', { x1: x(ply), y1: 0, x2: x(ply), y2: H, stroke: '#0E7C66', 'stroke-width': 3, 'vector-effect': 'non-scaling-stroke' });
+      svg.addEventListener('click', (e) => {
+        const box = svg.getBoundingClientRect();
+        const i = Math.round(((e.clientX - box.left) / box.width) * n);
+        const total = n;
+        setPly(Math.max(0, Math.min(total, i)) >= total ? null : Math.max(0, i));
+      });
+      return svg;
     }
     function navBtn(name, label, disabled, onclick) {
-      return h('button', { class: 'icon-btn chess-nav-btn', type: 'button', 'aria-label': label, disabled, onclick }, icon(`nav-${name}`));
+      return h('button', { class: 'icon-btn chess-nav-btn', type: 'button', 'aria-label': label, disabled, dataset: { focus: `nav-${name}` }, onclick }, icon(`nav-${name}`));
     }
     function setPly(p) {
+      stopPlaying();
       V.ply = p;
       V.selected = null;
       V.promo = null;
@@ -920,7 +1265,7 @@ window.ThinkChess = (() => {
     let dragging = null;
     let suppressClick = false;
 
-    function renderBoard({ fen, orientation, movable, lastMove }) {
+    function renderBoard({ fen, orientation, movable, lastMove, arrow }) {
       const rows = parseFen(fen);
       let chess = null;
       let targets = new Map();
@@ -952,19 +1297,22 @@ window.ThinkChess = (() => {
         order.forEach((f, fi) => {
           const sq = `${FILES[f]}${8 - r}`;
           const code = rows[r][f];
-          const hint = targets.has(sq) ? (code ? 'ring' : 'dot') : null;
+          const can = targets.has(sq);
+          const hint = P.hints && can ? (code ? 'ring' : 'dot') : null;
           const cls = ['sq', (r + f) % 2 ? 'is-dark' : 'is-light'];
           if (sq === V.selected) cls.push('is-selected');
           else if (sq === checkSq) cls.push('is-check');
-          else if (sq === lf || sq === lt) cls.push('is-last');
+          else if (P.lastMove && (sq === lf || sq === lt)) cls.push('is-last');
           if (hint) cls.push(`has-${hint}`);
-          const label = `${sq}${code ? `, ${NAMES[code[1].toLowerCase()]} ${code[0] === 'w' ? 'trắng' : 'đen'}` : ''}${hint ? ', đi được' : ''}`;
+          // Trình đọc màn hình vẫn báo ô đi được kể cả khi tắt chấm chỉ dẫn
+          const label = `${sq}${code ? `, ${NAMES[code[1].toLowerCase()]} ${code[0] === 'w' ? 'trắng' : 'đen'}` : ''}${can ? ', đi được' : ''}`;
           board.append(h('button', { class: cls.join(' '), type: 'button', dataset: { sq }, 'aria-label': label, tabindex: movable ? '0' : '-1' },
-            fi === 0 ? h('span', { class: 'coord coord-rank', text: String(8 - r) }) : null,
-            ri === 7 ? h('span', { class: 'coord coord-file', text: FILES[f] }) : null,
+            P.coords && fi === 0 ? h('span', { class: 'coord coord-rank', text: String(8 - r) }) : null,
+            P.coords && ri === 7 ? h('span', { class: 'coord coord-file', text: FILES[f] }) : null,
             code ? h('img', { class: 'pc', src: pieceSrc(code), alt: '', draggable: 'false' }) : null));
         });
       });
+      if (arrow && /^[a-h][1-8][a-h][1-8]/.test(arrow)) board.append(arrowSvg(arrow, orientation));
       if (V.promo) {
         const color = movable || 'w';
         board.append(h('div', { class: 'chess-promo' },
@@ -1020,6 +1368,35 @@ window.ThinkChess = (() => {
       return board;
     }
 
+    // Mũi tên gợi ý (nước tốt nhất của máy) vẽ đè lên bàn cờ, tọa độ theo ô (0–8)
+    function arrowSvg(uci, orientation) {
+      const pt = (sq) => {
+        const f = FILES.indexOf(sq[0]);
+        const r = Number(sq[1]) - 1;
+        return { x: (orientation === 'w' ? f : 7 - f) + 0.5, y: (orientation === 'w' ? 7 - r : r) + 0.5 };
+      };
+      const a = pt(uci.slice(0, 2));
+      const b = pt(uci.slice(2, 4));
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const ux = (b.x - a.x) / len;
+      const uy = (b.y - a.y) / len;
+      const head = 0.42;
+      const ex = b.x - ux * head;
+      const ey = b.y - uy * head;
+      const px = -uy * head * 0.6;
+      const py = ux * head * 0.6;
+      const svg = document.createElementNS(SVG, 'svg');
+      svg.setAttribute('viewBox', '0 0 8 8');
+      svg.setAttribute('class', 'chess-arrow');
+      svg.setAttribute('aria-hidden', 'true');
+      const line = document.createElementNS(SVG, 'line');
+      for (const [k, v] of Object.entries({ x1: a.x + ux * 0.15, y1: a.y + uy * 0.15, x2: ex, y2: ey, 'stroke-width': 0.17, 'stroke-linecap': 'round' })) line.setAttribute(k, v);
+      const poly = document.createElementNS(SVG, 'polygon');
+      poly.setAttribute('points', `${b.x},${b.y} ${ex + px},${ey + py} ${ex - px},${ey - py}`);
+      svg.append(line, poly);
+      return svg;
+    }
+
     window.addEventListener('pointermove', (e) => {
       const d = dragging;
       if (!d) return;
@@ -1031,7 +1408,7 @@ window.ThinkChess = (() => {
         d.ghost.style.width = d.ghost.style.height = `${d.size}px`;
         document.body.append(d.ghost);
         img.classList.add('is-dragging');
-        for (const m of d.moves) document.querySelector(`#chess-pane .sq[data-sq="${m.to}"]`)?.classList.add(m.captured ? 'has-ring' : 'has-dot');
+        if (P.hints) for (const m of d.moves) document.querySelector(`#chess-pane .sq[data-sq="${m.to}"]`)?.classList.add(m.captured ? 'has-ring' : 'has-dot');
       }
       d.ghost.style.transform = `translate(${e.clientX - d.size / 2}px, ${e.clientY - d.size / 2}px)`;
     });
@@ -1124,7 +1501,7 @@ window.ThinkChess = (() => {
       sheet.replaceChildren(
         h('header', { class: 'sheet-head' }, h('h2', { text: title }), h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Đóng', onclick: () => closeSheet() }, icon('close'))),
         h('div', { class: 'sheet-body' }, body),
-        foot ? h('div', { class: 'sheet-foot' }, foot) : null);
+        ...(foot ? [h('div', { class: 'sheet-foot' }, foot)] : [])); // replaceChildren(null) sẽ in ra chữ "null"
       if (l.hidden || !l.classList.contains('open')) {
         clearTimeout(hideTimer);
         if (!(history.state && history.state.chessSheet)) history.pushState({ ...(history.state || {}), chessSheet: true }, '', location.hash || '#/');
@@ -1317,6 +1694,43 @@ window.ThinkChess = (() => {
       ], start);
     }
 
+    const PREF_ROWS = [
+      ['hints', 'Chỉ dẫn nước đi', 'Chọn quân thì hiện chấm ở các ô đi được.'],
+      ['lastMove', 'Tô màu nước vừa đi', 'Tô vàng ô đi và ô đến của nước gần nhất.'],
+      ['coords', 'Tọa độ bàn cờ', 'Chữ a–h và số 1–8 ở mép bàn cờ.'],
+      ['arrows', 'Mũi tên gợi ý khi phân tích', 'Khi xem lại ván đã phân tích, vẽ mũi tên nước tốt nhất của máy.'],
+      ['sound', 'Âm thanh', 'Tiếng quân cờ khi đi, ăn quân, chiếu tướng, bắt đầu và kết thúc ván.'],
+    ];
+    function openPrefs() {
+      const rows = PREF_ROWS.map(([key, title, hint]) => {
+        const input = h('input', { class: 'switch', type: 'checkbox', checked: P[key], 'aria-label': title });
+        input.addEventListener('change', () => {
+          setPref(key, input.checked);
+          if (key === 'sound' && input.checked) playSound('move');
+        });
+        return h('label', { class: 'switch-row chess-pref' }, h('span', { class: 'chess-switch-text' }, h('strong', { text: title }), h('span', { class: 'hint', text: hint })), input);
+      });
+      openSheet('Tùy chọn bàn cờ', [h('div', { class: 'panel' }, rows)]);
+      layer.dataset.kind = 'prefs';
+    }
+
+    function openHistory() {
+      const list = h('ul', { class: 'chess-list' });
+      const more = h('button', { class: 'btn btn-block', type: 'button', onclick: () => loadHistory(true), text: 'Tải thêm' });
+      const note = h('p', { class: 'hint' });
+      drawHistory = () => {
+        if (!layer || layer.hidden || layer.dataset.kind !== 'history') return;
+        const games = S.history.ids.map((id) => S.games.get(id)).filter(Boolean);
+        list.replaceChildren(...games.map((g) => recentRow(g, () => closeSheet(true))));
+        note.textContent = S.history.loading ? 'Đang tải…' : S.history.loaded && !games.length ? 'Bạn chưa chơi xong ván nào.' : '';
+        more.hidden = !S.history.hasMore || S.history.loading;
+      };
+      openSheet('Lịch sử ván đấu', [h('p', { class: 'hint', text: 'Bấm vào một ván để xem lại từng nước và nhờ Stockfish phân tích.' }), list, note, more]);
+      layer.dataset.kind = 'history';
+      drawHistory();
+      loadHistory();
+    }
+
     function openLeaderboard() {
       loadLeaderboard().then(() => {
         if (layer && !layer.hidden && layer.dataset.kind === 'board') drawBoard();
@@ -1339,6 +1753,8 @@ window.ThinkChess = (() => {
       onEvent,
       openChallenge,
       openLeaderboard,
+      openPrefs,
+      onAnalysis,
       badge: todo,
     };
   }

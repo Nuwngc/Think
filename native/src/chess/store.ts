@@ -3,7 +3,7 @@ import { create } from "zustand";
 
 import { api, ApiError } from "../api";
 import { myColor, tcLabel } from "./format";
-import type { ChessBot, ChessGame, ChessRating } from "./types";
+import type { ChessAnalysis, ChessBot, ChessGame, ChessRating } from "./types";
 
 // Dữ liệu cờ vua trong app. Kết nối realtime và thông báo nhỏ nằm ở src/store.ts, gắn vào qua bindChess().
 
@@ -21,7 +21,13 @@ type State = {
   openId: number | null;
   /** Đang gửi nước đi của ván nào */
   sending: Record<number, boolean>;
+  /** Phân tích của từng ván (Stockfish trên máy chủ) */
+  analyses: Record<number, ChessAnalysis>;
+  /** Lịch sử ván đã xong (tải dần) */
+  history: { ids: number[]; hasMore: boolean; loading: boolean; loaded: boolean };
 };
+
+const emptyHistory = () => ({ ids: [] as number[], hasMore: false, loading: false, loaded: false });
 
 export const useChess = create<State>(() => ({
   loaded: false,
@@ -34,6 +40,8 @@ export const useChess = create<State>(() => ({
   leaderboard: null,
   openId: null,
   sending: {},
+  analyses: {},
+  history: emptyHistory(),
 }));
 
 const get = useChess.getState;
@@ -61,7 +69,20 @@ export function bindChess(b: Bridge) {
 
 export function resetChess() {
   loadAgain = false;
-  set({ loaded: false, loading: false, error: null, rating: null, bots: [], games: {}, receivedAt: {}, leaderboard: null, openId: null, sending: {} });
+  set({
+    loaded: false,
+    loading: false,
+    error: null,
+    rating: null,
+    bots: [],
+    games: {},
+    receivedAt: {},
+    leaderboard: null,
+    openId: null,
+    sending: {},
+    analyses: {},
+    history: emptyHistory(),
+  });
 }
 
 /** Thứ tự trạng thái của một ván: lời thách đấu → đang chơi → đã xong. Không bao giờ lùi lại. */
@@ -100,9 +121,10 @@ export async function loadChess() {
     const list = [...data.challenges, ...data.active, ...data.recent];
     const fresh = new Set(list.map((g) => g.id));
     set((s) => {
-      // Bỏ các ván không còn trong danh sách (trừ ván đang mở)
+      // Bỏ các ván không còn trong danh sách (trừ ván đang mở và ván trong lịch sử đã tải)
+      const keep = new Set(s.history.ids);
       const games: Record<number, ChessGame> = {};
-      for (const g of Object.values(s.games)) if (fresh.has(g.id) || g.id === s.openId) games[g.id] = g;
+      for (const g of Object.values(s.games)) if (fresh.has(g.id) || g.id === s.openId || keep.has(g.id)) games[g.id] = g;
       return { games, rating: data.rating, bots: data.bots, loaded: true, error: null };
     });
     upsert(list);
@@ -253,6 +275,63 @@ export async function rematch(id: number) {
   else {
     closeGame();
     bridge.toast(`Đã gửi lời mời đấu lại cho ${bridge.nameOf(game.opponentId)}.`);
+  }
+}
+
+/* ---------------- Lịch sử ván, phân tích ---------------- */
+
+/** Tải lịch sử ván đã xong; more = tải thêm trang cũ hơn */
+export async function loadHistory(more = false) {
+  const h = get().history;
+  if (h.loading || (more && !h.hasMore)) return;
+  set({ history: { ...h, loading: true } });
+  try {
+    const last = more ? get().games[h.ids[h.ids.length - 1]] : null;
+    const data = await api.chessHistory(last?.endedAt || undefined, last?.id);
+    upsert(data.games);
+    const ids = more ? [...h.ids, ...data.games.map((g) => g.id).filter((id) => !h.ids.includes(id))] : data.games.map((g) => g.id);
+    set({ history: { ids, hasMore: data.hasMore, loading: false, loaded: true } });
+  } catch (err) {
+    set((s) => ({ history: { ...s.history, loading: false, loaded: true } }));
+    bridge.toast(err instanceof Error ? err.message : "Không tải được lịch sử ván.");
+  }
+}
+
+function setAnalysis(id: number, a: ChessAnalysis) {
+  set((s) => {
+    const prev = s.analyses[id];
+    // Đã có kết quả thì không để tin tiến độ cũ đến trễ đè lên
+    if (prev?.status === "done" && a.status !== "done" && a.status !== "error") return {};
+    return { analyses: { ...s.analyses, [id]: a } };
+  });
+}
+
+export async function loadAnalysis(id: number) {
+  try {
+    const { analysis } = await api.chessAnalysis(id);
+    setAnalysis(id, analysis);
+  } catch {
+    // Không tải được (mất mạng…): hiện nút để bấm phân tích / thử lại
+    if (!get().analyses[id]) setAnalysis(id, { status: "none", progress: 0, total: 0 });
+  }
+}
+
+export async function requestAnalysis(id: number) {
+  try {
+    const { analysis } = await api.chessAnalyze(id);
+    setAnalysis(id, analysis);
+  } catch (err) {
+    bridge.toast(err instanceof Error ? err.message : "Chưa phân tích được ván này.");
+  }
+}
+
+export function onAnalysisEvent(data: { gameId: number; analysis: ChessAnalysis }) {
+  if (!data || !data.analysis) return;
+  const id = Number(data.gameId);
+  const before = get().analyses[id];
+  setAnalysis(id, data.analysis);
+  if (data.analysis.status === "done" && before && before.status !== "done" && get().openId !== id) {
+    bridge.toast("Đã phân tích xong ván cờ. Chạm để xem.", { title: "♟ Phân tích ván đấu", chessGameId: id });
   }
 }
 

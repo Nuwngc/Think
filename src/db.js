@@ -155,6 +155,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_chess_white ON chess_games(white_id, status);
   CREATE INDEX IF NOT EXISTS idx_chess_black ON chess_games(black_id, status);
   CREATE INDEX IF NOT EXISTS idx_chess_challenge ON chess_games(opponent_id, status);
+  CREATE INDEX IF NOT EXISTS idx_chess_ended ON chess_games(ended_at);
+
+  CREATE TABLE IF NOT EXISTS chess_analysis (
+    game_id INTEGER PRIMARY KEY REFERENCES chess_games(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    progress INTEGER NOT NULL DEFAULT 0,
+    total INTEGER NOT NULL DEFAULT 0,
+    data TEXT,
+    error TEXT,
+    requested_by INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
 `);
 
 // Nâng cấp database cũ: thêm cột mới mà không mất dữ liệu
