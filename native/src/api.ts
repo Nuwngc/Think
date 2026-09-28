@@ -1,6 +1,7 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 
+import type { ChessBot, ChessGame, ChessRating } from "./chess/types";
 import { API_URL } from "./config";
 import { getToken } from "./session";
 import type {
@@ -17,11 +18,14 @@ import type {
 export class ApiError extends Error {
   status: number;
   code?: string;
-  constructor(message: string, status: number, code?: string) {
+  /** Dữ liệu máy chủ gửi kèm lỗi (vd trạng thái ván cờ mới nhất) */
+  data?: any;
+  constructor(message: string, status: number, code?: string, data?: any) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.data = data;
   }
 }
 
@@ -40,7 +44,7 @@ export function setAuthHandlers(handlers: { unauthorized: (message: string) => v
 const OFFLINE = "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.";
 
 function handleError(status: number, data: { error?: string; code?: string } | null, auth: boolean) {
-  const err = new ApiError(data?.error || `Có lỗi xảy ra (mã ${status}).`, status, data?.code);
+  const err = new ApiError(data?.error || `Có lỗi xảy ra (mã ${status}).`, status, data?.code, data);
   if (auth && status === 401) onUnauthorized?.(err.message);
   else if (err.code === "must_change_password") onMustChange?.();
   return err;
@@ -208,6 +212,43 @@ export const api = {
     }),
 
   testPush: () => request<{ ok: true; sent: number }>("/api/push/test", { method: "POST", body: {} }),
+
+  /* ---------------- Cờ vua ---------------- */
+
+  chess: () =>
+    request<{
+      rating: ChessRating;
+      bots: ChessBot[];
+      baseMinutes: number[];
+      challenges: ChessGame[];
+      active: ChessGame[];
+      recent: ChessGame[];
+    }>("/api/chess"),
+
+  chessLeaderboard: () => request<{ players: ChessRating[]; me: ChessRating }>("/api/chess/leaderboard"),
+
+  chessGame: (id: number) => request<{ game: ChessGame }>(`/api/chess/games/${id}`),
+
+  chessChallenge: (body: { opponentId: number; base: number; inc: number; color: string; rated: boolean }) =>
+    request<{ game: ChessGame }>("/api/chess/challenges", { method: "POST", body }),
+
+  chessAnswer: (id: number, action: "accept" | "decline" | "cancel") =>
+    request<{ game: ChessGame }>(`/api/chess/challenges/${id}/${action}`, { method: "POST", body: {} }),
+
+  chessBot: (body: { bot: string; base: number; inc: number; color: string }) =>
+    request<{ game: ChessGame }>("/api/chess/bot", { method: "POST", body }),
+
+  chessMove: (id: number, move: string, ply: number) =>
+    request<{ game: ChessGame; san: string }>(`/api/chess/games/${id}/move`, { method: "POST", body: { move, ply } }),
+
+  chessResign: (id: number) => request<{ game: ChessGame }>(`/api/chess/games/${id}/resign`, { method: "POST", body: {} }),
+
+  chessAbort: (id: number) => request<{ game: ChessGame }>(`/api/chess/games/${id}/abort`, { method: "POST", body: {} }),
+
+  chessDraw: (id: number, action: "offer" | "accept" | "decline") =>
+    request<{ game: ChessGame }>(`/api/chess/games/${id}/draw`, { method: "POST", body: { action } }),
+
+  chessRematch: (id: number) => request<{ game: ChessGame }>(`/api/chess/games/${id}/rematch`, { method: "POST", body: {} }),
 
   /* ---------------- Quản trị ---------------- */
 

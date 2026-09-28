@@ -11,6 +11,7 @@ import { PUSH_CONFIGURED } from "./config";
 
 export const CHANNEL_MESSAGES = "messages";
 export const CHANNEL_OTHER = "other";
+export const CHANNEL_CHESS = "chess";
 export const CATEGORY_MESSAGE = "message";
 export const NOTIFICATION_TASK = "think-notification-action";
 
@@ -50,6 +51,14 @@ export function setupNotifications() {
           lightColor: "#0E7C66",
           lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
           showBadge: true,
+        });
+        await Notifications.setNotificationChannelAsync(CHANNEL_CHESS, {
+          name: "Cờ vua",
+          description: "Lời thách đấu, đến lượt đi, kết quả ván cờ",
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 120, 80, 120],
+          lightColor: "#F2B01E",
+          showBadge: false,
         });
         await Notifications.setNotificationChannelAsync(CHANNEL_OTHER, {
           name: "Cảm xúc và thông báo khác",
@@ -173,7 +182,11 @@ type RawResponse = {
 
 export type NotificationAction = {
   action: "open" | "reply" | "read" | "other";
+  /** Loại thông báo: message, reaction, chess… */
+  type: string;
   conversationId: number | null;
+  /** Ván cờ (thông báo cờ vua) */
+  gameId: number | null;
   text: string;
   identifier: string | null;
   title: string;
@@ -195,11 +208,14 @@ export function parseResponse(resp: RawResponse | null | undefined): Notificatio
     }
   }
   const convId = Number(data?.conversationId);
+  const gameId = Number(data?.gameId);
   const id = resp.actionIdentifier || "";
   const action = id === "reply" ? "reply" : id === "read" ? "read" : id === Notifications.DEFAULT_ACTION_IDENTIFIER ? "open" : "other";
   return {
     action,
+    type: typeof data?.type === "string" ? data.type : "message",
     conversationId: Number.isInteger(convId) && convId > 0 ? convId : null,
+    gameId: Number.isInteger(gameId) && gameId > 0 ? gameId : null,
     text: String(resp.userText || "").trim(),
     identifier: request?.identifier || null,
     title: String(content.title || "Think"),

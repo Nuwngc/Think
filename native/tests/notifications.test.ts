@@ -28,6 +28,14 @@ describe("phản hồi thông báo", () => {
     expect(a?.key).toBe("conv-3|reply|9|  Ok nha  ");
   });
 
+  it("đọc thông báo cờ vua (không có cuộc trò chuyện, có ván cờ)", () => {
+    const a = parseResponse({
+      actionIdentifier: "expo.modules.notifications.actions.DEFAULT",
+      notification: { date: 4, request: { identifier: "chess-g-7", content: { dataString: '{"type":"chess","gameId":7}' } } },
+    });
+    expect(a).toMatchObject({ action: "open", type: "chess", gameId: 7, conversationId: null });
+  });
+
   it("bỏ qua dữ liệu hỏng", () => {
     expect(parseResponse(null)).toBeNull();
     expect(parseResponse({ actionIdentifier: "read", notification: { request: { content: { dataString: "{hỏng" } } } })?.conversationId).toBeNull();

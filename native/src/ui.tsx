@@ -4,7 +4,6 @@ import { createContext, memo, useContext, useEffect, useRef, useState, type Comp
 import {
   ActivityIndicator,
   Alert,
-  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -13,12 +12,12 @@ import {
   Text,
   TextInput,
   View,
-  type LayoutChangeEvent,
   type StyleProp,
   type TextInputProps,
   type TextStyle,
   type ViewStyle,
 } from "react-native";
+import { KeyboardAvoidingView, KeyboardEvents } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { fileUrl } from "./api";
@@ -237,61 +236,33 @@ const KeyboardOpen = createContext(false);
 /** Bàn phím đang mở (trong vùng KeyboardAware): lúc này không cần chừa chỗ cho thanh điều hướng nữa */
 export const useKeyboardOpen = () => useContext(KeyboardOpen);
 
-/**
- * Chừa chỗ cho bàn phím. Tự nhận biết máy đã tự thu nhỏ màn hình hay chưa
- * (khác nhau giữa các đời Android) để không bị hở hoặc bị che.
- */
-export function KeyboardAware({ children, style, bottomInset = true }: { children: ReactNode; style?: StyleProp<ViewStyle>; bottomInset?: boolean }) {
-  const insets = useSafeAreaInsets();
-  const ref = useRef<View>(null);
-  const frame = useRef({ y: 0, height: 0 });
-  const [kbTop, setKbTop] = useState<number | null>(null);
-  const [pad, setPad] = useState(0);
-
-  const recompute = (top: number | null) => {
-    if (top == null) {
-      setPad(0);
-      return;
-    }
-    const bottom = frame.current.y + frame.current.height;
-    setPad(Math.max(0, Math.round(bottom - top)));
-  };
-
+/** Theo dõi bàn phím đang mở hay đóng (báo trước lúc bàn phím bắt đầu trượt lên / xuống) */
+export function useKeyboardVisible() {
+  const [open, setOpen] = useState(false);
   useEffect(() => {
     if (Platform.OS === "web") return;
-    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const a = Keyboard.addListener(showEvt, (e) => {
-      const top = e.endCoordinates.screenY;
-      setKbTop(top);
-      ref.current?.measureInWindow((_x, y, _w, h) => {
-        frame.current = { y, height: h };
-        recompute(top);
-      });
-    });
-    const b = Keyboard.addListener(hideEvt, () => {
-      setKbTop(null);
-      setPad(0);
-    });
+    const a = KeyboardEvents.addListener("keyboardWillShow", () => setOpen(true));
+    const b = KeyboardEvents.addListener("keyboardWillHide", () => setOpen(false));
     return () => {
       a.remove();
       b.remove();
     };
   }, []);
+  return open;
+}
 
-  const onLayout = (_e: LayoutChangeEvent) => {
-    ref.current?.measureInWindow((_x, y, _w, h) => {
-      frame.current = { y, height: h };
-      recompute(kbTop);
-    });
-  };
-
-  const keyboardOpen = kbTop != null;
+/**
+ * Chừa chỗ cho bàn phím, dùng react-native-keyboard-controller: đo bàn phím bằng WindowInsets của
+ * Android nên đúng ở mọi đời máy (kể cả máy tràn viền, có tai thỏ), không phụ thuộc toạ độ màn hình.
+ */
+export function KeyboardAware({ children, style, bottomInset = true }: { children: ReactNode; style?: StyleProp<ViewStyle>; bottomInset?: boolean }) {
+  const insets = useSafeAreaInsets();
+  const open = useKeyboardVisible();
   return (
-    <KeyboardOpen.Provider value={keyboardOpen}>
-      <View ref={ref} onLayout={onLayout} style={[{ flex: 1, paddingBottom: keyboardOpen ? pad : bottomInset ? insets.bottom : 0 }, style]}>
-        {children}
-      </View>
+    <KeyboardOpen.Provider value={open}>
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        <View style={[{ flex: 1, paddingBottom: !open && bottomInset ? insets.bottom : 0 }, style]}>{children}</View>
+      </KeyboardAvoidingView>
     </KeyboardOpen.Provider>
   );
 }

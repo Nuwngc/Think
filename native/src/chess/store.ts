@@ -1,0 +1,307 @@
+import { Chess } from "chess.js";
+import { create } from "zustand";
+
+import { api, ApiError } from "../api";
+import { myColor, tcLabel } from "./format";
+import type { ChessBot, ChessGame, ChessRating } from "./types";
+
+// Dữ liệu cờ vua trong app. Kết nối realtime và thông báo nhỏ nằm ở src/store.ts, gắn vào qua bindChess().
+
+type State = {
+  loaded: boolean;
+  loading: boolean;
+  error: string | null;
+  rating: ChessRating | null;
+  bots: ChessBot[];
+  games: Record<number, ChessGame>;
+  /** Giờ trên máy lúc nhận trạng thái ván (để chạy đồng hồ) */
+  receivedAt: Record<number, number>;
+  leaderboard: ChessRating[] | null;
+  /** Ván đang mở toàn màn hình */
+  openId: number | null;
+  /** Đang gửi nước đi của ván nào */
+  sending: Record<number, boolean>;
+};
+
+export const useChess = create<State>(() => ({
+  loaded: false,
+  loading: false,
+  error: null,
+  rating: null,
+  bots: [],
+  games: {},
+  receivedAt: {},
+  leaderboard: null,
+  openId: null,
+  sending: {},
+}));
+
+const get = useChess.getState;
+const set = useChess.setState;
+
+type Bridge = {
+  meId: () => number;
+  nameOf: (id: number | null | undefined) => string;
+  toast: (text: string, extra?: { title?: string; senderId?: number; chessGameId?: number }) => void;
+  onTab: () => boolean;
+  showChess: () => void;
+};
+
+let bridge: Bridge = {
+  meId: () => 0,
+  nameOf: () => "Người dùng",
+  toast: () => undefined,
+  onTab: () => false,
+  showChess: () => undefined,
+};
+
+export function bindChess(b: Bridge) {
+  bridge = b;
+}
+
+export function resetChess() {
+  loadAgain = false;
+  set({ loaded: false, loading: false, error: null, rating: null, bots: [], games: {}, receivedAt: {}, leaderboard: null, openId: null, sending: {} });
+}
+
+/** Thứ tự trạng thái của một ván: lời thách đấu → đang chơi → đã xong. Không bao giờ lùi lại. */
+const stageOf = (g: ChessGame) => (g.status === "challenge" ? 0 : g.status === "active" ? 1 : 2);
+
+function upsert(list: ChessGame[]) {
+  const now = Date.now();
+  set((s) => {
+    const games = { ...s.games };
+    const receivedAt = { ...s.receivedAt };
+    for (const g of list) {
+      const prev = games[g.id];
+      if (prev) {
+        // Bản cũ đến trễ (phản hồi của lần tải đang dở, sự kiện đến không theo thứ tự): bỏ qua
+        if (stageOf(g) < stageOf(prev)) continue;
+        if (g.status === "active" && prev.status === "active" && prev.moves.length > g.moves.length) continue;
+      }
+      games[g.id] = g;
+      receivedAt[g.id] = now;
+    }
+    return { games, receivedAt };
+  });
+}
+
+let loadAgain = false;
+
+/** Tải tổng quan: điểm, lời thách đấu, ván đang chơi, ván gần đây */
+export async function loadChess() {
+  if (get().loading) {
+    loadAgain = true; // có thay đổi trong lúc đang tải: tải thêm một lần nữa cho chắc
+    return;
+  }
+  set({ loading: true });
+  try {
+    const data = await api.chess();
+    const list = [...data.challenges, ...data.active, ...data.recent];
+    const fresh = new Set(list.map((g) => g.id));
+    set((s) => {
+      // Bỏ các ván không còn trong danh sách (trừ ván đang mở)
+      const games: Record<number, ChessGame> = {};
+      for (const g of Object.values(s.games)) if (fresh.has(g.id) || g.id === s.openId) games[g.id] = g;
+      return { games, rating: data.rating, bots: data.bots, loaded: true, error: null };
+    });
+    upsert(list);
+  } catch (err) {
+    set({ error: err instanceof Error ? err.message : "Không tải được cờ vua." });
+  } finally {
+    set({ loading: false });
+    if (loadAgain) {
+      loadAgain = false;
+      loadChess();
+    }
+  }
+}
+
+export async function loadLeaderboard() {
+  try {
+    const data = await api.chessLeaderboard();
+    set({ leaderboard: data.players, rating: data.me });
+  } catch (err) {
+    bridge.toast(err instanceof Error ? err.message : "Không tải được bảng xếp hạng.");
+  }
+}
+
+export async function openGame(id: number) {
+  set({ openId: id });
+  if (!get().games[id]) {
+    try {
+      const { game } = await api.chessGame(id);
+      upsert([game]);
+    } catch (err) {
+      set({ openId: null });
+      bridge.toast(err instanceof Error ? err.message : "Không mở được ván cờ.");
+    }
+  }
+}
+
+async function loadGameFresh(id: number) {
+  try {
+    const { game } = await api.chessGame(id);
+    upsert([game]);
+  } catch {
+    /* thôi */
+  }
+}
+
+export function closeGame() {
+  set({ openId: null });
+}
+
+/* ---------------- Thách đấu, chơi với máy ---------------- */
+
+export async function sendChallenge(body: { opponentId: number; base: number; inc: number; color: string; rated: boolean }) {
+  const { game } = await api.chessChallenge(body);
+  upsert([game]);
+  return game;
+}
+
+export async function answerChallenge(id: number, action: "accept" | "decline" | "cancel") {
+  try {
+    const { game } = await api.chessAnswer(id, action);
+    upsert([game]);
+    if (action === "accept" && game.status === "active") openGame(game.id);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 409) loadChess();
+    bridge.toast(err instanceof Error ? err.message : "Chưa làm được.");
+  }
+}
+
+export async function startBotGame(body: { bot: string; base: number; inc: number; color: string }) {
+  const { game } = await api.chessBot(body);
+  upsert([game]);
+  openGame(game.id);
+  return game;
+}
+
+/* ---------------- Trong ván ---------------- */
+
+/** Đi một nước: hiện ngay trên bàn cờ, máy chủ từ chối thì trả lại như cũ */
+export async function playMove(id: number, uci: string) {
+  const g = get().games[id];
+  if (!g || g.status !== "active" || get().sending[id]) return false;
+  const chess = new Chess(g.fen);
+  let fen: string;
+  try {
+    chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] || undefined });
+    fen = chess.fen();
+  } catch {
+    return false;
+  }
+  const ply = g.moves.length;
+  const now = Date.now();
+  // Đồng hồ của mình dừng lại (cộng thêm giây nếu có) như máy chủ sẽ làm, để không bị nhảy số
+  let clocks = g.clocks;
+  if (clocks && ply >= 2) {
+    const used = now - (get().receivedAt[id] || now);
+    clocks = { ...clocks, [g.turn]: Math.max(0, clocks[g.turn] - used) + g.inc };
+  }
+  const optimistic: ChessGame = {
+    ...g,
+    moves: [...g.moves, uci],
+    fen,
+    clocks,
+    turn: g.turn === "w" ? "b" : "w",
+    drawOffer: g.drawOffer && g.drawOffer !== g.turn ? null : g.drawOffer,
+  };
+  set((s) => ({
+    games: { ...s.games, [id]: optimistic },
+    receivedAt: { ...s.receivedAt, [id]: now },
+    sending: { ...s.sending, [id]: true },
+  }));
+  try {
+    const res = await api.chessMove(id, uci, ply);
+    upsert([res.game]);
+    return true;
+  } catch (err) {
+    const fresh = err instanceof ApiError && err.data?.game ? (err.data.game as ChessGame) : null;
+    // Trả bàn cờ về như trước rồi mới lấy bản của máy chủ (bản đó có thể ít nước hơn bản tạm)
+    set((s) => ({ games: { ...s.games, [id]: g } }));
+    if (fresh) upsert([fresh]);
+    else loadGameFresh(id);
+    bridge.toast(err instanceof Error ? err.message : "Chưa đi được nước này.");
+    return false;
+  } finally {
+    set((s) => ({ sending: { ...s.sending, [id]: false } }));
+  }
+}
+
+async function act(fn: () => Promise<{ game: ChessGame }>) {
+  try {
+    const { game } = await fn();
+    upsert([game]);
+    return game;
+  } catch (err) {
+    if (err instanceof ApiError && err.data?.game) upsert([err.data.game]);
+    bridge.toast(err instanceof Error ? err.message : "Chưa làm được.");
+    return null;
+  }
+}
+
+export const resign = (id: number) => act(() => api.chessResign(id));
+export const abort = (id: number) => act(() => api.chessAbort(id));
+export const draw = (id: number, action: "offer" | "accept" | "decline") => act(() => api.chessDraw(id, action));
+
+export async function rematch(id: number) {
+  const game = await act(() => api.chessRematch(id));
+  if (!game) return;
+  if (game.status === "active") openGame(game.id);
+  else {
+    closeGame();
+    bridge.toast(`Đã gửi lời mời đấu lại cho ${bridge.nameOf(game.opponentId)}.`);
+  }
+}
+
+/* ---------------- Sự kiện realtime ---------------- */
+
+export function onChessEvent(event: "chess:game" | "chess:challenge", data: { game: ChessGame }) {
+  const g = data?.game;
+  if (!g) return;
+  const me = bridge.meId();
+  const prev = get().games[g.id];
+  upsert([g]);
+  const open = get().openId === g.id;
+
+  if (event === "chess:challenge") {
+    if (g.status === "challenge" && g.opponentId === me && !prev) {
+      bridge.toast(`${bridge.nameOf(g.challengerId)} thách bạn một ván ${tcLabel(g)}${g.rated ? " (tính điểm)" : ""}. Chạm để xem.`, {
+        title: "♟ Thách đấu cờ vua",
+        senderId: g.challengerId ?? undefined,
+        chessGameId: g.id,
+      });
+    } else if (g.status === "declined" && g.challengerId === me && prev?.status === "challenge") {
+      bridge.toast(`${bridge.nameOf(g.opponentId)} đã từ chối lời thách đấu.`);
+    }
+    return;
+  }
+
+  // Lời thách đấu mình gửi vừa được nhận: vào ván luôn nếu đang ở tab Cờ vua
+  if (g.status === "active" && prev?.status === "challenge" && g.challengerId === me) {
+    if (bridge.onTab() && get().openId == null) openGame(g.id);
+    else bridge.toast(`${bridge.nameOf(g.opponentId)} đã nhận lời. Chạm để vào chơi!`, { title: "♟ Vào ván thôi", chessGameId: g.id });
+  }
+  // Ván vừa kết thúc: cập nhật điểm
+  if ((g.status === "finished" || g.status === "aborted") && prev?.status === "active") {
+    loadChess();
+    if (get().leaderboard) loadLeaderboard();
+    if (!open && myColor(g, me)) bridge.toast("Một ván cờ của bạn vừa kết thúc. Chạm để xem.", { chessGameId: g.id });
+  }
+  // Đối thủ vừa đi mà mình đang ở chỗ khác
+  if (g.status === "active" && prev && prev.moves.length < g.moves.length && !open && myColor(g, me) === g.turn && !g.bot) {
+    bridge.toast(`${bridge.nameOf(myColor(g, me) === "w" ? g.blackId : g.whiteId)} vừa đi. Đến lượt bạn!`, { title: "♟ Cờ vua", chessGameId: g.id });
+  }
+}
+
+/** Số việc cần làm ở tab Cờ vua: lời thách đấu gửi tới mình + ván đang tới lượt mình */
+export function chessBadge(s: State, meId: number) {
+  let n = 0;
+  for (const g of Object.values(s.games)) {
+    if (g.status === "challenge" && g.opponentId === meId) n++;
+    else if (g.status === "active" && myColor(g, meId) === g.turn) n++;
+  }
+  return n;
+}

@@ -6,6 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { useEffect, useState } from "react";
 import { AppState, Platform, View } from "react-native";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { prepareImage, recoverPick } from "./src/images";
@@ -15,21 +16,27 @@ import { ForcePasswordScreen } from "./src/screens/ForcePasswordScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { MainScreen } from "./src/screens/MainScreen";
 import { ToastHost } from "./src/screens/ToastHost";
-import { boot, openConversation, sendImages, showToast, startLifecycle, useStore } from "./src/store";
+import { boot, openChess, openConversation, sendImages, showToast, startLifecycle, useStore } from "./src/store";
 import { useColors } from "./src/theme";
 import { confirm } from "./src/ui";
 import { checkForUpdate } from "./src/update";
 
 const seen = new Set<string>();
-let pendingOpen: number | null = null;
+let pendingOpen: (() => void) | null = null;
 
 function handleResponse(resp: unknown) {
   const a: NotificationAction | null = parseResponse(resp as any);
   if (!a || seen.has(a.key)) return;
   seen.add(a.key);
-  if (a.action === "open" && a.conversationId) {
-    if (useStore.getState().phase === "ready") openConversation(a.conversationId);
-    else pendingOpen = a.conversationId;
+  if (a.action === "open" && (a.conversationId || a.type === "chess")) {
+    const go =
+      a.type === "chess"
+        ? () => openChess(a.gameId)
+        : () => {
+            if (a.conversationId) openConversation(a.conversationId);
+          };
+    if (useStore.getState().phase === "ready") go();
+    else pendingOpen = go;
   } else if ((a.action === "reply" || a.action === "read") && AppState.currentState === "active") {
     // App đang mở: tự làm luôn (khi app chạy nền thì tác vụ nền trong src/background.ts làm)
     runQuickAction(a).then((r) => {
@@ -85,9 +92,9 @@ export default function App() {
   useEffect(() => {
     if (phase !== "ready") return;
     if (pendingOpen != null) {
-      const id = pendingOpen;
+      const go = pendingOpen;
       pendingOpen = null;
-      openConversation(id);
+      go();
     }
     if (!offline && !pickChecked) {
       setPickChecked(true);
@@ -113,19 +120,21 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style={c.scheme === "dark" ? "light" : "dark"} />
-      <View style={{ flex: 1, backgroundColor: c.bg }}>
-        {phase === "login" ? (
-          <LoginScreen />
-        ) : phase === "force" ? (
-          <ForcePasswordScreen />
-        ) : phase === "ready" ? (
-          <MainScreen />
-        ) : (
-          <BootScreen />
-        )}
-        <ToastHost />
-      </View>
+      <KeyboardProvider>
+        <StatusBar style={c.scheme === "dark" ? "light" : "dark"} />
+        <View style={{ flex: 1, backgroundColor: c.bg }}>
+          {phase === "login" ? (
+            <LoginScreen />
+          ) : phase === "force" ? (
+            <ForcePasswordScreen />
+          ) : phase === "ready" ? (
+            <MainScreen />
+          ) : (
+            <BootScreen />
+          )}
+          <ToastHost />
+        </View>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

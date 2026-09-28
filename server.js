@@ -24,6 +24,7 @@ const storage = require('./src/storage');
 const auth = require('./src/auth');
 const push = require('./src/push');
 const fcm = require('./src/fcm');
+const { setupChess } = require('./src/chess');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -507,6 +508,13 @@ app.use(
     setHeaders: (res) => res.set('Cache-Control', 'private, max-age=31536000, immutable'),
   })
 );
+
+// Luật cờ vua cho bản web (chess.js, giấy phép BSD-2-Clause): trang cờ vua tự tải khi mở một ván
+const CHESS_RULES = path.join(path.dirname(require.resolve('chess.js')), '..', 'esm', 'chess.js');
+app.get('/vendor/chess.js', (req, res) => {
+  res.type('text/javascript').set('Cache-Control', 'no-cache');
+  res.sendFile(CHESS_RULES);
+});
 
 app.use(
   express.static(path.join(__dirname, 'public'), {
@@ -1155,6 +1163,18 @@ app.get('/api/app/notification/:id', requireAuth, requireReady, (req, res) => {
       };
     }),
   });
+});
+
+/* ---------------- API: cờ vua ---------------- */
+
+setupChess({
+  app,
+  io,
+  requireAuth,
+  requireReady,
+  isActive,
+  notify: (uid, payload) => push.sendToUser(uid, { icon: '/icons/icon-192.png', ...payload }),
+  nameOf: (uid) => get('SELECT display_name FROM users WHERE id = ?', uid)?.display_name || 'Ai đó',
 });
 
 /* ---------------- API: admin ---------------- */

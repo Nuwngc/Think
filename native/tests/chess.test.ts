@@ -1,0 +1,183 @@
+/* eslint-disable import/first -- vi.mock phải đứng trước import */
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const api = vi.hoisted(() => ({
+  chess: vi.fn(),
+  chessMove: vi.fn(),
+  chessGame: vi.fn(),
+}));
+
+vi.mock("../src/api", () => {
+  class ApiError extends Error {
+    status: number;
+    data: any;
+    constructor(message: string, status: number, _code?: string, data?: any) {
+      super(message);
+      this.status = status;
+      this.data = data;
+    }
+  }
+  return { api, ApiError };
+});
+
+import { ApiError } from "../src/api";
+import { clockText, material, outcomeFor, replay, resultTitle, tcLabel } from "../src/chess/format";
+import { bindChess, chessBadge, onChessEvent, playMove, resetChess, useChess } from "../src/chess/store";
+import type { ChessGame } from "../src/chess/types";
+
+const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+function game(over: Partial<ChessGame> = {}): ChessGame {
+  return {
+    id: 1,
+    status: "active",
+    rated: true,
+    whiteId: 1,
+    blackId: 2,
+    bot: null,
+    botColor: null,
+    challengerId: 1,
+    opponentId: 2,
+    colorPref: "white",
+    base: 300000,
+    inc: 2000,
+    moves: [],
+    fen: START,
+    turn: "w",
+    clocks: { w: 300000, b: 300000 },
+    serverNow: Date.now(),
+    firstMoveDeadline: null,
+    drawOffer: null,
+    result: null,
+    reason: null,
+    ratings: { w: 1200, b: 1200 },
+    deltas: { w: null, b: null },
+    live: { w: 1200, b: 1200 },
+    createdAt: 1,
+    startedAt: 1,
+    endedAt: null,
+    expiresAt: null,
+    ...over,
+  };
+}
+
+describe("chữ hiển thị cờ vua", () => {
+  it("ghi thời gian ván", () => {
+    expect(tcLabel({ base: 300000, inc: 3000 })).toBe("5+3");
+    expect(tcLabel({ base: 0, inc: 0 })).toBe("Không giới hạn");
+  });
+
+  it("đồng hồ: phút:giây, dưới 10 giây có phần mười", () => {
+    expect(clockText(245000)).toBe("4:05");
+    expect(clockText(3600000 + 65000)).toBe("1:01:05");
+    expect(clockText(9340)).toBe("0:09.3");
+    expect(clockText(-5)).toBe("0:00.0");
+  });
+
+  it("kết quả nhìn từ phía mình", () => {
+    const g = game({ status: "finished", result: "0-1", reason: "checkmate" });
+    expect(outcomeFor(g, "b")).toBe("win");
+    expect(outcomeFor(g, "w")).toBe("loss");
+    expect(resultTitle(g, null)).toBe("Đen thắng");
+    expect(outcomeFor(game({ status: "aborted" }), "w")).toBe("aborted");
+  });
+
+  it("dựng lại ký hiệu nước đi", () => {
+    const r = replay(["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6", "e1g1"]);
+    expect(r.san).toEqual(["e4", "e5", "Nf3", "Nc6", "Bc4", "Nf6", "O-O"]);
+    expect(r.fens).toHaveLength(8);
+  });
+
+  it("đếm quân đã ăn và điểm hơn", () => {
+    // Trắng đã ăn một mã đen
+    const m = material("r1bqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    expect(m.captured.w).toEqual(["bN"]);
+    expect(m.lead).toEqual({ w: 3, b: 0 });
+  });
+
+  it("đếm việc cần làm ở tab Cờ vua", () => {
+    const s = {
+      games: {
+        1: game({ id: 1, turn: "w" }), // tới lượt mình (trắng)
+        2: game({ id: 2, turn: "b" }),
+        3: game({ id: 3, status: "challenge", opponentId: 1, challengerId: 2, whiteId: null, blackId: null }),
+        4: game({ id: 4, status: "challenge", opponentId: 2, challengerId: 1, whiteId: null, blackId: null }),
+      },
+    } as any;
+    expect(chessBadge(s, 1)).toBe(2);
+  });
+});
+
+describe("đi quân", () => {
+  const toasts: string[] = [];
+  beforeEach(() => {
+    resetChess();
+    toasts.length = 0;
+    api.chessMove.mockReset();
+    api.chessGame.mockReset();
+    bindChess({
+      meId: () => 1,
+      nameOf: (id) => (id === 2 ? "Minh" : "Bạn"),
+      toast: (t) => toasts.push(t),
+      onTab: () => false,
+      showChess: () => undefined,
+    });
+  });
+
+  it("hiện nước đi ngay, máy chủ nhận thì giữ nguyên", async () => {
+    onChessEvent("chess:game", { game: game() });
+    let resolve!: (v: any) => void;
+    api.chessMove.mockReturnValue(new Promise((r) => (resolve = r)));
+    const p = playMove(1, "e2e4");
+    const shown = useChess.getState().games[1];
+    expect(shown.moves).toEqual(["e2e4"]);
+    expect(shown.turn).toBe("b");
+    expect(useChess.getState().sending[1]).toBe(true);
+    resolve({ game: { ...shown, serverNow: Date.now() } });
+    expect(await p).toBe(true);
+    expect(useChess.getState().sending[1]).toBe(false);
+    expect(api.chessMove).toHaveBeenCalledWith(1, "e2e4", 0);
+  });
+
+  it("máy chủ từ chối thì trả bàn cờ về như cũ", async () => {
+    onChessEvent("chess:game", { game: game() });
+    api.chessMove.mockRejectedValue(new ApiError("Nước đi không hợp lệ.", 400, undefined, { game: game() }));
+    expect(await playMove(1, "e2e4")).toBe(false);
+    expect(useChess.getState().games[1].moves).toEqual([]);
+    expect(toasts).toContain("Nước đi không hợp lệ.");
+  });
+
+  it("không cho đi nước sai luật hay khi chưa tới lượt", async () => {
+    onChessEvent("chess:game", { game: game() });
+    expect(await playMove(1, "e2e5")).toBe(false);
+    expect(api.chessMove).not.toHaveBeenCalled();
+  });
+
+  it("báo khi đối thủ đi mà mình đang ở chỗ khác", () => {
+    onChessEvent("chess:game", { game: game({ moves: ["e2e4"], turn: "b", whiteId: 2, blackId: 1 }) });
+    onChessEvent("chess:game", { game: game({ moves: ["e2e4", "e7e5"], turn: "w", whiteId: 2, blackId: 1 }) });
+    expect(toasts).toHaveLength(0); // lượt của Minh (trắng), không phải của mình
+    onChessEvent("chess:game", { game: game({ moves: ["e2e4", "e7e5", "g1f3"], turn: "b", whiteId: 2, blackId: 1 }) });
+    expect(toasts[0]).toContain("Minh vừa đi");
+  });
+
+  it("bỏ qua bản cũ đến trễ", () => {
+    onChessEvent("chess:game", { game: game({ moves: ["e2e4", "e7e5"], turn: "w" }) });
+    onChessEvent("chess:game", { game: game({ moves: ["e2e4"], turn: "b" }) });
+    expect(useChess.getState().games[1].moves).toHaveLength(2);
+  });
+
+  it("ván đã xong không bị bản cũ đến trễ đưa về đang chơi", () => {
+    onChessEvent("chess:game", { game: game({ moves: ["e2e4", "e7e5"], turn: "w" }) });
+    onChessEvent("chess:game", { game: game({ moves: ["e2e4", "e7e5"], status: "finished", result: "1-0", reason: "resign" }) });
+    onChessEvent("chess:game", { game: game({ moves: ["e2e4", "e7e5", "g1f3"], turn: "b" }) });
+    expect(useChess.getState().games[1].status).toBe("finished");
+  });
+
+  it("báo lời thách đấu mới", () => {
+    onChessEvent("chess:challenge", {
+      game: game({ id: 9, status: "challenge", challengerId: 2, opponentId: 1, whiteId: null, blackId: null }),
+    });
+    expect(toasts[0]).toContain("Minh thách bạn một ván 5+2");
+  });
+});

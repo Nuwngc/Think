@@ -108,6 +108,53 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_app_push_user ON app_push_tokens(user_id);
+
+  -- Cờ vua: điểm ELO của từng người (chỉ tính ván xếp hạng giữa người với người)
+  CREATE TABLE IF NOT EXISTS chess_ratings (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL DEFAULT 1200,
+    peak INTEGER NOT NULL DEFAULT 1200,
+    games INTEGER NOT NULL DEFAULT 0,
+    wins INTEGER NOT NULL DEFAULT 0,
+    draws INTEGER NOT NULL DEFAULT 0,
+    losses INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER
+  );
+
+  -- Cờ vua: lời thách đấu và ván cờ (status: challenge, active, finished, aborted, declined, cancelled, expired)
+  CREATE TABLE IF NOT EXISTS chess_games (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    status TEXT NOT NULL,
+    white_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    black_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    bot TEXT,
+    challenger_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    opponent_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    color_pref TEXT NOT NULL DEFAULT 'random',
+    rated INTEGER NOT NULL DEFAULT 0,
+    base_ms INTEGER NOT NULL DEFAULT 0,
+    inc_ms INTEGER NOT NULL DEFAULT 0,
+    moves TEXT NOT NULL DEFAULT '',
+    fen TEXT NOT NULL,
+    white_ms INTEGER,
+    black_ms INTEGER,
+    turn_started_at INTEGER,
+    draw_offer TEXT,
+    result TEXT,
+    reason TEXT,
+    white_rating INTEGER,
+    black_rating INTEGER,
+    white_delta INTEGER,
+    black_delta INTEGER,
+    created_at INTEGER NOT NULL,
+    started_at INTEGER,
+    ended_at INTEGER,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_chess_status ON chess_games(status);
+  CREATE INDEX IF NOT EXISTS idx_chess_white ON chess_games(white_id, status);
+  CREATE INDEX IF NOT EXISTS idx_chess_black ON chess_games(black_id, status);
+  CREATE INDEX IF NOT EXISTS idx_chess_challenge ON chess_games(opponent_id, status);
 `);
 
 // Nâng cấp database cũ: thêm cột mới mà không mất dữ liệu

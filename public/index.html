@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="/app.css">
   <script src="/socket.io/socket.io.min.js" defer></script>
   <script src="/localdb.js" defer></script>
+  <script src="/chess-ui.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -37,6 +38,19 @@
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 10.5 5 5 5-5"/><path d="M5 20h14"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 4.1 2.6 17.6A2 2 0 0 0 4.3 20.6h15.4a2 2 0 0 0 1.7-3L13.7 4.1a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4.5"/><path d="M12 17.2h.01"/></symbol>
     <symbol id="i-expand" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-7 7"/><path d="M10 20H4v-6"/><path d="M4 20l7-7"/></symbol>
+    <symbol id="i-knight" viewBox="4 6 38 36"><path fill="currentColor" stroke-width="1.5" d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path fill="currentColor" stroke-width="1.5" d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.04-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-1-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-2 2.5-3c1 0 1 3 1 3"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0Z"/><path d="M16 5h3v2a3 3 0 0 1-3 3"/><path d="M8 5H5v2a3 3 0 0 0 3 3"/><path d="M12 13v4"/><path d="M8.5 20h7l-1-3h-5Z"/></symbol>
+    <symbol id="i-leaderboard" viewBox="0 0 24 24"><rect x="3" y="12" width="5" height="8" rx="1"/><rect x="9.5" y="5" width="5" height="15" rx="1"/><rect x="16" y="9" width="5" height="11" rx="1"/></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4.5" y="8" width="15" height="11" rx="3.5"/><path d="M12 4v4"/><circle cx="12" cy="3.6" r="1"/><path d="M9.2 12.6h.01M14.8 12.6h.01"/><path d="M9.5 16h5"/><path d="M2.5 12.5v2M21.5 12.5v2"/></symbol>
+    <symbol id="i-swords" viewBox="0 0 24 24"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="m13 19 6-6"/><path d="m16 16 4 4"/><path d="m19 21 2-2"/><path d="M9.5 6.5 13 3h3v3l-3.5 3.5"/><path d="m5 14 4 4"/><path d="m7 17-3 3"/><path d="m3 19 2 2"/></symbol>
+    <symbol id="i-flip" viewBox="0 0 24 24"><path d="M7 20V4"/><path d="m3 8 4-4 4 4"/><path d="M17 4v16"/><path d="m21 16-4 4-4-4"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></symbol>
+    <symbol id="i-handshake" viewBox="0 0 24 24"><path d="m11 17 2 2a1.4 1.4 0 0 0 2-2"/><path d="m14 14 2.5 2.5a1.4 1.4 0 0 0 2-2l-3-3"/><path d="m21 11-3.5-3.5-3 1.5-2-1.5L9 10.5a1.4 1.4 0 0 0 2 2l2-1.5"/><path d="M3 11l3.5-3.5 2 .5"/><path d="M6 13l3.5 3.5a1.4 1.4 0 0 0 2-2"/></symbol>
+    <symbol id="i-replay" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></symbol>
+    <symbol id="i-nav-first" viewBox="0 0 24 24"><path d="M6 6v12"/><path d="m17 18-6-6 6-6"/></symbol>
+    <symbol id="i-nav-prev" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-nav-next" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-nav-last" viewBox="0 0 24 24"><path d="M18 6v12"/><path d="m7 18 6-6-6-6"/></symbol>
     <symbol id="i-group" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18.2 14.8c1.8.8 3 2.5 3.3 5.2"/></symbol>
   </svg>
 
@@ -107,6 +121,15 @@
         </div>
         <ul id="conv-list" class="conv-list"></ul>
         <p id="conn-status" class="conn-status" role="status" hidden>Đang kết nối lại… Nếu app vừa ngủ, máy chủ cần khoảng 1 phút để thức dậy.</p>
+      </section>
+
+      <!-- Tab Cờ vua (public/chess-ui.js vẽ nội dung) -->
+      <section id="page-chess" class="tab-page" aria-label="Cờ vua" hidden>
+        <header class="side-head">
+          <h1 class="side-title">Cờ vua</h1>
+          <button class="icon-btn" type="button" data-action="chess-board" aria-label="Bảng xếp hạng"><svg class="ic"><use href="#i-leaderboard"/></svg></button>
+        </header>
+        <div class="page-body chess-home" id="chess-home"></div>
       </section>
 
       <!-- Tab Cá nhân -->
@@ -292,6 +315,10 @@
           <span class="tab-icon"><svg class="ic"><use href="#i-chat"/></svg><span class="tab-badge" id="tab-badge" hidden></span></span>
           <span class="tab-label">Tin nhắn</span>
         </button>
+        <button class="tab" type="button" data-tab="chess" aria-label="Cờ vua">
+          <span class="tab-icon"><svg class="ic ic-knight"><use href="#i-knight"/></svg><span class="tab-badge" id="chess-badge" hidden></span></span>
+          <span class="tab-label">Cờ vua</span>
+        </button>
         <button class="tab" type="button" data-tab="me" aria-label="Cá nhân">
           <span class="tab-icon"><span class="avatar" id="tab-avatar"></span></span>
           <span class="tab-label">Cá nhân</span>
@@ -315,6 +342,7 @@
             <h2 id="chat-name"></h2>
             <p id="chat-status"></p>
           </div>
+          <button class="icon-btn" type="button" id="chess-dm-btn" data-action="chess-challenge" aria-label="Thách một ván cờ" hidden><svg class="ic ic-knight"><use href="#i-knight"/></svg></button>
           <button class="icon-btn" type="button" id="group-info-btn" data-action="group-info" aria-label="Thông tin nhóm" hidden><svg class="ic"><use href="#i-info"/></svg></button>
           <button class="icon-btn bubble-only" type="button" data-action="open-app" aria-label="Mở trong app Think"><svg class="ic"><use href="#i-expand"/></svg></button>
         </header>
@@ -331,6 +359,7 @@
           </form>
         </div>
       </div>
+      <div id="chess-pane" class="chess-pane" hidden></div>
     </section>
   </div>
 

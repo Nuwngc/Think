@@ -97,10 +97,11 @@
      Gọi API
      ========================================================= */
   class ApiError extends Error {
-    constructor(message, status, code) {
+    constructor(message, status, code, data) {
       super(message);
       this.status = status;
       this.code = code;
+      this.data = data; // dữ liệu máy chủ gửi kèm lỗi (vd trạng thái ván cờ mới nhất)
     }
   }
 
@@ -122,7 +123,7 @@
     let data = {};
     try { data = await res.json(); } catch { /* không phải JSON */ }
     if (!res.ok) {
-      const err = new ApiError(data.error || `Có lỗi xảy ra (mã ${res.status}).`, res.status, data.code);
+      const err = new ApiError(data.error || `Có lỗi xảy ra (mã ${res.status}).`, res.status, data.code, data);
       if (res.status === 401 && state.me && url !== '/api/login') sessionEnded('Phiên đăng nhập đã hết. Hãy đăng nhập lại.');
       else if (err.code === 'must_change_password' && state.me) showForce();
       throw err;
@@ -280,6 +281,11 @@
   }
   const toast = (text) => pushToast(h('div', { class: 'toast', role: 'status', text }), 3400);
 
+  // Cờ vua (public/chess-ui.js): tab riêng, ván cờ mở ở cột phải
+  const chess = window.ThinkChess
+    ? window.ThinkChess.create({ api, h, icon, avatarEl, userOf, nameOf, state, toast, pushToast, navigate, goBack, withBusy, shortTime, fold })
+    : null;
+
   function showLogin(message) {
     teardown();
     showScreen('view-login');
@@ -316,6 +322,7 @@
     state.replying.clear();
     state.currentId = null;
     state.everConnected = false;
+    if (chess) chess.reset();
     $('#conv-list').replaceChildren();
     $('#messages').replaceChildren();
     $('#banner').replaceChildren();
@@ -351,7 +358,12 @@
     if (!state.me || $('#view-main').hidden) return;
     let hash = location.hash || '#/';
     if (hash === '#/settings') hash = '#/me'; // đường dẫn cũ
-    const tab = hash === '#/me' ? 'me' : hash === '#/admin' ? 'admin' : 'chats';
+    const chessGame = /^#\/chess\/g\/(\d+)$/.exec(hash);
+    const tab = hash === '#/me' ? 'me' : hash === '#/admin' ? 'admin' : hash === '#/chess' || chessGame ? 'chess' : 'chats';
+    if (tab === 'chess' && !chess) {
+      navigate('#/', { replace: true });
+      return;
+    }
     if (tab === 'admin' && state.me.role !== 'admin') {
       navigate('#/', { replace: true });
       return;
@@ -371,6 +383,7 @@
     if (match) openConversation(Number(match[1]));
     else if (!sheet) closeConversation();
     showTab(tab);
+    if (chess) chess.route(tab === 'chess', chessGame ? Number(chessGame[1]) : null);
     showSheet(sheet);
   }
   window.addEventListener('popstate', route);
@@ -545,6 +558,10 @@
     fillConvAvatar($('#chat-avatar'), c);
     $('#chat-name').textContent = convTitle(c);
     $('#group-info-btn').hidden = c.type !== 'group';
+    // Chat riêng: nút thách đấu cờ vua
+    const chessBtn = $('#chess-dm-btn');
+    chessBtn.hidden = !chess || !isDm || !peer || peer.disabled || IN_BUBBLE;
+    chessBtn.setAttribute('aria-label', `Thách ${peer?.displayName || 'người này'} một ván cờ`);
     $('.chat-title').classList.toggle('is-link', c.type === 'group');
     const status = $('#chat-status');
     if (state.offline) {
@@ -1859,7 +1876,10 @@ ${sections}
     socket.on('connect', () => {
       $('#conn-status').hidden = true;
       reportVisibility();
-      if (state.everConnected) resync();
+      if (state.everConnected) {
+        resync();
+        if (chess) chess.reload();
+      }
       state.everConnected = true;
     });
     socket.on('disconnect', (reason) => { if (reason !== 'io client disconnect') showOffline(); });
@@ -1877,6 +1897,10 @@ ${sections}
     socket.on('presence', onPresence);
     socket.on('user:updated', onUserUpdated);
     socket.on('session:ended', (data) => sessionEnded((data && data.reason) || 'Bạn đã bị đăng xuất.'));
+    if (chess) {
+      socket.on('chess:game', (data) => chess.onEvent('chess:game', data));
+      socket.on('chess:challenge', (data) => chess.onEvent('chess:challenge', data));
+    }
     socket.on('storage:changed', (result) => {
       if (state.tab === 'admin') loadStorage();
       if (result && result.auto) toast(`Máy chủ sắp đầy nên đã tự dọn ${fmtNum(result.images)} ảnh và ${fmtNum(result.messages)} tin nhắn cũ nhất.`);
@@ -3243,6 +3267,12 @@ ${sections}
       case 'download-image': downloadImage($('#lightbox img').src); break;
       case 'new-group': navigate('#/new-group', { replace: true }); break;
       case 'group-info': navigate('#/group'); break;
+      case 'chess-challenge': {
+        const c = state.convs.get(state.currentId);
+        if (chess && c && c.type === 'dm') chess.openChallenge(c.peerId);
+        break;
+      }
+      case 'chess-board': if (chess) chess.openLeaderboard(); break;
       case 'open-app': if (NATIVE && NATIVE.openApp) NATIVE.openApp(location.hash || '#/'); break;
       case 'chat-title':
         if (state.convs.get(state.currentId)?.type === 'group') navigate('#/group');
@@ -3306,6 +3336,7 @@ ${sections}
     connectSocket();
     renderBanner();
     route();
+    if (chess) chess.load(); // để hiện số việc cần làm ở tab Cờ vua
     syncPush();
     if (LocalDB.ready()) {
       cacheMe(state.me);

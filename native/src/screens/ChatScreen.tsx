@@ -38,6 +38,8 @@ import {
 import { useColors, type Colors } from "../theme";
 import type { ChatItem, Conversation, Message } from "../types";
 import { Avatar, Button, confirm, ConvAvatar, Icon, IconButton, KeyboardAware, Sheet, SheetItem, useKeyboardOpen, useStyles } from "../ui";
+import { KnightIcon } from "../chess/Board";
+import { ChallengeSheet } from "../chess/Sheets";
 import { GroupInfoSheet } from "./GroupInfoSheet";
 import { ImageViewer } from "./ImageViewer";
 import { MessageRow } from "./MessageItem";
@@ -114,6 +116,7 @@ export function ChatScreen({ convId }: { convId: number }) {
   const [reactorsFor, setReactorsFor] = useState<ChatItem | null>(null);
   const [failedFor, setFailedFor] = useState<ChatItem | null>(null);
   const [viewer, setViewer] = useState<ChatItem | null>(null);
+  const [chessOpen, setChessOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
 
@@ -283,6 +286,17 @@ export function ChatScreen({ convId }: { convId: number }) {
             </Text>
           </View>
         </Pressable>
+        {conv.type === "dm" && peer && !peer.disabled ? (
+          <Pressable
+            onPress={() => setChessOpen(true)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Thách ${peer.displayName} một ván cờ`}
+            style={({ pressed }) => [s.chessBtn, { opacity: pressed ? 0.55 : 1 }]}
+          >
+            <KnightIcon size={22} color={c.text2} hole={c.surface} />
+          </Pressable>
+        ) : null}
         <IconButton name={conv.type === "group" ? "group" : "info-outline"} label="Thông tin cuộc trò chuyện" onPress={() => setInfoOpen(true)} />
       </View>
 
@@ -493,6 +507,7 @@ export function ChatScreen({ convId }: { convId: number }) {
 
       <ImageViewer item={viewer} onClose={() => setViewer(null)} />
       <GroupInfoSheet visible={infoOpen} onClose={() => setInfoOpen(false)} conv={conv} />
+      {conv.type === "dm" ? <ChallengeSheet visible={chessOpen} onClose={() => setChessOpen(false)} opponentId={conv.peerId} /> : null}
     </KeyboardAware>
   );
 }
@@ -556,6 +571,7 @@ const makeStyles = (c: Colors) =>
       borderBottomColor: c.line,
     },
     headerMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+    chessBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20 },
     title: { color: c.text, fontSize: 16.5, fontWeight: "800" },
     status: { color: c.muted, fontSize: 12.5 },
     fill: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },

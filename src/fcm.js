@@ -63,6 +63,7 @@ function toData(p) {
   const data = { type: p.type || 'message' };
   if (p.conversationId != null) data.conversationId = p.conversationId;
   if (p.messageId != null) data.messageId = p.messageId;
+  if (p.gameId != null) data.gameId = p.gameId;
   const out = { color: '#0E7C66', channelId: 'messages' };
   if (p.type === 'message') {
     out.title = clip(p.convTitle || p.senderName || 'Think', 80);
@@ -75,6 +76,7 @@ function toData(p) {
     out.message = clip(p.body || '', 400);
     if (p.tag) out.tag = p.tag;
     if (p.type === 'reaction' || p.type === 'test') out.channelId = 'other';
+    if (p.type === 'chess') out.channelId = 'chess';
   }
   if (p.badge != null) out.badge = String(p.badge);
   out.body = JSON.stringify(data);

@@ -1,5 +1,5 @@
 /* Service worker: lưu giao diện để mở nhanh + hiện thông báo đẩy kể cả khi đã đóng app */
-const CACHE = 'think-v4';
+const CACHE = 'think-v5';
 // Ảnh trong tin nhắn và ảnh đại diện đã xem được giữ lại trên máy (tên file không bao giờ đổi),
 // nên vẫn hiện được khi mất mạng hoặc khi máy chủ đã dọn ảnh cũ. Tắt "Lưu trên máy" thì không giữ nữa.
 const MEDIA = 'think-media';
@@ -9,6 +9,9 @@ const SHELL = [
   '/app.css',
   '/app.js',
   '/localdb.js',
+  '/chess-ui.js',
+  '/vendor/chess.js',
+  ...['K', 'Q', 'R', 'B', 'N', 'P'].flatMap((p) => [`/chess/pieces/w${p}.svg`, `/chess/pieces/b${p}.svg`]),
   '/manifest.webmanifest',
   '/socket.io/socket.io.min.js',
   '/icons/icon-192.png',

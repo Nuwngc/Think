@@ -5,6 +5,7 @@ import { create } from "zustand";
 
 import { api, ApiError, setAuthHandlers } from "./api";
 import { clearSnapshot, loadSnapshot, saveSnapshot } from "./cache";
+import { bindChess, closeGame, loadChess, onChessEvent, openGame, resetChess, useChess } from "./chess/store";
 import { API_URL } from "./config";
 import { convTitle, previewText, type Names } from "./format";
 import type { PreparedImage } from "./images";
@@ -36,7 +37,7 @@ import type { ChatItem, Conversation, Me, Message, PendingMessage, Reaction, Use
    ========================================================= */
 
 export type Phase = "boot" | "login" | "force" | "ready";
-export type Tab = "chats" | "me" | "admin";
+export type Tab = "chats" | "chess" | "me" | "admin";
 export type Connection = "connecting" | "online" | "offline";
 
 export type MsgBox = {
@@ -49,7 +50,8 @@ export type MsgBox = {
   stale: boolean;
 };
 
-export type Toast = { id: number; text: string; title?: string; convId?: number; senderId?: number };
+/** chessGameId: chạm để mở ván cờ đó (0 = mở tab Cờ vua) */
+export type Toast = { id: number; text: string; title?: string; convId?: number; senderId?: number; chessGameId?: number };
 
 export type UpdateInfo = { versionCode: number; versionName: string; apk: string; notes?: string };
 
@@ -279,6 +281,7 @@ async function enterApp() {
     if (get().convs[current]) loadMessages(current);
     else closeConversation();
   }
+  loadChess();
   setupPush().catch(() => undefined);
 }
 
@@ -317,6 +320,7 @@ function resetAll(notice: string | null) {
   typingTimers.clear();
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = null;
+  resetChess();
   set({ ...initial, phase: "login", notice, appActive: get().appActive, update: get().update });
   lastBadge = 0;
   setBadge(0);
@@ -378,6 +382,7 @@ async function resync() {
       for (const [id, b] of Object.entries(s.msgs)) msgs[Number(id)] = { ...b, stale: true };
       return { msgs, offline: false };
     });
+    if (useChess.getState().loaded) loadChess();
     const current = get().currentId;
     if (current != null) {
       if (!get().convs[current]) {
@@ -447,7 +452,9 @@ export async function openConversation(id: number) {
       return;
     }
   }
-  set({ currentId: id, atBottom: true, tab: "chats" });
+  // Đang trong một ván cờ thì giữ tab Cờ vua: đóng chat là quay lại ván
+  const keepChess = get().tab === "chess" && useChess.getState().openId != null;
+  set({ currentId: id, atBottom: true, tab: keepChess ? "chess" : "chats" });
   hideToastFor(id);
   dismissConversation(id);
   const box = get().msgs[id];
@@ -462,6 +469,18 @@ export function closeConversation() {
 
 export function setTab(tab: Tab) {
   set({ tab, currentId: null });
+  if (tab === "chess" && !useChess.getState().loading) loadChess();
+}
+
+/** Mở tab Cờ vua; có gameId thì mở luôn ván đó */
+export function openChess(gameId?: number | null) {
+  set({ tab: "chess", currentId: null });
+  if (get().toast?.chessGameId != null) hideToast();
+  if (gameId) openGame(gameId);
+  else {
+    closeGame();
+    loadChess();
+  }
 }
 
 export function setAtBottom(atBottom: boolean) {
@@ -814,6 +833,8 @@ function connectSocket() {
   });
   s.on("session:ended", (data: { reason?: string }) => sessionEnded(data?.reason || "Bạn đã bị đăng xuất."));
   s.on("storage:changed", () => set((st) => ({ storageVersion: st.storageVersion + 1 })));
+  s.on("chess:game", (data) => onChessEvent("chess:game", data));
+  s.on("chess:challenge", (data) => onChessEvent("chess:challenge", data));
 }
 
 export function reportVisibility() {
@@ -961,6 +982,18 @@ export function startLifecycle() {
     if (get().appActive) reportVisibility();
   }, 25000);
 }
+
+bindChess({
+  meId: () => get().me?.id ?? 0,
+  nameOf: (id) => namesOf(get()).nameOf(id),
+  toast: (text, extra) => {
+    // Đang xem đúng ván đó thì thôi
+    if (extra?.chessGameId && useChess.getState().openId === extra.chessGameId && get().tab === "chess" && get().currentId == null) return;
+    showToast(text, extra || {}, 4500);
+  },
+  onTab: () => get().tab === "chess" && get().currentId == null && get().appActive,
+  showChess: () => openChess(),
+});
 
 export const selectors = {
   box: (id: number | null) => (s: State) => (id == null ? undefined : s.msgs[id]),
