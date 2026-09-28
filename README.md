@@ -12,6 +12,7 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - **Lưu trên máy người dùng**: tin nhắn và ảnh được giữ lại trên điện thoại, mở app là xem được ngay kể cả khi mất mạng hay máy chủ đang thức dậy. Tải lịch sử chat thành file, tải ảnh về máy.
 - **Bộ nhớ máy chủ**: thanh hiển thị dung lượng đã dùng, **tự dọn ảnh và tin nhắn cũ nhất khi sắp đầy**, dọn thủ công có xem trước.
 - **App Android có bong bóng chat** (Android 8 trở lên): tin nhắn mới hiện thành bong bóng nổi như Messenger, chạm vào để trả lời ngay; thông báo có ảnh từng người gửi, ô **Trả lời** và nút **Đã đọc**. Tải app ngay trên web (Cá nhân → Cài app lên máy).
+- **App Think Beta** (thư mục `native/`): app thật viết bằng React Native, không phải trang web trong khung. GitHub tự build file APK mỗi lần sửa code (mục 13).
 - **Trả lời tin nhắn** (chạm giữ → Trả lời, hoặc vuốt ngang tin nhắn) và **thả cảm xúc** ❤️ 😆 😮 😢 😡 👍, xem được ai đã thả.
 - Realtime: đang nhập…, đang hoạt động / hoạt động X phút trước, "Đã xem" (nhóm hiện ảnh người đã xem), thu hồi tin nhắn.
 - Thông báo đầy đủ:
@@ -314,6 +315,7 @@ git pull && npm install --omit=dev && pm2 restart think-chat
 | `STORAGE_LIMIT_MB` | Giới hạn bộ nhớ máy chủ mặc định (admin vẫn đổi được trong app) | 900 khi có Firebase, còn lại theo ổ đĩa |
 | `RESET_ADMIN_PASSWORD` | Đặt lại mật khẩu admin khi khởi động (xóa đi sau khi dùng) | trống |
 | `FIREBASE_PREFIX` | Tiền tố tên bảng trên Firestore, đổi nếu chạy nhiều app chung một project | `think` |
+| `CORS_ORIGINS` | Chỉ dùng khi chạy thử App Think Beta trên trình duyệt ở địa chỉ khác, vd `http://localhost:8081` | trống |
 
 Màu sắc nằm ở đầu file `public/app.css` (biến `--jade`, `--turmeric`). Icon app nằm trong `public/icons/`.
 
@@ -348,6 +350,16 @@ Màu sắc nằm ở đầu file `public/app.css` (biến `--jade`, `--turmeric`
 - **Dọn thủ công**: chọn **Ảnh** hoặc **Tin nhắn**, chọn **Cũ hơn** (7 ngày … 1 năm, hoặc tất cả), bấm **Kiểm tra** để xem sẽ xóa bao nhiêu và giải phóng bao nhiêu, rồi mới bấm **Xóa ngay**.
 - Tin nhắn **mới nhất của mỗi cuộc trò chuyện luôn được giữ lại**, để danh sách chat không bị trống.
 
+## 13. App Think Beta (app thật, thư mục `native/`)
+
+Bản app viết lại bằng React Native (Expo), dùng chung máy chủ và tài khoản với bản web, cài song song với app bong bóng chat ở mục 7. Hướng dẫn đầy đủ: **[native/README.md](native/README.md)**. Tóm tắt:
+
+1. Push code lên GitHub như thường lệ.
+2. Repo → **Settings → Secrets and variables → Actions**, thêm secret `THINK_SIGNING_KEY` (mã mở khóa ký app, gửi riêng) và, để có thông báo đẩy, `GOOGLE_SERVICES_JSON` (file của Firebase cho app `com.nuwngc.think.beta`).
+3. Tab **Actions → App Think (Android) → Run workflow**. Khoảng 20–30 phút sau, file `think-app.apk` có trong **Releases**.
+
+Máy chủ tự hỗ trợ app này (đăng nhập bằng mã phiên, thông báo qua Firebase Cloud Messaging dùng chung khóa `FIREBASE_SERVICE_ACCOUNT`), không cần đổi cấu hình Render.
+
 ## Cấu trúc thư mục
 
 ```
@@ -358,11 +370,14 @@ src/cloud.js         Sao lưu database, ảnh, khóa thông báo lên Firebase F
 src/storage.js       Đo bộ nhớ máy chủ, tự dọn và dọn thủ công dữ liệu cũ
 src/auth.js          Mã hóa mật khẩu (scrypt), phiên đăng nhập
 src/push.js          Thông báo đẩy (Web Push / VAPID)
+src/fcm.js           Thông báo đẩy cho App Think Beta (Firebase Cloud Messaging)
 scripts/admin.js     Công cụ dòng lệnh cho chủ server
 scripts/tunnel.js    Mở link HTTPS tạm thời (npm run share / npm run tunnel)
 public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu trên máy), sw.js (service worker)
 public/download/     File cài app Android (think.apk) và version.json
 android/             Mã app Android: mở web bằng Chrome, bong bóng chat, trả lời trong thông báo (build.sh để build)
+native/              App Think Beta (React Native / Expo), xem native/README.md
+.github/workflows/   GitHub Actions: build và đăng file APK của App Think Beta
 deploy/              Mẫu cấu hình Caddy và Nginx
 ```
 

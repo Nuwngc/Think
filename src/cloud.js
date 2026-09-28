@@ -255,4 +255,4 @@ async function fileSize(rel) {
   return meta.exists ? meta.get('size') || 0 : 0;
 }
 
-module.exports = { init, enabled, restoreAll, attach, backupNow, flush, saveFile, removeFile, fetchFile, explain, backupBytes, fileSize };
+module.exports = { init, enabled, restoreAll, attach, backupNow, flush, saveFile, removeFile, fetchFile, explain, backupBytes, fileSize, readCredentials };

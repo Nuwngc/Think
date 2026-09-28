@@ -1,0 +1,241 @@
+import * as FileSystem from "expo-file-system/legacy";
+import { Platform } from "react-native";
+
+import { API_URL } from "./config";
+import { getToken } from "./session";
+import type {
+  AdminUser,
+  Conversation,
+  Me,
+  Message,
+  Reaction,
+  StoragePayload,
+  StorageSettings,
+  User,
+} from "./types";
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+type Method = "GET" | "POST" | "PATCH" | "DELETE";
+type Options = { method?: Method; body?: unknown; timeout?: number; auth?: boolean; token?: string | null };
+
+let onUnauthorized: ((message: string) => void) | null = null;
+let onMustChange: (() => void) | null = null;
+
+/** Cửa hàng dữ liệu đăng ký để biết khi phiên hết hạn (401) hoặc cần đổi mật khẩu. */
+export function setAuthHandlers(handlers: { unauthorized: (message: string) => void; mustChange: () => void }) {
+  onUnauthorized = handlers.unauthorized;
+  onMustChange = handlers.mustChange;
+}
+
+const OFFLINE = "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.";
+
+function handleError(status: number, data: { error?: string; code?: string } | null, auth: boolean) {
+  const err = new ApiError(data?.error || `Có lỗi xảy ra (mã ${status}).`, status, data?.code);
+  if (auth && status === 401) onUnauthorized?.(err.message);
+  else if (err.code === "must_change_password") onMustChange?.();
+  return err;
+}
+
+export async function request<T>(path: string, options: Options = {}): Promise<T> {
+  const { method = "GET", body, timeout = 30000, auth = true } = options;
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const token = !auth ? null : options.token !== undefined ? options.token : await getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch {
+    throw new ApiError(OFFLINE, 0);
+  } finally {
+    clearTimeout(timer);
+  }
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    /* không phải JSON */
+  }
+  if (!res.ok) throw handleError(res.status, data, auth && Boolean(token) && options.token === undefined);
+  return data as T;
+}
+
+/** Gửi nguyên nội dung file ảnh (máy chủ tự nhận dạng JPG/PNG/WEBP/GIF). */
+async function uploadRaw<T>(path: string, fileUri: string, mime: string): Promise<T> {
+  const token = await getToken();
+  const headers: Record<string, string> = { Accept: "application/json", "Content-Type": mime };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  let status: number;
+  let text: string;
+  try {
+    if (Platform.OS === "web") {
+      const blob = await (await fetch(fileUri)).blob();
+      const res = await fetch(`${API_URL}${path}`, { method: "POST", headers, body: blob });
+      status = res.status;
+      text = await res.text();
+    } else {
+      const res = await FileSystem.uploadAsync(`${API_URL}${path}`, fileUri, {
+        httpMethod: "POST",
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers,
+      });
+      status = res.status;
+      text = res.body;
+    }
+  } catch {
+    throw new ApiError(OFFLINE, 0);
+  }
+  let data: any = null;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    /* không phải JSON */
+  }
+  if (status < 200 || status >= 300) throw handleError(status, data, Boolean(token));
+  return data as T;
+}
+
+/* ---------------- Đăng nhập & tài khoản ---------------- */
+
+export const api = {
+  config: () => request<{ appName: string; appPush?: boolean }>("/api/config", { auth: false, timeout: 75000 }),
+
+  login: (username: string, password: string, device: string) =>
+    request<{ user: Me; token: string }>("/api/login", {
+      method: "POST",
+      body: { username, password, client: "app", device },
+      auth: false,
+      timeout: 75000, // máy chủ miễn phí có thể đang ngủ, cần gần 1 phút để thức dậy
+    }),
+
+  /** Báo máy chủ hủy phiên (mã phiên truyền vào vì trên máy đã xóa trước cho nhanh) */
+  logout: (token: string) => request<{ ok: true }>("/api/logout", { method: "POST", body: {}, token, timeout: 10000 }),
+
+  me: () => request<{ user: Me | null }>("/api/me", { timeout: 75000 }),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ user: Me }>("/api/me/password", { method: "POST", body: { currentPassword, newPassword } }),
+
+  updateName: (displayName: string) => request<{ user: Me }>("/api/me", { method: "PATCH", body: { displayName } }),
+
+  uploadAvatar: (fileUri: string, mime: string) => uploadRaw<{ user: Me }>("/api/me/avatar", fileUri, mime),
+
+  removeAvatar: () => request<{ user: Me }>("/api/me/avatar", { method: "DELETE" }),
+
+  /* ---------------- Chat ---------------- */
+
+  users: () => request<{ users: User[] }>("/api/users"),
+
+  conversations: () => request<{ conversations: Conversation[] }>("/api/conversations"),
+
+  conversation: (id: number) => request<{ conversation: Conversation }>(`/api/conversations/${id}`),
+
+  openDm: (userId: number) =>
+    request<{ conversation: Conversation }>("/api/conversations/dm", { method: "POST", body: { userId } }),
+
+  messages: (id: number, before?: number, limit = 40) =>
+    request<{ messages: Message[]; hasMore: boolean; reads: { userId: number; lastReadId: number }[] }>(
+      `/api/conversations/${id}/messages?limit=${limit}${before ? `&before=${before}` : ""}`,
+    ),
+
+  sync: (id: number, after: number, since: number) =>
+    request<{ messages: Message[]; changed: Message[]; nextAfter: number; nextSince: number; more: boolean }>(
+      `/api/conversations/${id}/sync?after=${after}&since=${since}`,
+    ),
+
+  uploadImage: (fileUri: string, mime: string, width: number, height: number) =>
+    uploadRaw<{ url: string }>(`/api/upload?w=${Math.round(width)}&h=${Math.round(height)}`, fileUri, mime),
+
+  send: (conversationId: number, body: { text?: string; image?: string; replyTo?: number; clientId?: string }) =>
+    request<{ message: Message }>(`/api/conversations/${conversationId}/messages`, { method: "POST", body }),
+
+  read: (conversationId: number, messageId?: number) =>
+    request<{ ok: true; unreadTotal: number }>(`/api/conversations/${conversationId}/read`, {
+      method: "POST",
+      body: messageId ? { messageId } : {},
+    }),
+
+  recall: (messageId: number) => request<{ ok: true }>(`/api/messages/${messageId}`, { method: "DELETE" }),
+
+  react: (messageId: number, emoji: string) =>
+    request<{ conversationId: number; messageId: number; reactions: Reaction[] }>(`/api/messages/${messageId}/reactions`, {
+      method: "POST",
+      body: { emoji },
+    }),
+
+  /* ---------------- Nhóm ---------------- */
+
+  createGroup: (name: string, memberIds: number[]) =>
+    request<{ conversation: Conversation }>("/api/groups", { method: "POST", body: { name, memberIds } }),
+
+  renameGroup: (id: number, name: string) =>
+    request<{ conversation: Conversation }>(`/api/groups/${id}`, { method: "PATCH", body: { name } }),
+
+  addMembers: (id: number, userIds: number[]) =>
+    request<{ conversation: Conversation }>(`/api/groups/${id}/members`, { method: "POST", body: { userIds } }),
+
+  removeMember: (id: number, userId: number) =>
+    request<{ ok: true }>(`/api/groups/${id}/members/${userId}`, { method: "DELETE" }),
+
+  /* ---------------- Thông báo đẩy ---------------- */
+
+  registerPush: (token: string, platform: string) =>
+    request<{ ok: true; enabled: boolean }>("/api/app/push", { method: "POST", body: { token, platform } }),
+
+  removePush: (pushToken: string, session?: string) =>
+    request<{ ok: true }>("/api/app/push/remove", {
+      method: "POST",
+      body: { token: pushToken },
+      ...(session ? { token: session, timeout: 10000 } : {}),
+    }),
+
+  testPush: () => request<{ ok: true; sent: number }>("/api/push/test", { method: "POST", body: {} }),
+
+  /* ---------------- Quản trị ---------------- */
+
+  adminUsers: () => request<{ users: AdminUser[] }>("/api/admin/users"),
+
+  createUser: (body: { username: string; displayName: string; password?: string; role: "admin" | "member" }) =>
+    request<{ user: AdminUser; password: string }>("/api/admin/users", { method: "POST", body }),
+
+  resetPassword: (id: number) =>
+    request<{ user: AdminUser; password: string }>(`/api/admin/users/${id}/reset-password`, { method: "POST", body: {} }),
+
+  setDisabled: (id: number, disabled: boolean) =>
+    request<{ user: AdminUser }>(`/api/admin/users/${id}/disabled`, { method: "POST", body: { disabled } }),
+
+  setRole: (id: number, role: "admin" | "member") =>
+    request<{ user: AdminUser }>(`/api/admin/users/${id}/role`, { method: "POST", body: { role } }),
+
+  storage: () => request<StoragePayload>("/api/admin/storage"),
+
+  saveStorageSettings: (settings: Partial<StorageSettings>) =>
+    request<StoragePayload>("/api/admin/storage/settings", { method: "PATCH", body: settings }),
+
+  cleanup: (kind: "images" | "messages", olderThanDays: number, dryRun: boolean) =>
+    request<StoragePayload & { result: { count: number; bytes: number; dryRun: boolean } }>("/api/admin/storage/cleanup", {
+      method: "POST",
+      body: { kind, olderThanDays, dryRun },
+    }),
+};
+
+/** Địa chỉ đầy đủ của ảnh trên máy chủ (/uploads/...). */
+export const fileUrl = (path: string) => (/^https?:/i.test(path) ? path : `${API_URL}${path}`);

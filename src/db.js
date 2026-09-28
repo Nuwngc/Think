@@ -98,6 +98,16 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
+
+  -- Mã nhận thông báo (FCM) của app Think cài từ APK. Gắn với phiên đăng nhập: đăng xuất là tự xóa.
+  CREATE TABLE IF NOT EXISTS app_push_tokens (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    session_hash TEXT REFERENCES sessions(token_hash) ON DELETE CASCADE,
+    platform TEXT NOT NULL DEFAULT 'android',
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_app_push_user ON app_push_tokens(user_id);
 `);
 
 // Nâng cấp database cũ: thêm cột mới mà không mất dữ liệu

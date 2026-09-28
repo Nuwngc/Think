@@ -23,6 +23,7 @@ const { db, get, all, run, transaction, getSetting, DATA_DIR, AVATAR_DIR, IMAGE_
 const storage = require('./src/storage');
 const auth = require('./src/auth');
 const push = require('./src/push');
+const fcm = require('./src/fcm');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -33,7 +34,15 @@ push.init();
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { pingInterval: 20000, pingTimeout: 20000, maxHttpBufferSize: 1e5 });
+// Chỉ cần khi chạy thử app Think bản web (Expo) ở địa chỉ khác, vd CORS_ORIGINS=http://localhost:8081
+// App cài trên điện thoại không cần dòng này.
+const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+const io = new Server(server, {
+  pingInterval: 20000,
+  pingTimeout: 20000,
+  maxHttpBufferSize: 1e5,
+  cors: CORS_ORIGINS.length ? { origin: CORS_ORIGINS } : undefined,
+});
 
 app.disable('x-powered-by');
 
@@ -75,6 +84,20 @@ app.use((req, res, next) => {
   });
   next();
 });
+if (CORS_ORIGINS.length) {
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (!origin || !CORS_ORIGINS.includes(origin)) return next();
+    res.set({
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+      Vary: 'Origin',
+    });
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+  });
+}
 app.use(express.json({ limit: '64kb' }));
 
 /* ---------------- Tiện ích ---------------- */
@@ -353,9 +376,15 @@ async function resetAdminFromEnv() {
 
 /* ---------------- Phiên đăng nhập ---------------- */
 
+// Web dùng cookie "sid". App Think cài từ APK gửi mã phiên trong header: Authorization: Bearer <mã>
+function bearerToken(header) {
+  const m = /^Bearer\s+(\S+)\s*$/i.exec(String(header || ''));
+  return m ? m[1] : null;
+}
 function loadSession(req) {
   if (req._session === undefined) {
-    req._session = auth.findSession(auth.parseCookies(req.headers.cookie)[COOKIE]);
+    const token = bearerToken(req.headers.authorization) || auth.parseCookies(req.headers.cookie)[COOKIE];
+    req._session = auth.findSession(token);
   }
   return req._session;
 }
@@ -491,7 +520,7 @@ app.use(
 /* ---------------- API: đăng nhập ---------------- */
 
 app.get('/api/config', (req, res) => {
-  res.json({ appName: APP_NAME, vapidPublicKey: push.publicKey() });
+  res.json({ appName: APP_NAME, vapidPublicKey: push.publicKey(), appPush: fcm.enabled() });
 });
 
 app.post('/api/login', async (req, res) => {
@@ -513,6 +542,12 @@ app.post('/api/login', async (req, res) => {
   if (user.disabled) return res.status(403).json({ error: 'Tài khoản này đã bị khóa. Liên hệ admin để mở lại.' });
 
   limiter.clear(keys[1]);
+  // App Think (APK) không dùng cookie: trả mã phiên để app tự giữ trong bộ nhớ an toàn của máy
+  if (req.body?.client === 'app') {
+    const device = String(req.body?.device || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 60);
+    const token = auth.createSession(user.id, `App Think${device ? ` (${device})` : ''}`);
+    return res.json({ user: meUser(user), token });
+  }
   setSessionCookie(req, res, auth.createSession(user.id, req.get('user-agent')));
   res.json({ user: meUser(user) });
 });
@@ -682,10 +717,20 @@ app.post('/api/upload', requireAuth, requireReady, rawImage, (req, res) => {
   res.json({ url });
 });
 
+// Tin vừa gửi theo clientId: máy gửi lại (mạng chập chờn, hết thời gian chờ) thì trả tin cũ, không tạo tin trùng
+const recentSends = new Map(); // `${userId}:${clientId}` -> { id, at }
+
 app.post('/api/conversations/:id/messages', requireAuth, requireReady, (req, res) => {
   const convId = Number(req.params.id);
   const conv = get('SELECT * FROM conversations WHERE id = ?', convId);
   if (!conv || !membership(convId, req.user.id)) return res.status(404).json({ error: 'Không tìm thấy cuộc trò chuyện.' });
+  const clientId = typeof req.body?.clientId === 'string' ? req.body.clientId.slice(0, 64) : undefined;
+  const sendKey = clientId ? `${req.user.id}:${clientId}` : null;
+  const already = sendKey && recentSends.get(sendKey);
+  if (already) {
+    const prev = loadMessage(already.id);
+    if (prev && prev.conversationId === convId) return res.json({ message: { ...prev, clientId } });
+  }
 
   const text = typeof req.body?.text === 'string' ? req.body.text.replace(/\r\n?/g, '\n').trim() : '';
   if (text.length > 4000) return res.status(400).json({ error: 'Tin nhắn dài quá 4000 ký tự. Hãy chia nhỏ ra.' });
@@ -722,7 +767,7 @@ app.post('/api/conversations/:id/messages', requireAuth, requireReady, (req, res
   });
 
   const message = loadMessage(newId);
-  const clientId = typeof req.body?.clientId === 'string' ? req.body.clientId.slice(0, 64) : undefined;
+  if (sendKey) recentSends.set(sendKey, { id: newId, at: Date.now() });
   const members = memberIds(convId);
   for (const uid of members) {
     io.to(`user:${uid}`).emit('message:new', uid === req.user.id ? { ...message, clientId } : message);
@@ -749,8 +794,15 @@ async function notifyMembers(conv, message, members) {
     url: `/#/c/${conv.id}`,
     createdAt: message.createdAt,
   };
-  await Promise.all(targets.map((uid) => push.sendToUser(uid, { ...base, badge: unreadTotal(uid) })));
+  await Promise.all(targets.map((uid) => push.sendToUser(uid, { ...base, badge: unreadTotal(uid), convUnread: unreadIn(conv.id, uid) })));
 }
+
+const unreadIn = (convId, uid) =>
+  get(
+    `SELECT COUNT(*) AS n FROM messages m JOIN members mem ON mem.conversation_id = m.conversation_id AND mem.user_id = :uid
+      WHERE m.conversation_id = :cid AND m.id > mem.last_read_id AND m.sender_id <> :uid AND m.kind <> 'system'`,
+    { uid, cid: convId }
+  ).n;
 
 app.post('/api/conversations/:id/read', requireAuth, requireReady, (req, res) => {
   const convId = Number(req.params.id);
@@ -998,6 +1050,19 @@ app.post('/api/push/unsubscribe', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// App Think (APK): đăng ký / hủy mã nhận thông báo FCM của máy này
+app.post('/api/app/push', requireAuth, (req, res) => {
+  const token = req.body?.token;
+  if (!fcm.validToken(token)) return res.status(400).json({ error: 'Mã nhận thông báo không hợp lệ.' });
+  fcm.save(req.user.id, req.sessionHash, token, req.body?.platform);
+  res.json({ ok: true, enabled: fcm.enabled() });
+});
+
+app.post('/api/app/push/remove', requireAuth, (req, res) => {
+  if (typeof req.body?.token === 'string') fcm.remove(req.body.token, req.user.id);
+  res.json({ ok: true });
+});
+
 app.post('/api/push/test', requireAuth, async (req, res) => {
   const sent = await push.sendToUser(req.user.id, {
     type: 'test',
@@ -1203,7 +1268,8 @@ app.use((err, req, res, next) => {
 /* ---------------- Realtime (Socket.IO) ---------------- */
 
 io.use((socket, next) => {
-  const session = auth.findSession(auth.parseCookies(socket.handshake.headers.cookie)[COOKIE]);
+  const appToken = typeof socket.handshake.auth?.token === 'string' ? socket.handshake.auth.token : null;
+  const session = auth.findSession(appToken || auth.parseCookies(socket.handshake.headers.cookie)[COOKIE]);
   if (!session) return next(new Error('unauthorized'));
   if (session.must_change_password) return next(new Error('must_change_password'));
   socket.data.userId = session.id;
@@ -1262,6 +1328,7 @@ setInterval(() => {
     }
   }
   limiter.prune();
+  for (const [key, info] of recentSends) if (Date.now() - info.at > 30 * 60 * 1000) recentSends.delete(key);
 }, 30 * 60 * 1000).unref();
 
 /* ---------------- Khởi động ---------------- */

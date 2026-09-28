@@ -1,0 +1,138 @@
+# App Think Beta — app cài trên điện thoại (không phải web)
+
+Đây là app Think viết lại bằng **React Native (Expo)**: giao diện là giao diện thật của điện thoại, không phải trang web mở trong khung. App nói chuyện với **cùng máy chủ Think** (thinkchat.id.vn), nên tin nhắn, tài khoản, nhóm… giống hệt bản web.
+
+App có tên **Think Beta** (mã gói `com.nuwngc.think.beta`), cài **song song** với app Think hiện tại (bản có bong bóng chat). Dùng thử thấy ổn rồi mới tính chuyện thay thế.
+
+## Có gì trong app
+
+- Đăng nhập bằng tài khoản Think, lần đầu bắt buộc đặt mật khẩu mới.
+- Danh sách chat: tìm không cần dấu, lọc Chưa đọc / Nhóm / Riêng tư, số tin chưa đọc.
+- Chat: gửi chữ, **gửi ảnh** (chọn trong máy hoặc chụp, tự thu nhỏ), **trả lời tin**, **thả cảm xúc**, **thu hồi**, sao chép, xem ảnh lớn và **lưu/chia sẻ ảnh**, "đang nhập…", "Đã gửi / Đã xem", tin cũ tải thêm khi kéo lên.
+- Nhắn riêng, **tạo nhóm**, đổi tên nhóm, thêm / xóa người, rời nhóm.
+- Cá nhân: đổi tên, ảnh đại diện, mật khẩu, bật/tắt thông báo, kiểm tra bản mới.
+- Quản trị (admin): tạo tài khoản (hiện mật khẩu tạm để gửi), đặt lại mật khẩu, khóa / mở khóa, cấp quyền admin, xem bộ nhớ máy chủ, tự dọn / dọn thủ công.
+- **Thông báo đẩy** khi đóng app, bấm **Trả lời** hoặc **Đã đọc** ngay trong thông báo (cần bước 3 bên dưới).
+- **Lưu trên máy**: mở app là thấy ngay tin nhắn cũ kể cả khi máy chủ đang ngủ hoặc mất mạng, tự kết nối lại.
+- Giao diện sáng / tối theo máy. Chạy từ Android 7 trở lên.
+
+Chưa có (so với app bong bóng chat hiện tại): **bong bóng chat nổi** kiểu Messenger. Muốn bong bóng thì vẫn dùng app Think cũ.
+
+---
+
+## Xuất bản (làm trên điện thoại, không cần máy tính)
+
+App được build tự động trên **GitHub Actions** (miễn phí với repo công khai), không cần tài khoản Expo hay Android Studio. Mỗi lần build xong, file cài `think-app.apk` nằm trong mục **Releases** của repo.
+
+### Bước 1. Đưa code lên GitHub
+
+Giống các lần cập nhật trước, trong Termux:
+
+```bash
+cd ~ && unzip -o ~/storage/downloads/think-chat.zip
+cd ~/think-chat
+git add -A && git commit -m "App Think Beta" && git push
+```
+
+### Bước 2. Thêm mã mở khóa ký app (làm một lần)
+
+File `native/credentials/signing.tgz.enc` là **khóa ký app đã được khóa lại**, để GitHub ký APK giống hệt nhau mỗi lần (nhờ vậy bản mới cài đè được bản cũ). GitHub cần mã để mở nó:
+
+1. Mở repo trên GitHub (trình duyệt điện thoại, bật "Trang web cho máy tính" nếu thấy thiếu menu).
+2. **Settings → Secrets and variables → Actions → New repository secret**.
+3. Name: `THINK_SIGNING_KEY` — Secret: dán mã mở khóa (mã được gửi riêng cho bạn, **không đăng lên đâu cả**).
+4. Bấm **Add secret**.
+
+### Bước 3 (nên làm). Bật thông báo đẩy
+
+Máy chủ gửi thông báo qua Firebase Cloud Messaging, dùng luôn **project Firebase đang sao lưu dữ liệu cho Think** (biến `FIREBASE_SERVICE_ACCOUNT` trên Render). Chỉ cần đăng ký app với Firebase:
+
+1. Vào console.firebase.google.com → mở đúng project của Think.
+2. Bấm biểu tượng bánh răng → **Project settings** → mục **Your apps** → **Add app** → chọn **Android**.
+3. **Android package name**: `com.nuwngc.think.beta` (gõ đúng từng chữ). Các ô khác bỏ trống → **Register app**.
+4. Bấm **Download google-services.json**. Mở file vừa tải, **chép toàn bộ nội dung**.
+5. Trên GitHub: **Settings → Secrets and variables → Actions → New repository secret** — Name: `GOOGLE_SERVICES_JSON`, Secret: dán nội dung file → **Add secret**.
+6. Trên Render không cần đổi gì. Sau lần deploy tới, log máy chủ có dòng `📱 Thông báo cho app Think (Firebase Cloud Messaging): đã bật`.
+
+Không làm bước này thì app vẫn chạy bình thường, chỉ là **đóng app sẽ không có thông báo** (tab Cá nhân sẽ ghi rõ).
+
+> Nếu Firebase báo lỗi thông báo: vào **Project settings → Cloud Messaging**, kiểm tra **Firebase Cloud Messaging API (V1)** đang **Enabled**.
+
+### Bước 4. Build
+
+- Mỗi lần `git push` có thay đổi trong thư mục `native/`, GitHub tự build.
+- Hoặc bấm tay: repo → tab **Actions** → **App Think (Android)** → **Run workflow** (ô *Ghi chú* là dòng hiện trong app khi báo có bản mới).
+- Build mất khoảng **20–30 phút** (lần đầu lâu hơn). Dấu tích xanh là xong, dấu X đỏ là lỗi (bấm vào để xem bước nào lỗi).
+
+### Bước 5. Cài app
+
+- Repo → **Releases** (cột bên phải, hoặc `https://github.com/Nuwngc/Think/releases/latest`) → tải **think-app.apk** → mở file để cài.
+- Android hỏi "Cho phép cài ứng dụng không rõ nguồn gốc" thì bật cho trình duyệt / trình quản lý file đang dùng.
+- Gửi link `https://github.com/Nuwngc/Think/releases/latest/download/think-app.apk` cho bạn bè để họ cài.
+
+### Cập nhật về sau
+
+Sửa code trong `native/` → push → GitHub build bản mới (số phiên bản tự tăng). App trên máy mọi người tự hiện dòng **"Có bản app mới … Tải về"** (kiểm tra 6 tiếng một lần, hoặc bấm **Cá nhân → Kiểm tra bản mới**). Tải về cài đè, không mất đăng nhập.
+
+Mẹo: trên Render, mục **Settings → Build & Deploy → Build Filters → Ignored Paths**, thêm `native/**` và `.github/**` để sửa app không làm máy chủ khởi động lại.
+
+---
+
+## Lỗi thường gặp
+
+| Hiện tượng | Cách xử lý |
+|---|---|
+| Actions báo "Chưa có secret THINK_SIGNING_KEY" | Làm bước 2. |
+| Bước **Ký APK** lỗi `bad decrypt` | Mã `THINK_SIGNING_KEY` dán sai (thừa dấu cách / xuống dòng). Sửa lại secret rồi **Re-run jobs**. |
+| Bước **Cấu hình Firebase** báo không có app `com.nuwngc.think.beta` | Trong Firebase thêm app Android đúng tên gói (bước 3), tải lại file và dán lại secret. |
+| Cài báo "Ứng dụng chưa được cài đặt" | Máy đang có bản ký bằng khóa khác, hoặc bản mới có số nhỏ hơn. Gỡ Think Beta cũ rồi cài lại. |
+| Đăng nhập chờ lâu | Máy chủ Render miễn phí đang ngủ, cần tới 1 phút để thức dậy. Đừng tắt app. |
+| Không có thông báo khi đóng app | Cá nhân → Thông báo tin nhắn mới phải đang bật. Cài đặt điện thoại → Pin → cho Think Beta chạy nền không giới hạn (máy Xiaomi/Oppo/Vivo: bật thêm **Tự khởi chạy**). |
+| Thông báo đến nhưng không có nút Trả lời | Mở app một lần sau khi cài (app tạo kênh thông báo và nút lúc mở). |
+
+---
+
+## Dành cho người sửa code
+
+```text
+native/
+  App.tsx, index.ts        Điểm vào; index.ts nạp tác vụ nền (nút trong thông báo) trước
+  app.config.ts            Tên app, mã gói, biểu tượng, quyền, cấu hình build
+  src/store.ts             Dữ liệu của app, kết nối realtime (Socket.IO), đăng nhập, gửi tin…
+  src/api.ts               Gọi API máy chủ Think (mã phiên gửi trong header Authorization)
+  src/notifications.ts     Thông báo đẩy, nút Trả lời / Đã đọc
+  src/background.ts        Tác vụ nền khi bấm nút trong thông báo lúc app đã tắt
+  src/cache.ts             Lưu bản sao trên máy để mở app nhanh / khi mất mạng
+  src/format.ts            Chữ, giờ, tin hệ thống — giống bản web
+  src/screens/             Các màn hình
+  credentials/             Khóa ký app đã khóa (không có mã thì không mở được)
+  tests/                   Kiểm thử (npm test)
+```
+
+Kiểm tra trước khi push: `npm install` rồi `npm run check && npm run lint && npm test`.
+
+Chạy thử giao diện trên máy tính (trình duyệt), trỏ vào máy chủ Think chạy ở máy mình:
+
+```bash
+# Cửa sổ 1 — máy chủ Think (thư mục gốc), cho phép trang web của Expo gọi API
+CORS_ORIGINS=http://localhost:8081 npm start
+# Cửa sổ 2 — app
+cd native && npm install
+EXPO_PUBLIC_THINK_API_URL=http://localhost:3000 npx expo start --web
+```
+
+Máy chủ cho app dùng các API sẵn có của Think, thêm:
+
+- `POST /api/login` với `{"client":"app"}`: trả về `token` (không dùng cookie). Các API khác nhận `Authorization: Bearer <token>`; Socket.IO nhận `auth: { token }`.
+- `POST /api/app/push` / `POST /api/app/push/remove`: đăng ký / hủy mã FCM của máy. Mã gắn với phiên đăng nhập: đăng xuất, đổi mật khẩu, bị khóa là tự xóa.
+- Gửi tin với cùng `clientId` hai lần (mạng chập chờn) chỉ tạo một tin.
+
+### Khi muốn app này thay app Think cũ
+
+Đổi `package` trong `app.config.ts` thành `com.nuwngc.think`, tên thành `Think`, và đặt `VERSION_OFFSET` trong `.github/workflows/android-app.yml` để số phiên bản lớn hơn app cũ (app cũ đang là 3). Khóa ký đã là khóa của app cũ nên sẽ cài đè được. Trong Firebase thêm app Android `com.nuwngc.think` và cập nhật secret `GOOGLE_SERVICES_JSON`.
+
+### Bảo mật
+
+- **Không** đưa lên GitHub: `google-services.json`, file `.jks`, mật khẩu khóa ký (đã có trong `.gitignore`).
+- `credentials/signing.tgz.enc` được mã hóa AES-256 bằng mã 32 ký tự ngẫu nhiên, chỉ nằm trong GitHub Secrets và trong tay chủ repo. Lộ mã này thì phải đổi khóa ký.
+- Bản gốc khóa ký vẫn là file `think-release.jks` trong gói `think-android-key.zip` — giữ kỹ.

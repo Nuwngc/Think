@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const webpush = require('web-push');
 const { all, run, DATA_DIR } = require('./db');
+const fcm = require('./fcm');
 
 let vapidPublicKey = null;
 
@@ -25,6 +26,7 @@ function init() {
   const subject = process.env.VAPID_SUBJECT || 'mailto:admin@example.com';
   webpush.setVapidDetails(subject, keys.publicKey, keys.privateKey);
   vapidPublicKey = keys.publicKey;
+  if (fcm.init()) console.log('📱 Thông báo cho app Think (Firebase Cloud Messaging): đã bật');
   return vapidPublicKey;
 }
 
@@ -66,7 +68,13 @@ function remove(endpoint, userId) {
   run('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?', endpoint, userId);
 }
 
+// Gửi tới mọi trình duyệt đã bật thông báo và mọi máy đã cài app Think (qua FCM)
 async function sendToUser(userId, payload) {
+  const [web, app] = await Promise.all([sendToBrowsers(userId, payload), fcm.sendToUser(userId, payload)]);
+  return web + app;
+}
+
+async function sendToBrowsers(userId, payload) {
   const subs = all('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?', userId);
   if (!subs.length) return 0;
   const body = JSON.stringify(payload);

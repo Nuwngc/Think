@@ -1,0 +1,26 @@
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Thư mục Android/iOS được tạo ra khi build (npx expo prebuild), không cần lưu
+/android
+/ios
+
+# Khóa ký app và cấu hình Firebase: KHÔNG đưa lên GitHub
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist
+.env
+.env*.local
+
+*.log
+.DS_Store
+*.tsbuildinfo

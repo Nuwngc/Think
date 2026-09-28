@@ -1,0 +1,148 @@
+# Build app Think (thư mục native/) thành file APK đã ký, rồi đăng lên mục Releases của repo.
+# Chạy tự động khi có thay đổi trong native/, hoặc bấm tay: tab Actions → "App Think (Android)" → Run workflow.
+#
+# Cần 1 secret (Settings → Secrets and variables → Actions → New repository secret):
+#   THINK_SIGNING_KEY     mã mở khóa file native/credentials/signing.tgz.enc (khóa ký app)
+# Không bắt buộc:
+#   GOOGLE_SERVICES_JSON  nội dung file google-services.json của Firebase (để app nhận thông báo đẩy)
+name: App Think (Android)
+
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: "Ghi chú cho bản mới (hiện trong app khi báo có bản mới)"
+        required: false
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - "native/**"
+      - ".github/workflows/android-app.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-app
+  cancel-in-progress: false
+
+env:
+  # Số phiên bản = số lần chạy workflow này + VERSION_OFFSET.
+  # Nếu đổi tên / tạo lại file workflow (số lần chạy đếm lại từ 1), hãy tăng số này lên
+  # lớn hơn số phiên bản cũ, nếu không điện thoại sẽ từ chối cài đè.
+  VERSION_OFFSET: 0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: native/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Kiểm tra khóa ký
+        env:
+          THINK_SIGNING_KEY: ${{ secrets.THINK_SIGNING_KEY }}
+        run: |
+          if [ -z "$THINK_SIGNING_KEY" ]; then
+            echo "::error::Chưa có secret THINK_SIGNING_KEY. Xem native/README.md, mục 'Xuất bản'."
+            exit 1
+          fi
+
+      - name: Cài thư viện
+        run: npm ci
+
+      - name: Kiểm tra code
+        run: |
+          npm run check
+          npm run lint
+          npm test
+
+      - name: Số phiên bản
+        run: |
+          BASE=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
+          CODE=$((GITHUB_RUN_NUMBER + VERSION_OFFSET))
+          echo "THINK_VERSION_CODE=${CODE}" >> "$GITHUB_ENV"
+          echo "THINK_VERSION_NAME=${BASE}.${CODE}" >> "$GITHUB_ENV"
+          echo "Phiên bản: ${BASE}.${CODE} (số ${CODE})"
+
+      - name: Cấu hình Firebase (thông báo đẩy)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json
+            node -e "const j=require('./google-services.json'); const ok=(j.client||[]).some(c=>c.client_info&&c.client_info.android_client_info&&c.client_info.android_client_info.package_name==='com.nuwngc.think.beta'); if(!ok){console.error('google-services.json không có app com.nuwngc.think.beta. Trong Firebase hãy thêm app Android đúng tên gói này.'); process.exit(1)}"
+            echo "Đã có google-services.json: app sẽ nhận được thông báo đẩy."
+          else
+            echo "::warning::Chưa có secret GOOGLE_SERVICES_JSON: app vẫn chạy nhưng không có thông báo khi đóng app."
+          fi
+
+      - name: Tạo project Android
+        run: |
+          npx expo prebuild --platform android --no-install
+          sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8/' android/gradle.properties
+
+      - name: Build APK
+        working-directory: native/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Ký APK
+        env:
+          THINK_SIGNING_KEY: ${{ secrets.THINK_SIGNING_KEY }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/sign"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in credentials/signing.tgz.enc -pass env:THINK_SIGNING_KEY \
+            | tar -xz -C "$RUNNER_TEMP/sign"
+          set -a; . "$RUNNER_TEMP/sign/signing.env"; set +a
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          mkdir -p out
+          "$BT/zipalign" -f -p 4 android/app/build/outputs/apk/release/app-release.apk out/aligned.apk
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/sign/release.jks" --ks-key-alias "$THINK_KEY_ALIAS" \
+            --ks-pass env:THINK_KEY_PASSWORD --key-pass env:THINK_KEY_PASSWORD \
+            --out out/think-app.apk out/aligned.apk
+          "$BT/apksigner" verify --print-certs out/think-app.apk | grep -i "SHA-256"
+          rm -rf "$RUNNER_TEMP/sign" out/aligned.apk
+          ls -la out
+
+      - name: Đăng bản mới lên Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ github.event.inputs.notes }}
+        run: |
+          TAG="app-v${THINK_VERSION_NAME}"
+          APK_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/think-app.apk"
+          MSG="${NOTES:-$(git log -1 --pretty=%s)}"
+          node -e "require('fs').writeFileSync('out/think-app.json', JSON.stringify({versionCode:Number(process.env.THINK_VERSION_CODE), versionName:process.env.THINK_VERSION_NAME, apk:process.argv[1], notes:process.argv[2].slice(0,200)}, null, 2))" "$APK_URL" "$MSG"
+          cat out/think-app.json
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            # Chạy lại (Re-run) cùng một lần build: thay file cũ
+            gh release upload "$TAG" out/think-app.apk out/think-app.json --clobber
+          else
+            gh release create "$TAG" out/think-app.apk out/think-app.json \
+              --title "App Think Beta ${THINK_VERSION_NAME}" \
+              --notes "Tải file **think-app.apk** bên dưới về điện thoại Android rồi mở để cài. ${MSG}" \
+              --latest
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: think-app-${{ env.THINK_VERSION_NAME }}
+          path: native/out/think-app.apk
+          retention-days: 14
