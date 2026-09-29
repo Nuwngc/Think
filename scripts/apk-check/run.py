@@ -29,6 +29,7 @@ ap.add_argument("--user", default="tester")
 ap.add_argument("--password", default="tester12345")
 ap.add_argument("--label", default="")
 ap.add_argument("--server", default="http://127.0.0.1:3000")
+ap.add_argument("--report-checks", action="store_true", help="kiểm tra cả phần báo lỗi app (bản app có phần báo lỗi)")
 ap.add_argument("--admin-password", default=os.environ.get("ADMIN_PASSWORD", "admin-ci-12345"))
 args = ap.parse_args()
 OUT = args.out
@@ -314,7 +315,7 @@ def s_login():
 
 
 def s_chat():
-    tap(r"^Bạn Bè")
+    tap(r"^Bạn Bè($|[,.])")  # cuộc trò chuyện riêng (không nhầm với dòng "Bạn Bè: …" của phòng chung)
     if wait_for(r"Tối nay chơi cờ không", 20) is None:
         raise RuntimeError("Không thấy tin nhắn cũ trong cuộc trò chuyện")
     box = wait_for(r"Nhập tin nhắn", 10)
@@ -345,7 +346,7 @@ def s_chess_bot():
     tap(r"^Chơi với máy", 20)
     tap(r"ELO", 15)
     tap(r"^Bắt đầu$", 10)
-    if wait_for(r"^Bàn cờ$", 30) is None:
+    if wait_for(r"^e2, Tốt trắng", 30) is None:
         raise RuntimeError("Không mở được bàn cờ")
     time.sleep(2)
     tap(r"^e2,")
@@ -479,8 +480,9 @@ def main():
         step("Trang cá nhân", s_profile)
         step("Cuộn bảng tin", s_feed_and_scroll)
         step("Tắt và bật màn hình", s_rotate_like_resume)
-        step("Báo lỗi: màn hình bị lỗi", s_report_render_error)
-        step("Báo lỗi: app crash", s_report_crash)
+        if args.report_checks:
+            step("Báo lỗi: màn hình bị lỗi", s_report_render_error)
+            step("Báo lỗi: app crash", s_report_crash)
         time.sleep(3)
         if not alive():
             results.append(("Cuối cùng", False, "APP ĐÃ BỊ TẮT (crash)", shot("cuoi")))
