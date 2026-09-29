@@ -70,6 +70,7 @@ jobs:
 
       - name: Kiểm tra code
         run: |
+          npm run check:native
           npm run check
           npm run lint
           npm test

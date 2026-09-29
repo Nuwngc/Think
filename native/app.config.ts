@@ -9,13 +9,17 @@ import type { ExpoConfig } from "expo/config";
 //   THINK_API_URL       địa chỉ máy chủ Think (mặc định https://thinkchat.id.vn)
 //   THINK_UPDATE_URL    file JSON báo bản mới nhất (GitHub Actions tự điền theo repo)
 //   google-services.json đặt cạnh file này để bật thông báo đẩy (GitHub Actions tạo từ secret)
+//   THINK_TEST_BUILD=1  bản thử cho máy ảo (workflow "Kiểm tra APK"): thêm kiến trúc x86_64 và cho nối
+//                       máy chủ thử bằng http:// (bản phát hành thật không bao giờ bật)
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8")) as { version: string };
 
 const env = process.env;
 const versionCode = Math.max(1, Number.parseInt(env.THINK_VERSION_CODE || "1", 10) || 1);
 const repo = env.GITHUB_REPOSITORY || "";
-const updateUrl = env.THINK_UPDATE_URL || (repo ? `https://github.com/${repo}/releases/latest/download/think-app.json` : "");
+const testBuild = env.THINK_TEST_BUILD === "1";
+// Bản thử không hỏi cập nhật (hộp thoại "Có bản mới" sẽ che mất màn hình đang kiểm tra)
+const updateUrl = testBuild ? "" : env.THINK_UPDATE_URL || (repo ? `https://github.com/${repo}/releases/latest/download/think-app.json` : "");
 const googleServices = path.join(__dirname, "google-services.json");
 const hasGoogleServices = fs.existsSync(googleServices);
 
@@ -80,13 +84,20 @@ const config: ExpoConfig = {
     ["expo-audio", { microphonePermission: false, recordAudioAndroid: false }],
     [
       "expo-build-properties",
-      { android: { minSdkVersion: 24, buildArchs: ["armeabi-v7a", "arm64-v8a"] } },
+      {
+        android: {
+          minSdkVersion: 24,
+          buildArchs: testBuild ? ["armeabi-v7a", "arm64-v8a", "x86_64"] : ["armeabi-v7a", "arm64-v8a"],
+          ...(testBuild ? { usesCleartextTraffic: true } : {}),
+        },
+      },
     ],
   ],
   extra: {
     apiUrl: (env.THINK_API_URL || "https://thinkchat.id.vn").replace(/\/+$/, ""),
     updateUrl,
     pushConfigured: hasGoogleServices,
+    testBuild,
   },
 };
 
