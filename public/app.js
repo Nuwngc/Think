@@ -313,18 +313,37 @@
   }
   const toast = (text) => pushToast(h('div', { class: 'toast', role: 'status', text }), 3400);
 
-  // Tab Trò chơi (public/games-ui.js): trang chọn game, Xếp Khối (public/blocks.js) và Cờ vua (public/chess-ui.js).
-  // Ván cờ / game Xếp Khối mở ở cột phải (toàn màn hình trên điện thoại)
+  // Tab Trò chơi (public/games-ui.js): trang chọn game, Xếp Khối (public/blocks.js), Cờ vua (public/chess-ui.js)
+  // và Cờ caro (public/caro-ui.js). Ván cờ / game mở ở cột phải (toàn màn hình trên điện thoại)
   let games = null;
+  let caro = null;
+  // Số trên tab Trò chơi: việc cần làm ở cờ vua + cờ caro (lời thách đấu gửi tới mình, ván tới lượt mình)
+  function updateGamesBadge() {
+    const badge = $('#chess-badge');
+    if (!badge) return;
+    const n = (chess ? chess.badge() : 0) + (caro ? caro.badge() : 0);
+    badge.hidden = !n;
+    badge.textContent = n > 99 ? '99+' : String(n);
+    const tab = $('.tab[data-tab="games"]');
+    if (tab) tab.setAttribute('aria-label', n ? `Trò chơi, ${n} việc cần làm` : 'Trò chơi');
+  }
   const chess = window.ThinkChess
     ? window.ThinkChess.create({
         api, h, icon, avatarEl, userOf, nameOf, state, toast, pushToast, navigate, goBack, withBusy, shortTime, fold,
         share: (game) => social && social.shareGame(game),
         onChange: () => games && games.refresh(),
+        updateBadge: updateGamesBadge,
+      })
+    : null;
+  caro = window.ThinkCaro && window.CaroCore
+    ? window.ThinkCaro.create({
+        api, h, icon, avatarEl, userOf, nameOf, state, toast, pushToast, navigate, goBack, withBusy, shortTime, fold,
+        onChange: () => games && games.refresh(),
+        updateBadge: updateGamesBadge,
       })
     : null;
   games = window.ThinkGames
-    ? window.ThinkGames.create({ h, icon, api, state, navigate, goBack, toast, chess, nameOf, userOf, avatarEl })
+    ? window.ThinkGames.create({ h, icon, api, state, navigate, goBack, toast, chess, caro, nameOf, userOf, avatarEl })
     : null;
 
   // Trang cá nhân và bảng tin (public/social-ui.js)
@@ -382,6 +401,7 @@
     state.currentId = null;
     state.everConnected = false;
     if (chess) chess.reset();
+    if (caro) caro.reset();
     if (games) games.reset();
     if (social) social.reset();
     $('#conv-list').replaceChildren();
@@ -419,16 +439,18 @@
     if (!state.me || $('#view-main').hidden) return;
     const hash = location.hash || '#/';
     const chessGame = /^#\/chess\/g\/(\d+)$/.exec(hash);
+    // Cờ caro: #/caro (trang caro), #/caro/bot (ván với máy), #/caro/g/12 (ván / lời thách đấu)
+    const caroPage = /^#\/caro(?:\/(bot)|\/g\/(\d+))?$/.exec(hash);
     // Trang cá nhân của một người (#/u/5) mở ở cột phải; bài đăng (#/p/9, từ thông báo) mở bình luận
     const userPage = /^#\/u\/(\d+)$/.exec(hash);
     const postPage = /^#\/p\/(\d+)$/.exec(hash);
-    const gamesView = hash === '#/chess' || chessGame ? 'chess' : hash === '#/blocks' ? 'blocks' : hash === '#/games' ? 'hub' : null;
+    const gamesView = hash === '#/chess' || chessGame ? 'chess' : caroPage ? 'caro' : hash === '#/blocks' ? 'blocks' : hash === '#/games' ? 'hub' : null;
     const tab = hash === '#/me' || hash === '#/settings' || postPage ? 'me'
       : hash === '#/admin' ? 'admin'
         : gamesView ? 'games'
           : userPage ? (state.tab || 'chats')
             : 'chats';
-    if (tab === 'games' && (!games || (gamesView === 'chess' && !chess))) {
+    if (tab === 'games' && (!games || (gamesView === 'chess' && !chess) || (gamesView === 'caro' && !caro))) {
       navigate('#/', { replace: true });
       return;
     }
@@ -462,6 +484,8 @@
         social.openPost(Number(postPage[1]));
       }
     }
+    // Cờ caro chạy sau cùng: mở / đóng cột phải của caro sau khi các phần khác đã ẩn hiện xong
+    if (caro) caro.route(tab === 'games' && gamesView === 'caro', !caroPage ? null : caroPage[1] ? 'bot' : caroPage[2] ? Number(caroPage[2]) : null);
     showSheet(sheet);
   }
 
@@ -2006,6 +2030,7 @@ ${sections}
       if (state.everConnected) {
         resync();
         if (chess) chess.reload();
+        if (caro) caro.reload();
       }
       state.everConnected = true;
     });
@@ -2033,6 +2058,10 @@ ${sections}
       socket.on('chess:game', (data) => chess.onEvent('chess:game', data));
       socket.on('chess:challenge', (data) => chess.onEvent('chess:challenge', data));
       socket.on('chess:analysis', (data) => chess.onAnalysis(data));
+    }
+    if (caro) {
+      socket.on('caro:game', (data) => caro.onEvent('caro:game', data));
+      socket.on('caro:challenge', (data) => caro.onEvent('caro:challenge', data));
     }
     if (games) socket.on('games:score', (data) => games.onScore(data));
     socket.on('storage:changed', (result) => {
@@ -3544,6 +3573,7 @@ ${sections}
     renderBanner();
     route();
     if (chess) chess.load(); // để hiện số việc cần làm ở tab Trò chơi
+    if (caro) caro.load();
     if (games) games.sync(); // gửi điểm Xếp Khối chơi lúc offline
     syncPush();
     if (LocalDB.ready()) {

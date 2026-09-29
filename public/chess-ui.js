@@ -385,6 +385,11 @@ window.ThinkChess = (() => {
       return n;
     }
     function updateBadge() {
+      // app.js gộp việc cần làm của cờ vua và cờ caro vào một số trên tab Trò chơi
+      if (host.updateBadge) {
+        host.updateBadge();
+        return;
+      }
       const badge = $('#chess-badge');
       if (!badge) return;
       const n = todo();

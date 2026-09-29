@@ -1,0 +1,289 @@
+/* ===== Cờ caro (public/caro-ui.js) =====
+   Bàn cờ kiểu giấy kẻ ô: nền kem, đường kẻ xanh nhạt; X đỏ, O xanh. Có bản cho nền tối.
+   Dùng lại các lớp danh sách / bảng chọn của cờ vua (app.css) để hai game trông giống nhau. */
+:root {
+  --caro-paper: #FFFCF2;
+  --caro-grid: #BFD2EA;
+  --caro-frame: #8FADD5;
+  --caro-x: #D8342C;
+  --caro-o: #2361C8;
+  --caro-last: rgba(242, 176, 30, .32);
+  --caro-shadow: 0 10px 28px rgba(22, 44, 84, .14);
+  --caro-hero: linear-gradient(135deg, #D9502F 0%, #B8382A 52%, #8A241F 100%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --caro-paper: #1A2331;
+    --caro-grid: #2E4360;
+    --caro-frame: #3F5C83;
+    --caro-x: #FF6F66;
+    --caro-o: #65A8FF;
+    --caro-last: rgba(242, 176, 30, .22);
+    --caro-shadow: 0 10px 28px rgba(0, 0, 0, .35);
+  }
+}
+:root[data-theme="dark"] {
+  --caro-paper: #1A2331;
+  --caro-grid: #2E4360;
+  --caro-frame: #3F5C83;
+  --caro-x: #FF6F66;
+  --caro-o: #65A8FF;
+  --caro-last: rgba(242, 176, 30, .22);
+  --caro-shadow: 0 10px 28px rgba(0, 0, 0, .35);
+}
+.is-x { --mark: var(--caro-x); }
+.is-o { --mark: var(--caro-o); }
+
+/* ----- Quân X / O (SVG, nét tròn như viết bút bi) ----- */
+.caro-mark { display: block; overflow: visible; color: var(--mark); }
+.caro-mark path, .caro-mark circle { fill: none; stroke: currentColor; stroke-width: 13; stroke-linecap: round; }
+.caro-mark.is-o circle { stroke-width: 12; }
+.caro-mark.is-new { animation: caro-pop .26s cubic-bezier(.2, 1.4, .4, 1); }
+.caro-mark.is-new path, .caro-mark.is-new circle { stroke-dasharray: 1 1.2; stroke-dashoffset: 1.05; animation: caro-draw .16s ease-out forwards; }
+.caro-mark.is-new path + path { animation-delay: .1s; }
+.caro-mark.is-new circle { animation-duration: .26s; }
+
+/* ----- Bàn cờ ----- */
+.caro-stage { position: relative; width: 100%; }
+.caro-board {
+  position: relative; width: 100%; aspect-ratio: 1;
+  display: grid; grid-template-columns: repeat(15, minmax(0, 1fr)); grid-template-rows: repeat(15, minmax(0, 1fr));
+  background: var(--caro-paper); border-radius: 10px; overflow: hidden;
+  box-shadow: 0 0 0 1.5px var(--caro-frame), var(--caro-shadow);
+  user-select: none; -webkit-user-select: none; touch-action: manipulation;
+}
+.caro-row { display: contents; }
+.caro-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.caro-lines path { fill: none; stroke: var(--caro-grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.caro-cell { position: relative; z-index: 1; display: block; min-width: 0; min-height: 0; width: 100%; height: 100%; padding: 0; border-radius: 0; cursor: default; }
+.caro-board.is-playable .caro-cell { cursor: pointer; }
+.caro-cell .caro-mark { position: absolute; left: 11%; top: 11%; width: 78%; height: 78%; }
+.caro-cell.is-last::before { content: ''; position: absolute; inset: 1px; border-radius: 3px; background: var(--caro-last); }
+.caro-cell.is-win::before { content: ''; position: absolute; inset: 1px; border-radius: 3px; background: color-mix(in srgb, var(--win, var(--caro-x)) 16%, transparent); }
+.caro-board.win-o { --win: var(--caro-o); }
+.caro-cell.is-win .caro-mark { animation: caro-beat .5s ease-in-out .45s 3 alternate; }
+.caro-cell:focus-visible { outline: 2.5px solid var(--turmeric); outline-offset: -2px; z-index: 4; }
+.caro-cell.is-shake { animation: caro-shake .3s ease; }
+.caro-cell.is-shake::after { content: ''; position: absolute; inset: 1px; border-radius: 3px; background: rgba(214, 48, 32, .18); }
+/* Dấu ngắm: chạm lần đầu hiện quân mờ, chạm lần nữa mới đánh */
+.caro-ghost { position: absolute; z-index: 2; width: calc(100% / 15); height: calc(100% / 15); pointer-events: none; border-radius: 3px; }
+.caro-ghost .caro-mark { position: absolute; left: 11%; top: 11%; width: 78%; height: 78%; opacity: .32; }
+.caro-ghost.is-armed { background: color-mix(in srgb, var(--mark) 14%, transparent); box-shadow: inset 0 0 0 2px var(--mark); animation: caro-armed .8s ease-in-out infinite alternate; }
+.caro-ghost.is-armed .caro-mark { opacity: .5; }
+.caro-fx { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.caro-winline { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.caro-winline path { fill: none; stroke-linecap: round; }
+.caro-winline .halo { stroke: color-mix(in srgb, var(--mark) 30%, transparent); stroke-width: .62; opacity: 0; animation: caro-fade .3s ease-out .35s forwards; }
+.caro-winline .core { stroke: var(--mark); stroke-width: .16; stroke-dasharray: 1 1.2; stroke-dashoffset: 1.05; animation: caro-draw .5s cubic-bezier(.4, 0, .2, 1) .12s forwards; }
+.caro-confetti { position: absolute; top: -6%; width: 7%; height: 7%; animation: caro-fall var(--t, 1.4s) cubic-bezier(.3, .1, .6, 1) var(--d, 0s) both; }
+.caro-confetti .caro-mark { width: 100%; height: 100%; }
+.caro-mini.is-preview { width: min(360px, 52vh); border-radius: 12px; box-shadow: 0 0 0 1.5px var(--caro-frame), var(--caro-shadow); }
+
+/* ----- Màn chơi (cột phải / toàn màn hình trên điện thoại) ----- */
+.caro-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; container: caropane / inline-size; }
+.caro-head .icon-btn[aria-pressed="false"] { color: var(--muted); }
+.caro-head-extra { display: contents; }
+.caro-col-body { display: grid; gap: 12px; }
+.caro-game {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 10px 8px calc(18px + var(--safe-bottom));
+}
+.caro-play { width: min(100%, 640px, calc(var(--app-h, 100dvh) - 260px)); min-width: min(100%, 270px); display: grid; gap: 10px; margin-top: auto; }
+.caro-col { width: min(100%, 560px); display: grid; gap: 12px; padding: 0 6px; margin-bottom: auto; }
+@container caropane (min-width: 760px) {
+  .caro-game { display: grid; grid-template-columns: minmax(0, 1fr) 300px; align-items: center; align-content: center; gap: 28px; padding: 20px 28px; }
+  .caro-play { justify-self: end; width: min(100%, 660px, calc(var(--app-h, 100dvh) - 190px)); margin: 0; }
+  .caro-col { width: 100%; padding: 0; margin: 0; }
+}
+
+/* Hai người chơi + đồng hồ mỗi nước */
+.caro-players { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 6px; }
+.caro-player { position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 10px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--line); transition: box-shadow .2s, background-color .2s; }
+.caro-player.is-right { flex-direction: row-reverse; text-align: right; }
+.caro-player.is-turn { box-shadow: inset 0 0 0 2px var(--mark), 0 4px 14px color-mix(in srgb, var(--mark) 22%, transparent); }
+.caro-av { position: relative; flex: none; display: grid; place-items: center; width: 40px; height: 40px; }
+.caro-av .avatar { --size: 36px; font-size: 15px; }
+.caro-av .avatar.is-online::after { display: none; }
+.caro-ring { position: absolute; inset: -3px; width: 46px; height: 46px; transform: rotate(-90deg); pointer-events: none; }
+.caro-ring circle { fill: none; stroke-width: 3; }
+.caro-ring .track { stroke: color-mix(in srgb, var(--mark) 16%, transparent); }
+.caro-ring .left { stroke: var(--mark); stroke-linecap: round; stroke-dasharray: 1 1; transition: stroke-dashoffset .25s linear; }
+.caro-player.is-low .caro-ring .left { stroke: var(--danger); }
+.caro-player-main { flex: 1; min-width: 0; display: grid; }
+.caro-player-name { font-weight: 700; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.caro-player-sub { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.caro-player-sub .is-up { color: var(--jade-ink); }
+.caro-player-sub .is-down { color: var(--danger); }
+/* Dấu X / O gắn ở góc ảnh đại diện */
+.caro-player-mark { position: absolute; right: -5px; bottom: -5px; z-index: 1; width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--mark) 45%, var(--line)); }
+.caro-player.is-right .caro-player-mark { right: auto; left: -5px; }
+.caro-player-mark .caro-mark { width: 15px; height: 15px; }
+.caro-player-mark .caro-mark path, .caro-player-mark .caro-mark circle { stroke-width: 15; }
+.caro-center { min-width: 44px; display: grid; justify-items: center; font-weight: 800; color: var(--muted); font-size: 13px; letter-spacing: .02em; }
+.caro-clock { font-size: 18px; font-variant-numeric: tabular-nums; color: var(--mark, var(--ink)); }
+.caro-clock.is-low { color: var(--danger); animation: caro-tick 1s steps(2, jump-none) infinite; }
+.caro-center small { font-size: 10.5px; font-weight: 700; color: var(--muted); }
+.caro-timebar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: -2px; }
+.caro-timebar span { display: block; height: 100%; width: 100%; border-radius: 2px; background: var(--mark); transform-origin: left center; transition: transform .25s linear; }
+.caro-timebar.is-o span { transform-origin: right center; }
+.caro-timebar.is-low span { background: var(--danger); }
+.avatar.caro-bot-av { --av: #6A55C2; }
+.avatar.caro-bot-av .ic { width: 58%; height: 58%; stroke-width: 1.8; }
+
+/* Dòng trạng thái, kết quả, nút */
+.caro-status { min-height: 24px; text-align: center; font-weight: 700; color: var(--ink-2); }
+.caro-status.is-turn { color: var(--jade-ink); }
+.caro-status.is-hint { color: var(--turmeric-ink); }
+.caro-status.is-wait::after { content: ''; display: inline-block; width: 1.2em; text-align: left; animation: caro-dots 1.2s steps(4, end) infinite; }
+.caro-status[hidden] { display: none; }
+.caro-note { text-align: center; font-size: 13px; color: var(--muted); }
+.caro-actions { display: flex; gap: 8px; }
+.caro-actions .btn { flex: 1; min-width: 0; padding: 0 10px; gap: 6px; white-space: nowrap; }
+.caro-actions .btn .ic { width: 18px; height: 18px; }
+.caro-result { position: relative; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 18px; background: var(--field); overflow: hidden; animation: caro-rise .35s cubic-bezier(.2, 1.3, .4, 1); }
+.caro-result.is-win { background: var(--jade-wash); }
+.caro-result.is-loss { background: var(--danger-wash); }
+.caro-result-ic { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--muted); }
+.caro-result-ic .ic { width: 24px; height: 24px; }
+.caro-result.is-win .caro-result-ic { background: var(--turmeric); color: #14201C; }
+.caro-result.is-loss .caro-result-ic { color: var(--danger); }
+.caro-result-main { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.caro-result-main strong { font-size: 21px; font-weight: 800; letter-spacing: -.01em; }
+.caro-result.is-win .caro-result-main strong, .caro-result.is-win .caro-result-delta strong { color: var(--jade-ink); }
+.caro-result.is-loss .caro-result-main strong, .caro-result.is-loss .caro-result-delta strong { color: var(--danger); }
+.caro-result-main span, .caro-result-delta span { font-size: 13.5px; color: var(--ink-2); }
+.caro-result-delta { flex: none; display: grid; justify-items: end; }
+.caro-result-delta strong { font-size: 22px; font-weight: 800; }
+.caro-loading { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); }
+.caro-loading .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--jade-ink); border-right-color: transparent; animation: spin .7s linear infinite; }
+.caro-empty { flex: 1; display: grid; place-items: center; align-content: center; gap: 20px; padding: 32px; text-align: center; color: var(--muted); }
+.caro-empty p { max-width: 340px; }
+.caro-botline { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+.caro-botline strong { color: var(--ink-2); }
+.caro-keys { text-align: center; font-size: 12px; color: var(--muted); }
+@media (pointer: coarse) { .caro-keys { display: none; } }
+
+/* ----- Trang Cờ caro (cột trái) ----- */
+/* Cột flex, phần tử không co lại (phần tử có overflow: hidden trong lưới cuộn sẽ bị bóp nhỏ) */
+.caro-home { display: flex; flex-direction: column; gap: 18px; }
+.caro-home > * { flex: none; }
+.caro-hero { position: relative; isolation: isolate; overflow: hidden; display: grid; gap: 12px; padding: 18px; border-radius: 22px; color: #fff; background: var(--caro-hero); }
+/* Nền kẻ ô mờ như trang vở */
+.caro-hero::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background-image: linear-gradient(rgba(255, 255, 255, .09) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .09) 1px, transparent 1px);
+  background-size: 22px 22px; background-position: -1px -1px;
+  -webkit-mask-image: linear-gradient(200deg, #000 10%, transparent 75%); mask-image: linear-gradient(200deg, #000 10%, transparent 75%);
+}
+.caro-hero-top { display: flex; align-items: center; gap: 14px; }
+.caro-medal { flex: none; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--turmeric); color: #14201C; box-shadow: 0 3px 0 rgba(0, 0, 0, .15); }
+.caro-medal .ic { width: 28px; height: 28px; }
+.caro-hero-main { flex: 1; min-width: 0; display: grid; }
+.caro-hero-label { font-size: 12.5px; font-weight: 600; color: rgba(255, 255, 255, .85); }
+.caro-hero-rating { font-size: 40px; font-weight: 800; line-height: 1.05; letter-spacing: -.03em; }
+.caro-hero-rank { display: grid; justify-items: end; }
+.caro-hero-rank strong { font-size: 26px; font-weight: 800; }
+.caro-hero-stats { font-size: 13.5px; line-height: 1.45; color: rgba(255, 255, 255, .95); }
+.caro-hero-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; }
+.caro-action {
+  display: grid; justify-items: start; align-content: start; gap: 2px;
+  min-height: 88px; padding: 12px 14px; border-radius: 16px; text-align: left;
+  background: #fff; color: #8A241F; box-shadow: 0 3px 0 rgba(0, 0, 0, .14);
+  transition: transform .1s, background-color .15s;
+}
+.caro-action:hover { background: #FFF3EE; }
+.caro-action:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, .14); }
+.caro-action .ic { width: 26px; height: 26px; margin-bottom: 4px; }
+.caro-action strong { font-size: 16px; font-weight: 800; line-height: 1.2; white-space: nowrap; }
+.caro-action span { font-size: 12px; font-weight: 600; color: #9A5A50; line-height: 1.25; }
+.caro-action.is-ghost { background: rgba(255, 255, 255, .16); color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22); }
+.caro-action.is-ghost:hover { background: rgba(255, 255, 255, .24); }
+.caro-action.is-ghost span { color: rgba(255, 255, 255, .85); }
+.caro-resume { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--turmeric-wash); color: var(--ink); text-align: left; width: 100%; }
+.caro-resume:hover { filter: brightness(.98); }
+.caro-resume-main { flex: 1; min-width: 0; display: grid; }
+.caro-resume-main strong { font-weight: 800; }
+.caro-resume-main span { font-size: 13px; color: var(--ink-2); }
+.caro-resume .caro-mini { flex: none; width: 46px; }
+.caro-resume-go { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 999px; background: var(--jade); color: #fff; font-weight: 800; font-size: 13.5px; }
+.caro-resume-go .ic { width: 15px; height: 15px; }
+.caro-pill-mark { display: inline-block; width: 13px; height: 13px; vertical-align: -1px; margin: 0 1px; }
+.chess-pill.is-caro-turn { background: var(--jade); color: #fff; }
+/* Lời thách đấu: nút Nhận / Từ chối xuống dòng dưới cho tên và thông tin đủ chỗ */
+.chess-row.caro-ch-row { flex-wrap: wrap; row-gap: 0; }
+.caro-ch-row .chess-row-main { flex-basis: 100%; }
+.caro-ch-row .chess-row-actions { flex: 1; justify-content: flex-end; gap: 8px; padding: 0 10px 10px 68px; }
+.caro-ch-row .chess-row-actions .btn { min-width: 88px; }
+.caro-bots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.caro-bot-stat { display: grid; justify-items: center; gap: 1px; padding: 12px 6px 10px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); text-align: center; }
+.caro-bot-stat:hover { background: var(--field); }
+.caro-bot-stat .caro-level { font-size: 13px; font-weight: 800; }
+.caro-bot-stat strong { font-size: 26px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.caro-bot-stat small { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.caro-level.is-easy { color: #2E9A5A; }
+.caro-level.is-medium { color: #C98A08; }
+.caro-level.is-hard { color: #C8432A; }
+.caro-toast-ic .ic { fill: none; stroke: currentColor; }
+
+/* ----- Bảng chọn: đối thủ, luật, thời gian, bên đi ----- */
+.caro-choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.caro-choices.is-2 { grid-template-columns: repeat(2, 1fr); }
+.caro-choices.is-4 { grid-template-columns: repeat(4, 1fr); }
+.caro-choice {
+  display: grid; justify-items: center; align-content: center; gap: 3px; min-height: 58px; padding: 9px 6px;
+  border-radius: 14px; background: var(--field); border: 1.5px solid transparent; text-align: center;
+}
+.caro-choice strong { font-size: 14.5px; font-weight: 800; line-height: 1.2; }
+.caro-choice span { font-size: 11.5px; font-weight: 600; color: var(--muted); line-height: 1.25; }
+.caro-choice.is-wide { grid-column: 1 / -1; min-height: 46px; }
+.caro-choice[aria-checked="true"] { background: var(--jade-wash); border-color: var(--jade-ink); color: var(--jade-ink); }
+.caro-choice[aria-checked="true"] span { color: var(--jade-ink); }
+.caro-choice-art { display: flex; justify-content: center; gap: 2px; height: 22px; }
+.caro-choice-art .caro-mark { width: 22px; height: 22px; }
+.caro-choice.is-level { min-height: 84px; }
+.caro-choice.is-level em { font-style: normal; font-size: 11px; font-weight: 700; color: var(--ink-2); }
+.caro-rule-hint { min-height: 2.9em; }
+.caro-rules { display: grid; gap: 14px; }
+.caro-rules li { line-height: 1.5; color: var(--ink-2); }
+.caro-rules ul { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.caro-rules h3 { font-size: 15px; font-weight: 800; }
+.caro-rule-demo { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.caro-rule-fig { margin: 0; display: grid; gap: 8px; justify-items: center; align-content: start; text-align: center; }
+.caro-rule-fig .caro-mini { width: min(100%, 150px); }
+
+/* Hình minh họa nhỏ (trang chọn game, thẻ ván dở) */
+.caro-mini {
+  position: relative; display: grid; grid-template-columns: repeat(var(--n, 5), 1fr); aspect-ratio: 1;
+  background: var(--caro-paper); border-radius: 8px; overflow: hidden;
+  box-shadow: 0 0 0 1px var(--caro-frame);
+  --caro-x: #D8342C; --caro-o: #2361C8;
+}
+.caro-mini > span { position: relative; aspect-ratio: 1; box-shadow: inset -1px -1px 0 var(--caro-grid); }
+.caro-mini .caro-mark { position: absolute; left: 14%; top: 14%; width: 72%; height: 72%; }
+.caro-mini .caro-winline { z-index: 1; }
+.caro-mini .caro-winline .core, .caro-mini .caro-winline .halo { animation: none; stroke-dashoffset: 0; opacity: 1; }
+.game-card.is-caro { background: linear-gradient(135deg, #E8683F 0%, #C7432B 50%, #8E261F 100%); }
+.game-card.is-caro .game-cta { color: #8E261F; }
+.game-art-caro { flex: none; width: 112px; transform: rotate(5deg); border-radius: 10px; box-shadow: 0 8px 18px rgba(0, 0, 0, .3); --caro-paper: #FFFCF2; --caro-grid: #BFD2EA; --caro-frame: #8FADD5; }
+.game-art-caro .caro-mini { border-radius: 10px; }
+
+@keyframes caro-draw { to { stroke-dashoffset: 0; } }
+@keyframes caro-fade { to { opacity: 1; } }
+@keyframes caro-pop { 0% { transform: scale(.55); } 100% { transform: scale(1); } }
+@keyframes caro-beat { from { transform: scale(1); } to { transform: scale(1.18); } }
+@keyframes caro-armed { from { opacity: .75; } to { opacity: 1; } }
+@keyframes caro-shake { 0%, 100% { transform: none; } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+@keyframes caro-rise { from { opacity: 0; transform: translateY(12px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes caro-tick { 50% { opacity: .55; } }
+@keyframes caro-dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+@keyframes caro-fall {
+  0% { opacity: 0; transform: translateY(0) rotate(0) scale(.4); }
+  12% { opacity: 1; transform: translateY(10%) rotate(40deg) scale(1); }
+  100% { opacity: 0; transform: translateY(1400%) rotate(var(--r, 260deg)) scale(.9); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .caro-mark.is-new, .caro-cell.is-win .caro-mark, .caro-ghost.is-armed, .caro-confetti { animation: none; }
+  .caro-mark.is-new path, .caro-mark.is-new circle, .caro-winline .core { animation: none; stroke-dashoffset: 0; }
+  .caro-winline .halo { animation: none; opacity: 1; }
+}
