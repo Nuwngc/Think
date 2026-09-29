@@ -344,7 +344,7 @@ html.auth-mode, html.auth-mode body { background: #000000; }
 .chat { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); padding-right: var(--safe-right); }
 .chat-empty { flex: 1; display: grid; place-items: center; padding: 40px; text-align: center; color: var(--muted); }
 .chat-empty p { max-width: 300px; }
-.chat-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.chat-pane { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .chat-head { display: flex; align-items: center; gap: 10px; padding: calc(8px + var(--safe-top)) 14px 8px 8px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .chat-title { flex: 1; min-width: 0; }
 .chat-title h2 { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -378,7 +378,7 @@ html.auth-mode, html.auth-mode body { background: #000000; }
   font-size: 15.5px; line-height: 1.4;
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
-.msg.mine .bubble { background: var(--jade); color: #fff; }
+.msg.mine .bubble { background: linear-gradient(135deg, var(--mine-a, var(--jade)), var(--mine-b, var(--mine-a, var(--jade)))); color: #fff; }
 .msg.theirs .bubble { background: var(--theirs); color: var(--ink); box-shadow: inset 0 0 0 1px var(--theirs-line); }
 .msg.mine:not(.last) .bubble { border-bottom-right-radius: 6px; }
 .msg.mine:not(.first) .bubble { border-top-right-radius: 6px; }
@@ -426,7 +426,7 @@ html.auth-mode, html.auth-mode body { background: #000000; }
 .composer textarea:focus { border-color: color-mix(in srgb, var(--jade-ink), transparent 50%); }
 .send-btn { display: grid; place-items: center; width: 42px; height: 42px; flex: none; border-radius: 50%; background: var(--field); color: var(--muted); transition: background-color .15s, color .15s; }
 .send-btn .ic { stroke-width: 2.4; }
-.send-btn.is-ready { background: var(--jade); color: #fff; }
+.send-btn.is-ready { background: var(--mine-a, var(--jade)); color: #fff; }
 
 /* ===== Trả lời, cảm xúc, tin hệ thống ===== */
 .sys-msg { display: flex; justify-content: center; margin: 12px 0 6px; padding: 0 24px; text-align: center; }
@@ -1188,3 +1188,133 @@ a.chess-row-main:hover { background: var(--field); }
 .collapse > summary::after { content: '›'; margin-left: auto; font-size: 20px; color: var(--muted); transition: transform .15s; }
 .collapse[open] > summary::after { transform: rotate(90deg); }
 .collapse .collapse-body { display: grid; gap: 12px; padding: 0 14px 14px; }
+
+/* ===== Chat 2.1.0: chủ đề, gửi nhanh, sửa, ghim, tìm, chuyển tiếp, nhắc tên, bình chọn ===== */
+.send-emoji { display: none; font-size: 25px; line-height: 1; }
+.send-btn.is-emoji { background: transparent; }
+.send-btn.is-emoji .ic { display: none; }
+.send-btn.is-emoji .send-emoji { display: block; transition: transform .12s; }
+.send-btn.is-emoji:active .send-emoji { transform: scale(1.25); }
+.jump-btn { background: var(--mine-a, var(--jade)); }
+.reply-bar-title .ic { width: 14px; height: 14px; vertical-align: -2px; }
+
+/* Danh sách cuộc trò chuyện: ghim, tắt thông báo */
+.conv-flag { flex: none; display: inline-grid; color: var(--muted); }
+.conv-flag .ic { width: 15px; height: 15px; }
+.conv.is-muted .badge { background: color-mix(in srgb, var(--muted), transparent 20%); }
+
+/* Nhãn trên bong bóng: đã chuyển tiếp / đã chỉnh sửa / đã ghim */
+.msg-tags { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--muted); margin: 0 10px 3px; }
+.msg-tags span { display: inline-flex; align-items: center; gap: 4px; }
+.msg-tags .ic { width: 13px; height: 13px; }
+
+/* @nhắc tên */
+.mention { font-weight: 700; }
+.msg.theirs .mention { color: var(--jade-ink); }
+.mention.is-me { background: color-mix(in srgb, var(--turmeric), transparent 62%); color: inherit !important; border-radius: 5px; padding: 0 3px; }
+.msg.theirs .bubble.mentions-me { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--turmeric), transparent 25%); }
+.mention-box {
+  position: absolute; left: 10px; right: 10px; bottom: calc(100% + 6px); max-height: 260px; overflow-y: auto;
+  padding: 6px; border-radius: 16px; background: var(--surface); z-index: 5;
+  box-shadow: 0 12px 30px rgba(10, 25, 20, .2), 0 0 0 1px var(--line);
+}
+.mention-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; text-align: left; }
+.mention-item.is-active, .mention-item:hover { background: var(--field); }
+.mention-item .person-sub { margin-left: auto; }
+
+/* Thanh tin đã ghim */
+.pin-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.pin-bar-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left; padding: 2px 0; }
+.pin-bar-main > .ic { width: 18px; height: 18px; color: var(--mine-a, var(--jade-ink)); flex: none; }
+.pin-bar-text { min-width: 0; display: grid; }
+.pin-bar-text strong { font-size: 12.5px; font-weight: 700; color: var(--mine-a, var(--jade-ink)); }
+.pin-bar-text span { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pins-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.pin-row { display: flex; align-items: center; gap: 8px; }
+.pin-row-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-radius: 14px; text-align: left; }
+.pin-row-main:hover { background: var(--field); }
+.pin-row-text { display: block; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Tìm tin nhắn trong cuộc trò chuyện */
+.chat-search { position: absolute; left: 0; right: 0; top: var(--chat-head-h, 64px); bottom: 0; z-index: 6; display: flex; flex-direction: column; background: var(--bg); }
+.chat-search-bar { display: flex; align-items: center; gap: 8px; padding: 10px 8px 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.chat-search-bar > .ic { color: var(--muted); }
+.chat-search-bar input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--field); font-size: 16px; color: var(--ink); outline: none; }
+.chat-search-bar input:focus { border-color: var(--jade-ink); }
+.chat-search-state { padding: 10px 18px 4px; font-size: 13px; color: var(--muted); }
+.chat-search-results { list-style: none; margin: 0; padding: 4px 8px 20px; overflow-y: auto; flex: 1; }
+.search-hit { width: 100%; display: flex; align-items: flex-start; gap: 12px; padding: 10px; border-radius: 14px; text-align: left; }
+.search-hit:hover { background: var(--field); }
+.search-hit-head { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; }
+.search-hit-head time { color: var(--muted); font-size: 12px; flex: none; }
+.search-hit-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 14.5px; color: var(--ink-2); }
+.search-hit-text mark { background: color-mix(in srgb, var(--turmeric), transparent 55%); color: inherit; border-radius: 4px; padding: 0 2px; }
+
+/* Bảng tùy chỉnh đoạn chat */
+.conv-quick-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
+.conv-quick { display: grid; justify-items: center; gap: 6px; padding: 10px 4px; border-radius: 16px; font-size: 12.5px; font-weight: 600; text-align: center; color: var(--ink-2); }
+.conv-quick:hover { background: var(--field); }
+.conv-quick-ic { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--field); color: var(--ink); }
+.conv-quick.is-on .conv-quick-ic { background: color-mix(in srgb, var(--jade), transparent 82%); color: var(--jade-ink); }
+.ctheme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 10px; }
+.ctheme { display: grid; justify-items: center; gap: 6px; padding: 8px 4px; border-radius: 14px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.ctheme-dot { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--sw-a), var(--sw-b)); box-shadow: 0 2px 6px rgba(0, 0, 0, .15); }
+.ctheme.is-on { background: var(--field); }
+.ctheme.is-on .ctheme-dot { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--sw-a); }
+.emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; }
+.emoji-pick { height: 44px; border-radius: 12px; font-size: 24px; line-height: 1; }
+.emoji-pick:hover { background: var(--field); }
+.emoji-pick.is-on { background: color-mix(in srgb, var(--jade), transparent 82%); box-shadow: inset 0 0 0 2px var(--jade-ink); }
+
+/* Ảnh đã gửi */
+.media-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.media-thumb { aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: var(--field); padding: 0; }
+.media-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.media-more { grid-column: 1 / -1; justify-self: center; margin-top: 8px; }
+
+/* Chuyển tiếp */
+.forward-preview { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--field); font-size: 14px; color: var(--ink-2); }
+.forward-preview img { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; flex: none; }
+.forward-preview span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Bình chọn */
+.poll-options { display: grid; gap: 8px; }
+.poll-option-row { display: flex; align-items: center; gap: 6px; }
+.poll-option-row input { flex: 1; min-width: 0; }
+.bubble.poll { width: min(300px, 72vw); padding: 12px 12px 10px; white-space: normal; background: var(--theirs) !important; color: var(--ink) !important; box-shadow: inset 0 0 0 1px var(--theirs-line) !important; }
+.poll-q { display: flex; gap: 8px; font-weight: 700; font-size: 15.5px; line-height: 1.3; }
+.poll-q .ic { width: 18px; height: 18px; flex: none; margin-top: 1px; color: var(--mine-a, var(--jade-ink)); }
+.poll-sub { font-size: 12px; color: var(--muted); margin: 3px 0 10px 26px; }
+.poll-opts { display: grid; gap: 7px; }
+.poll-opt {
+  position: relative; display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 7px 10px; border-radius: 12px; text-align: left;
+  background: var(--field); overflow: hidden; isolation: isolate; font-size: 14.5px;
+}
+.poll-opt::before { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--pct); background: color-mix(in srgb, var(--mine-a, var(--jade)), transparent 80%); z-index: -1; transition: width .35s ease; }
+.poll-opt.is-on { box-shadow: inset 0 0 0 1.5px var(--mine-a, var(--jade-ink)); }
+.poll-opt:disabled { cursor: default; }
+.poll-mark { width: 20px; height: 20px; flex: none; border-radius: 50%; display: grid; place-items: center; border: 2px solid color-mix(in srgb, var(--ink), transparent 60%); }
+.poll-mark.is-multi { border-radius: 6px; }
+.poll-opt.is-on .poll-mark { background: var(--mine-a, var(--jade)); border-color: var(--mine-a, var(--jade)); color: #fff; }
+.poll-mark .ic { width: 13px; height: 13px; stroke-width: 3; }
+.poll-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.poll-voters { display: flex; }
+.poll-voters .avatar { margin-left: -6px; box-shadow: 0 0 0 2px var(--field); }
+.poll-count { flex: none; font-size: 12.5px; font-weight: 700; color: var(--ink-2); min-width: 32px; text-align: right; }
+.poll-foot { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.poll.is-closed .poll-opt.is-top { font-weight: 700; }
+
+/* Quản trị: báo lỗi app */
+.seg-badge { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); vertical-align: 2px; margin-left: 3px; }
+.errors-list { list-style: none; margin: 0 16px 24px; padding: 0; display: grid; gap: 10px; }
+.error-card { display: grid; gap: 6px; padding: 12px 12px 10px 14px; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.error-card.is-fatal { box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger), transparent 55%); }
+.error-head { display: flex; align-items: center; gap: 8px; }
+.error-head .icon-btn { margin-left: auto; width: 34px; height: 34px; }
+.error-kind { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--field); color: var(--ink-2); }
+.error-card.is-fatal .error-kind { background: color-mix(in srgb, var(--danger), transparent 85%); color: var(--danger); }
+.error-count { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.error-msg { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.error-meta { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.error-stack summary { font-size: 12.5px; color: var(--jade-ink); cursor: pointer; }
+.error-stack pre { margin: 6px 0 0; max-height: 260px; overflow: auto; font-size: 11px; line-height: 1.45; padding: 8px 10px; border-radius: 10px; background: var(--field); white-space: pre; }

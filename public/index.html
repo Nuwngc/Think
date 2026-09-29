@@ -61,6 +61,16 @@
     <symbol id="i-heart-fill" viewBox="0 0 24 24"><path fill="currentColor" d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/></symbol>
     <symbol id="i-comment" viewBox="0 0 24 24"><path d="M20 11.5c0 3.9-3.6 7-8 7-1 0-2-.2-2.9-.5L4 19.5l1.3-3.6A6.6 6.6 0 0 1 4 11.5c0-3.9 3.6-7 8-7s8 3.1 8 7Z"/></symbol>
     <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5Z"/><path d="M12 14v6"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
+    <symbol id="i-bell-off" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/><path d="M4 4l16 16"/></symbol>
+    <symbol id="i-poll" viewBox="0 0 24 24"><path d="M5 20V11"/><path d="M12 20V4"/><path d="M19 20v-6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-forward" viewBox="0 0 24 24"><path d="m14 5 7 7-7 7"/><path d="M21 12H10a6 6 0 0 0-6 6v1"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16Z"/><path d="m13.5 6.5 4 4"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8Z"/><circle cx="7.5" cy="11" r=".9"/><circle cx="10" cy="7.3" r=".9"/><circle cx="14.6" cy="7.3" r=".9"/></symbol>
+    <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.3a4 4 0 0 0 7 0"/><path d="M9 9.6h.01M15 9.6h.01"/></symbol>
     <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></symbol>
     <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-2.5h6L17 8h3v11H4Z"/><circle cx="12" cy="13" r="3.5"/></symbol>
     <symbol id="i-feed" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h5"/></symbol>
@@ -319,7 +329,8 @@
         <header class="side-head"><h1 class="side-title">Quản trị</h1></header>
         <div class="seg" role="tablist" aria-label="Mục quản trị">
           <button class="seg-btn" type="button" role="tab" id="seg-accounts" data-seg="accounts" aria-selected="true" aria-controls="admin-accounts">Tài khoản</button>
-          <button class="seg-btn" type="button" role="tab" id="seg-storage" data-seg="storage" aria-selected="false" aria-controls="admin-storage" tabindex="-1">Bộ nhớ máy chủ</button>
+          <button class="seg-btn" type="button" role="tab" id="seg-storage" data-seg="storage" aria-selected="false" aria-controls="admin-storage" tabindex="-1">Bộ nhớ</button>
+          <button class="seg-btn" type="button" role="tab" id="seg-errors" data-seg="errors" aria-selected="false" aria-controls="admin-errors" tabindex="-1">Báo lỗi app <span class="seg-badge" id="errors-badge" hidden></span></button>
         </div>
         <div class="page-body" id="admin-accounts" role="tabpanel" aria-labelledby="seg-accounts">
           <div id="storage-alert"></div>
@@ -344,6 +355,17 @@
           <ul id="admin-list" class="admin-list"></ul>
         </div>
       </div>
+        <div class="page-body" id="admin-errors" role="tabpanel" aria-labelledby="seg-errors" hidden>
+          <section class="panel">
+            <div class="panel-row">
+              <h3>Báo lỗi app</h3>
+              <button class="btn btn-sm btn-danger-quiet" type="button" id="errors-clear" hidden>Xóa hết</button>
+            </div>
+            <p class="hint">App Think Beta và trang web tự gửi lỗi về đây (app bị tắt đột ngột, màn hình lỗi, lỗi JavaScript), kèm tên máy, bản Android và bản app. Lỗi giống nhau được gộp lại và đếm số lần.</p>
+            <p class="hint" id="errors-summary"></p>
+          </section>
+          <ul id="errors-list" class="errors-list"></ul>
+        </div>
         <div class="page-body" id="admin-storage" role="tabpanel" aria-labelledby="seg-storage" hidden>
           <section class="panel storage-card" id="storage-card" aria-labelledby="storage-title">
             <div class="panel-row">
@@ -435,19 +457,32 @@
             <p id="chat-status"></p>
           </div>
           <button class="icon-btn" type="button" id="chess-dm-btn" data-action="chess-challenge" aria-label="Thách một ván cờ" hidden><svg class="ic ic-knight"><use href="#i-knight"/></svg></button>
-          <button class="icon-btn" type="button" id="group-info-btn" data-action="group-info" aria-label="Thông tin nhóm" hidden><svg class="ic"><use href="#i-info"/></svg></button>
+          <button class="icon-btn" type="button" id="chat-search-btn" data-action="chat-search" aria-label="Tìm tin nhắn"><svg class="ic"><use href="#i-search"/></svg></button>
+          <button class="icon-btn" type="button" id="group-info-btn" data-action="conv-info" aria-label="Tùy chỉnh đoạn chat"><svg class="ic"><use href="#i-info"/></svg></button>
           <button class="icon-btn bubble-only" type="button" data-action="open-app" aria-label="Mở trong app Think"><svg class="ic"><use href="#i-expand"/></svg></button>
         </header>
+        <div id="pin-bar" class="pin-bar" hidden></div>
+        <div id="chat-search" class="chat-search" hidden>
+          <div class="chat-search-bar">
+            <svg class="ic"><use href="#i-search"/></svg>
+            <input id="chat-search-input" type="search" placeholder="Tìm trong cuộc trò chuyện" aria-label="Tìm tin nhắn trong cuộc trò chuyện" autocomplete="off" enterkeyhint="search">
+            <button class="icon-btn" type="button" data-action="chat-search-close" aria-label="Đóng tìm kiếm"><svg class="ic"><use href="#i-close"/></svg></button>
+          </div>
+          <p id="chat-search-state" class="chat-search-state"></p>
+          <ul id="chat-search-results" class="chat-search-results"></ul>
+        </div>
         <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions"></div>
         <div class="chat-foot">
           <button id="jump-btn" class="jump-btn" type="button" hidden>Có tin nhắn mới</button>
           <p id="typing" class="typing" hidden></p>
           <div id="reply-bar" class="reply-bar" hidden></div>
+          <div id="mention-box" class="mention-box" role="listbox" aria-label="Nhắc tên" hidden></div>
           <form id="composer" class="composer" autocomplete="off">
+            <button type="button" class="icon-btn" data-action="composer-more" aria-label="Thêm: bình chọn…"><svg class="ic"><use href="#i-plus"/></svg></button>
             <button type="button" class="icon-btn" data-action="pick-image" aria-label="Gửi ảnh"><svg class="ic"><use href="#i-image"/></svg></button>
             <input id="image-input" type="file" accept="image/*" multiple hidden>
             <textarea id="composer-input" rows="1" placeholder="Nhắn tin" aria-label="Nội dung tin nhắn" maxlength="4000"></textarea>
-            <button type="submit" class="send-btn" aria-label="Gửi"><svg class="ic"><use href="#i-send"/></svg></button>
+            <button type="submit" class="send-btn" aria-label="Gửi"><svg class="ic"><use href="#i-send"/></svg><span class="send-emoji" aria-hidden="true"></span></button>
           </form>
         </div>
       </div>
@@ -498,6 +533,65 @@
       <div class="sheet-foot">
         <button class="btn btn-primary btn-block" type="button" id="new-group-create" disabled>Chọn ít nhất 2 người</button>
       </div>
+    </section>
+
+    <section id="sheet-conv" class="sheet" role="dialog" aria-modal="true" aria-labelledby="conv-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="conv-title">Tùy chỉnh đoạn chat</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body" id="conv-body"></div>
+    </section>
+
+    <section id="sheet-forward" class="sheet" role="dialog" aria-modal="true" aria-labelledby="forward-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="forward-title">Chuyển tiếp</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <div id="forward-preview" class="forward-preview"></div>
+        <input id="forward-search" class="search-input" type="search" placeholder="Tìm cuộc trò chuyện" aria-label="Tìm cuộc trò chuyện để gửi" autocomplete="off">
+        <ul id="forward-list" class="people-list"></ul>
+      </div>
+      <footer class="sheet-foot"><button class="btn btn-primary btn-block" type="button" id="forward-send" disabled>Chọn nơi gửi</button></footer>
+    </section>
+
+    <section id="sheet-poll" class="sheet" role="dialog" aria-modal="true" aria-labelledby="poll-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="poll-title">Tạo bình chọn</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <form id="poll-form" class="panel" novalidate>
+          <label class="field"><span>Câu hỏi</span>
+            <input name="question" maxlength="200" placeholder="vd: Cuối tuần đi đâu?" autocomplete="off" required>
+          </label>
+          <div class="panel">
+            <h3>Các lựa chọn</h3>
+            <div id="poll-options" class="poll-options"></div>
+            <button class="btn btn-sm" type="button" id="poll-add">Thêm lựa chọn</button>
+          </div>
+          <label class="check-row"><input type="checkbox" name="multi"> <span>Cho chọn nhiều đáp án</span></label>
+          <p class="form-error" role="alert" hidden></p>
+          <button class="btn btn-primary btn-block" type="submit">Gửi bình chọn</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="sheet-pins" class="sheet" role="dialog" aria-modal="true" aria-labelledby="pins-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="pins-title">Tin nhắn đã ghim</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body"><ul id="pins-list" class="pins-list"></ul></div>
+    </section>
+
+    <section id="sheet-media" class="sheet" role="dialog" aria-modal="true" aria-labelledby="media-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="media-title">Ảnh đã gửi</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body"><div id="media-grid" class="media-grid"></div></div>
     </section>
 
     <section id="sheet-group" class="sheet" role="dialog" aria-modal="true" aria-labelledby="group-title" tabindex="-1" hidden>
