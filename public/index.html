@@ -19,12 +19,15 @@
   <link rel="preload" href="/fonts/be-vietnam-pro-vietnamese-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/app.css">
   <link rel="stylesheet" href="/blocks.css">
+  <link rel="stylesheet" href="/caro.css">
   <script src="/theme.js"></script>
   <script src="/socket.io/socket.io.min.js" defer></script>
   <script src="/localdb.js" defer></script>
   <script src="/chess-ui.js" defer></script>
   <script src="/blocks-core.js" defer></script>
   <script src="/blocks.js" defer></script>
+  <script src="/caro-core.js" defer></script>
+  <script src="/caro-ui.js" defer></script>
   <script src="/games-ui.js" defer></script>
   <script src="/social-ui.js" defer></script>
   <script src="/app.js" defer></script>
@@ -74,6 +77,11 @@
     <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="m12 3.2 2.7 5.6 6.1.8-4.5 4.2 1.1 6-5.4-3-5.4 3 1.1-6-4.5-4.2 6.1-.8Z"/></symbol>
     <symbol id="i-thumb" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M7 10.5v9H4.5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Zm2 9h7.9a2 2 0 0 0 2-1.6l1.3-6A2 2 0 0 0 18.2 9.5H14l.7-3.4A1.8 1.8 0 0 0 13 4l-4 5.9Z"/></symbol>
     <symbol id="i-book" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5a1.5 1.5 0 0 0 0 3H20v1H6.5A3.5 3.5 0 0 1 3 18.5V5.5Zm4 1v2h8v-2Z"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-swap" viewBox="0 0 24 24"><path d="m7 4-4 4 4 4"/><path d="M3 8h14"/><path d="m17 12 4 4-4 4"/><path d="M21 16H7"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6"/><path d="M18 6.5a8 8 0 0 1 0 11"/></symbol>
+    <symbol id="i-volume-off" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></symbol>
+    <symbol id="i-caro" viewBox="0 0 24 24"><path d="m4 4 6 6M10 4l-6 6"/><circle cx="16.5" cy="16.5" r="3.8"/></symbol>
     <symbol id="i-group" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18.2 14.8c1.8.8 3 2.5 3.3 5.2"/></symbol>
   </svg>
 
@@ -148,7 +156,7 @@
         <p id="conn-status" class="conn-status" role="status" hidden>Đang kết nối lại… Nếu app vừa ngủ, máy chủ cần khoảng 1 phút để thức dậy.</p>
       </section>
 
-      <!-- Tab Trò chơi: trang chọn game (public/games-ui.js) và Cờ vua (public/chess-ui.js vẽ nội dung) -->
+      <!-- Tab Trò chơi: trang chọn game (public/games-ui.js), Cờ vua (public/chess-ui.js) và Cờ caro (public/caro-ui.js vẽ nội dung) -->
       <section id="page-games" class="tab-page" aria-label="Trò chơi" hidden>
         <div id="games-hub" class="games-view">
           <header class="side-head">
@@ -164,6 +172,15 @@
             <button class="icon-btn" type="button" data-action="chess-board" aria-label="Bảng xếp hạng"><svg class="ic"><use href="#i-leaderboard"/></svg></button>
           </header>
           <div class="page-body chess-home" id="chess-home"></div>
+        </div>
+        <div id="games-caro" class="games-view" hidden>
+          <header class="side-head">
+            <a class="icon-btn" href="#/games" data-action="games-home" aria-label="Về trang Trò chơi"><svg class="ic"><use href="#i-back"/></svg></a>
+            <h1 class="side-title">Cờ caro</h1>
+            <button class="icon-btn" type="button" id="caro-rules-btn" aria-label="Luật chơi"><svg class="ic"><use href="#i-info"/></svg></button>
+            <button class="icon-btn" type="button" id="caro-board-btn" aria-label="Bảng xếp hạng cờ caro"><svg class="ic"><use href="#i-leaderboard"/></svg></button>
+          </header>
+          <div class="page-body caro-home" id="caro-home"></div>
         </div>
       </section>
 
@@ -435,6 +452,7 @@
         </div>
       </div>
       <div id="chess-pane" class="chess-pane" hidden></div>
+      <div id="caro-pane" class="caro-pane" hidden></div>
       <div id="blocks-pane" class="blocks-pane" hidden></div>
       <div id="profile-pane" class="profile-pane" hidden></div>
     </section>

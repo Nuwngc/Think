@@ -1,13 +1,13 @@
 'use strict';
-/* Mục "Trò chơi" của bản web: trang chọn game (Cờ vua, Xếp Khối) + mở game Xếp Khối ở cột phải
-   (toàn màn hình trên điện thoại). Cờ vua vẫn do public/chess-ui.js lo; Xếp Khối do public/blocks.js.
-   Đường dẫn: #/games (chọn game) · #/chess (cờ vua) · #/chess/g/12 (một ván cờ) · #/blocks (Xếp Khối) */
+/* Mục "Trò chơi" của bản web: trang chọn game (Cờ vua, Cờ caro, Xếp Khối) + mở game Xếp Khối ở cột phải
+   (toàn màn hình trên điện thoại). Cờ vua do public/chess-ui.js lo; Cờ caro do public/caro-ui.js; Xếp Khối do public/blocks.js.
+   Đường dẫn: #/games (chọn game) · #/chess (cờ vua) · #/chess/g/12 (một ván cờ) · #/caro (cờ caro) · #/blocks (Xếp Khối) */
 window.ThinkGames = (() => {
   function create(host) {
-    const { h, icon, api, state, navigate, goBack, toast, chess, nameOf, userOf, avatarEl } = host;
+    const { h, icon, api, state, navigate, goBack, toast, chess, caro, nameOf, userOf, avatarEl } = host;
     const $ = (sel) => document.querySelector(sel);
     const fmt = (n) => Number(n || 0).toLocaleString('vi-VN');
-    let view = null; // 'hub' | 'chess' | 'blocks' | null (đang ở tab khác)
+    let view = null; // 'hub' | 'chess' | 'caro' | 'blocks' | null (đang ở tab khác)
 
     const blocks = window.ThinkBlocks
       ? window.ThinkBlocks.create({
@@ -30,8 +30,10 @@ window.ThinkGames = (() => {
     function route(next) {
       const was = view;
       view = next;
-      $('#games-hub').hidden = next === 'chess';
+      $('#games-hub').hidden = next === 'chess' || next === 'caro';
       $('#games-chess').hidden = next !== 'chess';
+      const caroView = $('#games-caro');
+      if (caroView) caroView.hidden = next !== 'caro';
       const pane = $('#blocks-pane');
       if (next === 'blocks' && blocks) {
         document.body.classList.add('in-chat');
@@ -44,7 +46,8 @@ window.ThinkGames = (() => {
         blocks.unmount();
         pane.hidden = true;
         pane.replaceChildren();
-        if (state.currentId == null && $('#chess-pane').hidden && $('#profile-pane').hidden) {
+        const caroPane = $('#caro-pane');
+        if (state.currentId == null && $('#chess-pane').hidden && $('#profile-pane').hidden && (!caroPane || caroPane.hidden)) {
           document.body.classList.remove('in-chat');
           $('#chat-empty').hidden = false;
         }
@@ -61,6 +64,9 @@ window.ThinkGames = (() => {
       for (const c of layout) art.append(h('span', { class: c ? `bb-block is-c${c}` : 'game-art-empty' }));
       return art;
     }
+    function caroArt() {
+      return h('div', { class: 'game-art-caro', 'aria-hidden': 'true' }, window.ThinkCaro && window.ThinkCaro.art ? window.ThinkCaro.art() : null);
+    }
     function chessArt() {
       const board = window.ThinkChess && window.ThinkChess.miniBoard
         ? window.ThinkChess.miniBoard('r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4')
@@ -73,6 +79,7 @@ window.ThinkGames = (() => {
       if (!body || !state.me) return;
       const cs = chess && chess.summary ? chess.summary() : null;
       const bs = blocks ? blocks.summary() : null;
+      const ks = caro && caro.summary ? caro.summary() : null;
 
       const chessSub = cs && cs.rating
         ? `ELO ${cs.rating.rating}${cs.rating.provisional ? '?' : ''}${cs.rank ? ` · hạng #${cs.rank}` : ''}`
@@ -89,6 +96,15 @@ window.ThinkGames = (() => {
       if (bs && bs.playing != null) blocksChips.push(h('span', { class: 'game-chip is-alert', text: `Đang chơi dở · ${fmt(bs.playing)} điểm` }));
       blocksChips.push(h('span', { class: 'game-chip' }, icon('wifi-off'), 'Chơi được khi mất mạng'));
       if (bs && bs.pending) blocksChips.push(h('span', { class: 'game-chip', text: `${bs.pending} ván chờ gửi` }));
+
+      const caroSub = ks && ks.rating && ks.rating.games
+        ? `ELO ${ks.rating.rating}${ks.rank ? ` · hạng #${ks.rank}` : ''}`
+        : 'Năm quân liền nhau là thắng';
+      const caroChips = [];
+      if (ks && ks.myTurn) caroChips.push(h('span', { class: 'game-chip is-alert', text: `Tới lượt bạn: ${ks.myTurn}` }));
+      if (ks && ks.incoming) caroChips.push(h('span', { class: 'game-chip is-alert', text: `${ks.incoming} lời thách đấu` }));
+      if (ks && ks.botPlaying) caroChips.push(h('span', { class: 'game-chip', text: `Ván dở với máy ${ks.botPlaying.level.toLowerCase()}` }));
+      if (caroChips.length < 2) caroChips.push(h('span', { class: 'game-chip' }, icon('bot'), 'Chơi với máy · Thách bạn bè'));
 
       const card = (kind, hash, title, sub, chips, art, cta) => h('a', {
         class: `game-card is-${kind}`,
@@ -109,10 +125,11 @@ window.ThinkGames = (() => {
       art);
 
       const parts = [
-        h('p', { class: 'games-intro', text: 'Chơi cùng cả nhóm: thách đấu cờ, đua điểm Xếp Khối mỗi tuần.' }),
+        h('p', { class: 'games-intro', text: 'Chơi cùng cả nhóm: thách đấu cờ vua, cờ caro, đua điểm Xếp Khối mỗi tuần.' }),
         card('blocks', '#/blocks', 'Xếp Khối', blocksSub, blocksChips, blocksArt(), bs && bs.playing != null ? 'Chơi tiếp' : 'Chơi ngay'),
         card('chess', '#/chess', 'Cờ vua', chessSub, chessChips, chessArt(), cs && cs.todo ? 'Vào xem' : 'Vào chơi'),
       ];
+      if (caro) parts.push(card('caro', '#/caro', 'Cờ caro', caroSub, caroChips, caroArt(), ks && ks.todo ? 'Vào xem' : 'Vào chơi'));
 
       // Bảng xếp hạng tuần của Xếp Khối + top ELO cờ vua
       const boards = [];
@@ -129,6 +146,15 @@ window.ThinkGames = (() => {
         boards.push(h('section', { class: 'games-board' },
           h('h3', {}, 'Cờ vua · điểm ELO'),
           h('ol', {}, cs.top.map((r, i) => h('li', { class: r.userId === state.me.id ? 'is-me' : '' },
+            h('span', { class: `games-medal is-top${i + 1}`, text: String(i + 1) }),
+            avatarEl(userOf(r.userId), 'avatar-sm', { dot: false }),
+            h('span', { class: 'games-board-name', text: nameOf(r.userId) }),
+            h('strong', { text: String(r.rating) }))))));
+      }
+      if (ks && ks.top && ks.top.length) {
+        boards.push(h('section', { class: 'games-board' },
+          h('h3', {}, 'Cờ caro · điểm ELO'),
+          h('ol', {}, ks.top.map((r, i) => h('li', { class: r.userId === state.me.id ? 'is-me' : '' },
             h('span', { class: `games-medal is-top${i + 1}`, text: String(i + 1) }),
             avatarEl(userOf(r.userId), 'avatar-sm', { dot: false }),
             h('span', { class: 'games-board-name', text: nameOf(r.userId) }),
