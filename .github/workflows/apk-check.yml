@@ -1,0 +1,190 @@
+# Kiểm tra APK: build app Think Beta rồi chạy thử trên máy ảo Android 10 và Android 14,
+# bấm qua các màn hình chính như người dùng thật (đăng nhập, nhắn tin, cờ vua, Xếp Khối, trang cá nhân...),
+# chụp màn hình và đọc logcat để bắt lỗi crash TRƯỚC khi phát hành bản mới.
+#
+# Chạy tự động khi đẩy code có sửa native/ lên bất kỳ nhánh nào, hoặc bấm tay:
+# tab Actions → "Kiểm tra APK" → Run workflow.
+# Kết quả: xem ở trang của lần chạy (Summary), ảnh chụp và logcat nằm trong mục Artifacts
+# và trong nhánh apk-check-results (thư mục runs/<số lần chạy>/).
+name: Kiểm tra APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [apk-check-results]
+    paths:
+      - "native/**"
+      - "scripts/apk-check/**"
+      - ".github/workflows/apk-check.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build APK bản thử
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: native
+    env:
+      THINK_TEST_BUILD: "1"
+      # Máy ảo Android gọi máy tính chạy nó bằng địa chỉ 10.0.2.2
+      THINK_API_URL: http://10.0.2.2:3000
+      THINK_VERSION_NAME: 0.0.${{ github.run_number }}
+      THINK_VERSION_CODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: native/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Cài thư viện
+        run: npm ci
+
+      - name: Cấu hình Firebase (giống bản phát hành)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json; fi
+
+      - name: Tạo project Android
+        run: |
+          npx expo prebuild --platform android --no-install
+          sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8/' android/gradle.properties
+
+      - name: Build APK
+        working-directory: native/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-test
+          path: native/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 7
+
+  test:
+    name: Chạy thử trên ${{ matrix.label }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 29
+            label: Android 10 (API 29)
+          - api: 34
+            label: Android 14 (API 34)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk-test
+          path: apk
+
+      - name: Chạy máy chủ Think thử
+        env:
+          ADMIN_PASSWORD: admin-ci-12345
+          DATA_DIR: ${{ runner.temp }}/think-data
+          PORT: "3000"
+          THINK_CHESS_ANALYSIS_MS: "150"
+        run: |
+          npm ci --omit=dev
+          nohup node start.js > "$RUNNER_TEMP/server.log" 2>&1 &
+          ADMIN_PASSWORD=admin-ci-12345 python3 scripts/apk-check/seed.py
+
+      - name: Bật KVM cho máy ảo
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Chạy thử app trên máy ảo
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          profile: pixel_4
+          disable-animations: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none
+          script: python3 scripts/apk-check/run.py --apk apk/app-release.apk --out apk-out/api${{ matrix.api }} --label "${{ matrix.label }}"
+
+      - name: Kết quả
+        if: always()
+        run: |
+          mkdir -p apk-out/api${{ matrix.api }}
+          cp "$RUNNER_TEMP/server.log" apk-out/api${{ matrix.api }}/server.log || true
+          cat apk-out/api${{ matrix.api }}/report.md >> "$GITHUB_STEP_SUMMARY" || echo "Không có báo cáo (máy ảo không chạy được)" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apk-check-api${{ matrix.api }}
+          path: apk-out
+          retention-days: 14
+
+  report:
+    name: Lưu kết quả
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: apk-check-api*
+          path: all
+          merge-multiple: true
+
+      - name: Đẩy kết quả lên nhánh apk-check-results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN="${GITHUB_RUN_NUMBER}"
+          cd "$RUNNER_TEMP"
+          git init -q results && cd results
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git fetch -q --depth 1 origin apk-check-results; then git checkout -q FETCH_HEAD; fi
+          git checkout -q --orphan fresh
+          mkdir -p "runs/$RUN"
+          cp -r "$GITHUB_WORKSPACE/all/." "runs/$RUN/"
+          # Giữ 8 lần chạy gần nhất
+          ls -d runs/* | sort -t/ -k2 -n | head -n -8 | xargs -r rm -rf
+          {
+            echo "# Kiểm tra APK — lần chạy #$RUN"
+            echo
+            echo "Nhánh: \`${GITHUB_REF_NAME}\`, commit \`${GITHUB_SHA::7}\`, $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo
+            for f in runs/$RUN/*/report.md; do [ -f "$f" ] && cat "$f" && echo; done
+          } > "runs/$RUN/README.md"
+          cp "runs/$RUN/README.md" README.md
+          echo "$RUN" > latest.txt
+          git add -A
+          git commit -q -m "Kiểm tra APK #$RUN (${GITHUB_REF_NAME} ${GITHUB_SHA::7})"
+          git push -q -f origin fresh:apk-check-results
+          cat README.md >> "$GITHUB_STEP_SUMMARY"
