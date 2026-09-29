@@ -300,6 +300,11 @@ def s_login():
         raise RuntimeError(f"Chỉ thấy {len(fields)} ô nhập")
     tap_xy(*center(fields[0]))
     type_text(args.user)
+    # Bàn phím hiện lên làm màn hình dịch chuyển: ẩn bàn phím rồi tìm lại ô mật khẩu
+    hide_keyboard()
+    fields = [n for n in nodes(dump()) if n.get("class") == "android.widget.EditText"]
+    if len(fields) < 2:
+        raise RuntimeError("Không thấy ô mật khẩu")
     tap_xy(*center(fields[1]))
     type_text(args.password)
     hide_keyboard()
@@ -407,7 +412,7 @@ def s_report_render_error():
         raise RuntimeError("Không thấy màn hình 'Có lỗi xảy ra'")
     shot("man-hinh-loi")
     tap(r"^Thử lại$")
-    if wait_for(r"^Cá nhân|^Tin nhắn", 20) is None:
+    if wait_for(r"^Cá nhân|^Tin nhắn|^Đăng nhập$", 20) is None:
         raise RuntimeError("Bấm Thử lại không về app")
     e = wait_report("lỗi màn hình thử")
     if e is None:
