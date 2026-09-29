@@ -137,4 +137,5 @@ export type ProfileStats = {
   posts: number;
   likes: number;
   chess: { rating: number; games: number; wins: number } | null;
+  blocks?: { best: number; games: number } | null;
 };

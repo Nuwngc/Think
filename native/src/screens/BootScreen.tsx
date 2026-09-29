@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { openStandalone } from "../blocks/store";
 import { connectServer, logout, useStore } from "../store";
 import { useColors } from "../theme";
 import { Button, Icon, Loading } from "../ui";
@@ -28,6 +29,7 @@ export function BootScreen() {
           <Text style={[styles.text, { color: c.text2 }]}>{error}</Text>
           <Text style={[styles.hint, { color: c.muted }]}>App sẽ tự thử lại sau vài giây.</Text>
           <Button title="Thử lại ngay" icon="refresh" onPress={() => connectServer()} />
+          <Button title="Chơi Xếp Khối trong lúc chờ" icon="sports-esports" kind="secondary" onPress={() => openStandalone(true)} />
           <Button title="Đăng nhập tài khoản khác" kind="ghost" onPress={() => logout()} />
         </View>
       ) : (
@@ -36,6 +38,7 @@ export function BootScreen() {
           <Text style={[styles.hint, { color: c.muted }]}>
             {slow ? "Máy chủ đang thức dậy sau khi ngủ, có thể mất tới 1 phút…" : "Đang kết nối máy chủ…"}
           </Text>
+          {slow ? <Button title="Chơi Xếp Khối trong lúc chờ" icon="sports-esports" kind="secondary" onPress={() => openStandalone(true)} /> : null}
         </View>
       )}
     </SafeAreaView>

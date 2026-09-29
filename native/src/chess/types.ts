@@ -55,8 +55,19 @@ export type ChessRating = {
   provisional: boolean;
 };
 
-/** Xếp loại một nước đi khi phân tích */
-export type MoveClass = "best" | "good" | "inaccuracy" | "mistake" | "blunder";
+/** Xếp loại một nước đi khi phân tích (giống "Game Review" của các trang cờ lớn) */
+export type MoveClass =
+  | "brilliant"
+  | "great"
+  | "best"
+  | "excellent"
+  | "good"
+  | "book"
+  | "inaccuracy"
+  | "mistake"
+  | "miss"
+  | "blunder"
+  | "forced";
 
 /** Một thế cờ đã được máy chấm (điểm theo góc nhìn của Trắng) */
 export type AnalysedPosition = {
@@ -67,6 +78,8 @@ export type AnalysedPosition = {
   best: string | null;
   bestSan: string | null;
   end?: "checkmate" | "draw";
+  /** Nước tốt thứ nhì */
+  second?: { move: string; san: string | null; cp: number | null; mate: number | null; wp: number };
 };
 
 export type AnalysedMove = {
@@ -77,14 +90,24 @@ export type AnalysedMove = {
   cls: MoveClass;
   loss: number;
   accuracy: number;
+  /** Quân vừa thí (nước thiên tài) */
+  sac?: string | null;
+  /** Nước duy nhất: nước tốt thứ nhì kém bao nhiêu */
+  gap?: number;
+  /** Sau nước này đối thủ chiếu hết được sau n nước */
+  allowsMate?: number;
+  /** Đã có đường chiếu hết sau n nước mà bỏ lỡ */
+  missedMate?: number;
 };
 
 export type AnalysisResult = {
+  version?: number;
   engine: string;
   positions: AnalysedPosition[];
   moves: AnalysedMove[];
   accuracy: { w: number | null; b: number | null };
-  counts: Record<Color, { best: number; inaccuracy: number; mistake: number; blunder: number }>;
+  counts: Record<Color, Partial<Record<MoveClass, number>>>;
+  opening?: { eco: string; name: string; ply: number } | null;
 };
 
 export type ChessAnalysis = {

@@ -185,7 +185,11 @@ function Hero({ user, own, width }: { user: User; own: boolean; width: number })
           </Pressable>
         ) : null}
         {stats ? (
-          <View style={s.stats} accessible accessibilityLabel={`${stats.posts} bài viết, ${stats.likes} lượt thích${stats.chess ? `, ELO cờ vua ${stats.chess.rating}` : ""}`}>
+          <View
+            style={s.stats}
+            accessible
+            accessibilityLabel={`${stats.posts} bài viết, ${stats.likes} lượt thích${stats.chess ? `, ELO cờ vua ${stats.chess.rating}` : ""}${stats.blocks ? `, kỷ lục Xếp Khối ${stats.blocks.best}` : ""}`}
+          >
             <Text style={s.stat}>
               <Text style={s.statNum}>{stats.posts}</Text> bài viết
             </Text>
@@ -195,6 +199,11 @@ function Hero({ user, own, width }: { user: User; own: boolean; width: number })
             {stats.chess ? (
               <Text style={s.stat}>
                 ♞ ELO <Text style={s.statNum}>{stats.chess.rating}</Text>
+              </Text>
+            ) : null}
+            {stats.blocks ? (
+              <Text style={s.stat}>
+                🧩 Xếp Khối <Text style={s.statNum}>{stats.blocks.best.toLocaleString("vi-VN")}</Text>
               </Text>
             ) : null}
           </View>

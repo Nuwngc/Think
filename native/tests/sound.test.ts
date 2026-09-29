@@ -8,7 +8,18 @@ vi.mock("expo-audio", () => ({
 }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: vi.fn(), setItem: vi.fn(() => Promise.resolve()) } }));
 vi.mock("../src/chess/soundFiles", () => ({
-  SOURCES: { move: "move", capture: "capture", castle: "castle", check: "check", start: "start", end: "end" },
+  SOURCES: {
+    move: "move",
+    "move-opp": "move-opp",
+    capture: "capture",
+    castle: "castle",
+    check: "check",
+    promote: "promote",
+    start: "start",
+    end: "end",
+    illegal: "illegal",
+    lowtime: "lowtime",
+  },
 }));
 
 import { setPref } from "../src/chess/prefs";
@@ -21,6 +32,11 @@ describe("âm thanh cờ vua", () => {
     expect(soundForSan("Qxf7#")).toBe("check");
     expect(soundForSan("Bb5+")).toBe("check");
     expect(soundForSan("O-O-O")).toBe("castle");
+    expect(soundForSan("e8=Q")).toBe("promote");
+    expect(soundForSan("exd8=Q+")).toBe("check");
+    // Nước của đối thủ nghe khác nước của mình
+    expect(soundForSan("e5", false)).toBe("move-opp");
+    expect(soundForSan("Nxe5", false)).toBe("capture");
   });
 
   it("tắt âm thanh thì không phát", async () => {

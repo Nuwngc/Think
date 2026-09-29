@@ -113,37 +113,85 @@ window.ThinkChess = (() => {
     }
     return { captured, lead: { w: Math.max(0, score), b: Math.max(0, -score) } };
   }
-  // Xếp loại nước đi khi phân tích (ký hiệu quốc tế ?! ? ??)
+  // Xếp loại nước đi khi phân tích (giống "Game Review" của các trang cờ lớn)
   const MOVE_CLASS = {
-    best: { symbol: '★', label: 'Nước tốt nhất', color: '#1E9E7C' },
-    good: { symbol: '', label: 'Nước tốt', color: '' },
-    inaccuracy: { symbol: '?!', label: 'Thiếu chính xác', color: '#D99A0B' },
-    mistake: { symbol: '?', label: 'Sai lầm', color: '#E07B24' },
-    blunder: { symbol: '??', label: 'Sai lầm nghiêm trọng', color: '#D1402F' },
+    brilliant: { symbol: '!!', label: 'Thiên tài', color: '#1FB3A9', title: 'là nước thiên tài!' },
+    great: { symbol: '!', label: 'Tuyệt vời', color: '#4F8FD9', title: 'là nước tuyệt vời!' },
+    best: { symbol: '★', label: 'Tốt nhất', color: '#7DB24A', title: 'là nước tốt nhất' },
+    excellent: { symbol: '👍', label: 'Rất tốt', color: '#93BD4F', title: 'là nước rất tốt' },
+    good: { symbol: '✓', label: 'Tốt', color: '#8FAE8A', title: 'là nước tốt' },
+    book: { symbol: '📖', label: 'Theo sách', color: '#A8845F', title: 'là nước theo sách khai cuộc' },
+    inaccuracy: { symbol: '?!', label: 'Thiếu chính xác', color: '#E9B83E', title: 'thiếu chính xác' },
+    mistake: { symbol: '?', label: 'Sai lầm', color: '#E58A2B', title: 'là sai lầm' },
+    miss: { symbol: '✕', label: 'Bỏ lỡ', color: '#F06A5B', title: 'là nước bỏ lỡ' },
+    blunder: { symbol: '??', label: 'Sai lầm nghiêm trọng', color: '#D1373B', title: 'là sai lầm nghiêm trọng' },
+    forced: { symbol: '→', label: 'Bắt buộc', color: '#96A39E', title: 'là nước bắt buộc' },
   };
+  const CLASS_ORDER = ['brilliant', 'great', 'best', 'excellent', 'good', 'book', 'inaccuracy', 'mistake', 'miss', 'blunder'];
+  // Loại nước đáng chú ý: có dấu trong danh sách nước đi và trên biểu đồ
+  const NOTABLE = new Set(['brilliant', 'great', 'inaccuracy', 'mistake', 'miss', 'blunder']);
+  const PIECE_OBJ = { n: 'Mã', b: 'Tượng', r: 'Xe', q: 'Hậu', p: 'Tốt' };
   function evalText(p) {
     if (!p) return '';
     if (p.end === 'checkmate') return p.wp >= 50 ? '1-0' : '0-1';
     if (p.end === 'draw') return '½-½';
-    if (p.mate != null) return `#${p.mate > 0 ? '' : '-'}${Math.abs(p.mate)}`;
+    if (p.mate != null) return `M${Math.abs(p.mate)}`;
     const v = (p.cp || 0) / 100;
     return `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}`;
   }
-  function moveComment(m, before) {
-    if (!m) return '';
-    const info = MOVE_CLASS[m.cls] || MOVE_CLASS.good;
-    const no = `${Math.ceil(m.ply / 2)}${m.color === 'w' ? '.' : '…'} ${m.san}${info.symbol && m.cls !== 'best' ? info.symbol : ''}`;
-    if (m.cls === 'best') return `${no}: nước tốt nhất.`;
-    if (m.cls === 'good') return `${no}: nước tốt.${before && before.bestSan ? ` Máy thích ${before.bestSan} hơn một chút.` : ''}`;
-    return `${no}: ${info.label.toLowerCase()}.${before && before.bestSan ? ` Nước tốt nhất là ${before.bestSan}.` : ''}`;
+  // Đọc điểm cho trình đọc màn hình: nói rõ bên nào chiếu hết được
+  function evalSpeech(p) {
+    if (!p) return '';
+    if (p.end === 'checkmate') return p.wp >= 50 ? 'Trắng đã chiếu hết' : 'Đen đã chiếu hết';
+    if (p.end === 'draw') return 'Hòa';
+    if (p.mate != null) return `${p.mate > 0 ? 'Trắng' : 'Đen'} chiếu hết được sau ${Math.abs(p.mate)} nước`;
+    return evalText(p);
   }
-  // Tiếng quân cờ (tự tổng hợp bằng scripts/chess-sounds.py)
-  function soundForSan(san) {
-    if (!san) return 'move';
+  /** Nhận xét một nước: tiêu đề ("Nf3 là nước tốt nhất") + giải thích ngắn */
+  function coachText(m, before, result) {
+    const info = MOVE_CLASS[m.cls] || MOVE_CLASS.good;
+    const best = before && before.bestSan && before.best !== m.uci ? before.bestSan : null;
+    const title = `${m.san} ${info.title}`;
+    let detail = '';
+    switch (m.cls) {
+      case 'brilliant':
+        detail = `Thí ${PIECE_OBJ[m.sac] || 'quân'} rất đẹp mà thế cờ vẫn tốt nhất. Không dễ nhìn ra đâu!`;
+        break;
+      case 'great':
+        detail = 'Nước duy nhất giữ được thế cờ, các nước khác đều kém hẳn.';
+        break;
+      case 'best':
+        detail = /#$/.test(m.san) ? 'Chiếu hết!' : 'Đúng nước máy chọn.';
+        break;
+      case 'excellent':
+      case 'good':
+        detail = best ? `Máy thích ${best} hơn một chút.` : '';
+        break;
+      case 'book':
+        detail = result && result.opening && m.ply <= result.opening.ply ? `Khai cuộc: ${result.opening.name}.` : 'Nước quen thuộc trong lý thuyết khai cuộc.';
+        break;
+      case 'miss':
+        detail = m.missedMate && best
+          ? `Bạn đã có đường chiếu hết sau ${m.missedMate} nước, bắt đầu bằng ${best}.`
+          : `Đối thủ vừa đi sai mà chưa tận dụng được.${best ? ` Nên đi ${best}.` : ''}`;
+        break;
+      case 'forced':
+        detail = 'Chỉ có một nước đi hợp lệ.';
+        break;
+      default:
+        detail = best ? `Nước tốt nhất là ${best}.` : '';
+    }
+    if (m.allowsMate && m.cls !== 'forced') detail += ` Đối thủ có thể chiếu hết sau ${m.allowsMate} nước.`;
+    return { title, detail: detail.trim() };
+  }
+  // Tiếng quân cờ (tự tổng hợp bằng scripts/chess-sounds.py). byMe: nước của mình (tiếng khác với nước đối thủ)
+  function soundForSan(san, byMe = true) {
+    if (!san) return byMe ? 'move' : 'move-opp';
     if (/[+#]/.test(san)) return 'check';
+    if (san.includes('=')) return 'promote';
     if (san.includes('x')) return 'capture';
     if (san.startsWith('O-O')) return 'castle';
-    return 'move';
+    return byMe ? 'move' : 'move-opp';
   }
 
   function botTint(elo) {
@@ -177,7 +225,7 @@ window.ThinkChess = (() => {
     S.analyses = new Map(); // id ván -> { status, progress, total, result }
     S.history = { ids: [], hasMore: false, loading: false, loaded: false };
     // Trạng thái xem ván đang mở (lastPly/lastStatus: để phát tiếng đúng lúc)
-    const V = { ply: null, flip: false, selected: null, promo: null, rulesError: false, playing: false, playTimer: null, lastId: null, lastPly: null, lastStatus: null };
+    const V = { ply: null, flip: false, selected: null, promo: null, rulesError: false, playing: false, playTimer: null, lastId: null, lastPly: null, lastStatus: null, showBest: false, lowWarned: null };
 
     /* ---------------- Tùy chọn bàn cờ (lưu trên máy này) ---------------- */
     const PREF_KEY = 'chess-prefs';
@@ -292,6 +340,7 @@ window.ThinkChess = (() => {
       S.sending.clear();
       S.tab = false;
       S.analyses.clear();
+      S.summaryTry = 0;
       S.history = { ids: [], hasMore: false, loading: false, loaded: false };
       stopPlaying();
       const pane = $('#chess-pane');
@@ -309,6 +358,22 @@ window.ThinkChess = (() => {
       updateBadge();
       if (S.tab) renderHome();
       if (S.openId != null) renderGame();
+      if (host.onChange) host.onChange();
+    }
+
+    // Tóm tắt cho trang chọn game: điểm ELO, hạng, việc cần làm, top 3
+    function summary() {
+      const me = meId();
+      let active = 0;
+      for (const g of S.games.values()) if (g.status === 'active' && myColor(g)) active++;
+      const rank = S.leaderboard ? S.leaderboard.findIndex((r) => r.userId === me) + 1 : 0;
+      // Chưa có dữ liệu: tải (không thử lại liên tục khi mất mạng)
+      if (state.me && !state.offline && Date.now() - (S.summaryTry || 0) > 15000 && ((!S.loaded && !S.loading) || !S.leaderboard)) {
+        S.summaryTry = Date.now();
+        if (!S.loaded && !S.loading) load();
+        if (!S.leaderboard) loadLeaderboard();
+      }
+      return { rating: S.rating, rank: rank || null, todo: todo(), active, top: (S.leaderboard || []).slice(0, 3) };
     }
 
     function todo() {
@@ -325,8 +390,8 @@ window.ThinkChess = (() => {
       const n = todo();
       badge.hidden = !n;
       badge.textContent = n > 99 ? '99+' : String(n);
-      const tab = $('.tab[data-tab="chess"]');
-      if (tab) tab.setAttribute('aria-label', n ? `Cờ vua, ${n} việc cần làm` : 'Cờ vua');
+      const tab = $('.tab[data-tab="games"]');
+      if (tab) tab.setAttribute('aria-label', n ? `Trò chơi, ${n} việc cần làm ở Cờ vua` : 'Trò chơi');
     }
 
     /* ---------------- Điều hướng ---------------- */
@@ -926,14 +991,20 @@ window.ThinkChess = (() => {
       const total = g.moves.length;
       const ply = V.ply == null ? total : Math.min(V.ply, total);
       const live = ply === total;
-      const fen = live ? g.fen : fens[ply] || g.fen;
-      const lastMove = ply > 0 ? g.moves[ply - 1] : null;
+      const analysis = S.analyses.get(g.id);
+      const result = analysis && analysis.status === 'done' ? analysis.result : null;
+      // Xem lại ván đã phân tích (kiểu "Game Review"): thanh đánh giá, huy hiệu trên ô, nhận xét từng nước
+      const review = !active && result && Array.isArray(result.moves) && Array.isArray(result.positions) ? result : null;
+      const reviewMove = review && ply > 0 ? review.moves[ply - 1] : null;
+      const beforePos = review && ply > 0 ? review.positions[ply - 1] : null;
+      // "Xem nước tốt nhất": hiện thế cờ trước nước vừa đi với mũi tên nước máy chọn
+      const bestView = Boolean(V.showBest && reviewMove && beforePos && beforePos.best && beforePos.best !== reviewMove.uci);
+      const fen = bestView ? fens[ply - 1] : live ? g.fen : fens[ply] || g.fen;
+      const lastMove = !bestView && ply > 0 ? g.moves[ply - 1] : null;
       const movable = live && active && mine && g.turn === mine && !S.sending.has(g.id) && Chess ? mine : null;
       const mat = material(fen);
       const oppColor = mine ? other(mine) : 'b';
       const oppName = sideName(g, oppColor);
-      const analysis = S.analyses.get(g.id);
-      const result = analysis && analysis.status === 'done' ? analysis.result : null;
       if (!active && g.status === 'finished' && total >= 2 && !analysis) {
         S.analyses.set(g.id, { status: 'loading' });
         loadAnalysis(g.id);
@@ -942,7 +1013,10 @@ window.ThinkChess = (() => {
       // Âm thanh: bàn cờ tiến thêm đúng một nước (đi quân, đối thủ đi, xem lại), hoặc ván vừa kết thúc
       if (V.lastId === g.id) {
         if (V.lastStatus === 'active' && g.status !== 'active') playSound('end');
-        else if (V.lastPly != null && ply === V.lastPly + 1) playSound(soundForSan(san[ply - 1]));
+        else if (V.lastPly != null && ply === V.lastPly + 1) {
+          const mover = ply % 2 === 1 ? 'w' : 'b';
+          playSound(soundForSan(san[ply - 1], mine ? mover === mine : mover === 'w'));
+        }
       }
       V.lastId = g.id;
       V.lastPly = ply;
@@ -959,8 +1033,17 @@ window.ThinkChess = (() => {
         h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Tùy chọn bàn cờ', onclick: openPrefs }, icon('tune')),
         h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Xoay bàn cờ', dataset: { focus: 'flip' }, onclick: () => { V.flip = !V.flip; renderGame(); } }, icon('flip')));
 
-      const arrow = !active && P.arrows && result && ply < total && result.positions[ply] ? result.positions[ply].best : null;
-      const board = renderBoard({ fen, orientation: bottom, movable, lastMove, arrow });
+      let arrow = null;
+      let badge = null;
+      if (review) {
+        if (P.arrows) arrow = bestView ? beforePos.best : ply < total && review.positions[ply] ? review.positions[ply].best : null;
+        if (bestView) badge = { sq: beforePos.best.slice(2, 4), cls: 'best' };
+        else if (reviewMove) badge = { sq: reviewMove.uci.slice(2, 4), cls: reviewMove.cls };
+      }
+      const boardEl = renderBoard({ fen, orientation: bottom, movable, lastMove, arrow, badge });
+      const board = review
+        ? h('div', { class: 'chess-board-row' }, evalBar(bestView ? beforePos : review.positions[ply], bottom), boardEl)
+        : boardEl;
 
       const side = [];
       // Danh sách nước đi
@@ -979,6 +1062,10 @@ window.ThinkChess = (() => {
         navBtn('next', 'Nước sau', live, () => setPly(ply + 1 >= total ? null : ply + 1)),
         navBtn('last', 'Nước mới nhất', live, () => setPly(null))));
 
+      if (review) {
+        side.push(coachCard(g, review, ply, total, bestView));
+        side.push(evalGraph(review, ply));
+      }
       if (!live && active) {
         side.push(h('button', { class: 'chess-banner', type: 'button', onclick: () => setPly(null) },
           `Đang xem lại nước ${ply}/${total}. `, h('strong', { text: 'Về thế cờ hiện tại' })));
@@ -1051,6 +1138,14 @@ window.ThinkChess = (() => {
       body.scrollTop = prevScroll;
       const list = moveList;
       if (live) list.scrollLeft = list.scrollWidth;
+      else {
+        // Xem lại: đưa nước đang xem vào giữa danh sách (ngang trên điện thoại, dọc trên máy tính)
+        const cur = list.querySelector('.chess-move.is-current');
+        if (cur) {
+          list.scrollLeft = Math.max(0, cur.offsetLeft - list.clientWidth / 2 + cur.offsetWidth / 2);
+          list.scrollTop = Math.max(0, cur.offsetTop - list.clientHeight / 2);
+        }
+      }
       if (V.promo) pane.querySelector('.chess-promo-row button')?.focus({ preventScroll: true });
       else if (focusSq) pane.querySelector(`.sq[data-sq="${focusSq}"]`)?.focus({ preventScroll: true });
       else if (focusKey) {
@@ -1066,17 +1161,76 @@ window.ThinkChess = (() => {
     }
 
     function moveBtn(text, n, ply, total, result) {
-      const cls = result && result.moves[n - 1] ? result.moves[n - 1].cls : null;
-      const mark = cls && cls !== 'best' && cls !== 'good' ? MOVE_CLASS[cls] : null;
-      const el = h('button', {
-        class: `chess-move${ply === n ? ' is-current' : ''}${mark ? ` is-${cls}` : ''}`,
+      const cls = result && result.moves && result.moves[n - 1] ? result.moves[n - 1].cls : null;
+      const mark = cls && NOTABLE.has(cls) ? MOVE_CLASS[cls] : null;
+      const info = cls ? MOVE_CLASS[cls] : null;
+      return h('button', {
+        class: `chess-move${ply === n ? ' is-current' : ''}${mark ? ' is-marked' : ''}`,
         type: 'button',
+        style: mark ? `--mark:${mark.color}` : null,
         dataset: { focus: `move-${n}` },
-        'aria-label': `Xem nước ${text}${mark ? `, ${mark.label}` : ''}`,
+        'aria-label': `Xem nước ${text}${info ? `, ${info.label}` : ''}`,
         onclick: () => setPly(n === total ? null : n),
-        text: `${text}${mark ? mark.symbol : ''}`,
-      });
-      return el;
+      }, text, mark ? h('span', { class: 'chess-move-mark', text: mark.symbol }) : null);
+    }
+
+    // Huy hiệu loại nước đi (vòng tròn màu có ký hiệu)
+    function classBadge(cls, extra = '') {
+      const info = MOVE_CLASS[cls] || MOVE_CLASS.good;
+      const iconName = { best: 'star', excellent: 'thumb', good: 'check', book: 'book', miss: 'close', forced: 'nav-next' }[cls];
+      return h('span', { class: `cls-badge is-${cls} ${extra}`.trim(), style: `--cls:${info.color}`, 'aria-hidden': 'true' },
+        iconName ? icon(iconName) : h('b', { text: info.symbol }));
+    }
+
+    // Thanh đánh giá bên trái bàn cờ: phần trắng = khả năng thắng của Trắng
+    function evalBar(pos, orientation) {
+      const wp = pos ? Math.max(2, Math.min(98, pos.end === 'checkmate' ? pos.wp : pos.wp)) : 50;
+      const text = evalText(pos) || '0.0';
+      return h('div', {
+        class: `chess-evalbar${orientation === 'b' ? ' is-flipped' : ''}`,
+        role: 'img',
+        'aria-label': `Đánh giá thế cờ: ${evalSpeech(pos) || text}`,
+      },
+      h('span', { class: 'chess-evalbar-fill', style: `height:${wp}%` }),
+      h('span', { class: `chess-evalbar-text ${wp >= 50 ? 'is-white' : 'is-black'}`, text: text.replace(/^\+/, '') }));
+    }
+
+    /* ---------------- Nhận xét từng nước (khi xem lại ván đã phân tích) ---------------- */
+    function coachCard(g, r, ply, total, bestView) {
+      const m = ply > 0 ? r.moves[ply - 1] : null;
+      const before = ply > 0 ? r.positions[ply - 1] : null;
+      const pos = r.positions[ply];
+      const nav = h('div', { class: 'chess-coach-nav' },
+        h('button', { class: 'btn btn-sm', type: 'button', disabled: ply === 0, dataset: { focus: 'coach-prev' }, onclick: () => setPly(Math.max(0, ply - 1)) }, icon('nav-prev'), 'Nước trước'),
+        h('button', { class: 'btn btn-sm btn-primary', type: 'button', disabled: ply >= total, dataset: { focus: 'coach-next' }, onclick: () => setPly(ply + 1 >= total ? null : ply + 1) }, 'Nước sau', icon('nav-next')));
+      if (!m) {
+        return h('div', { class: 'chess-coach is-start' },
+          h('div', { class: 'chess-coach-head' },
+            h('span', { class: 'chess-coach-ic' }, icon('chart')),
+            h('p', { class: 'chess-coach-title' }, h('strong', { text: 'Xem lại ván đấu' }))),
+          h('p', { class: 'chess-coach-text', text: `${r.opening ? `Khai cuộc: ${r.opening.name}. ` : ''}Bấm "Nước sau" (hoặc phím →) để xem nhận xét từng nước.` }),
+          nav);
+      }
+      const t = coachText(m, before, r);
+      const canBest = before && before.best && before.bestSan && before.best !== m.uci && !['best', 'book', 'forced', 'brilliant', 'great'].includes(m.cls);
+      const info = MOVE_CLASS[m.cls] || MOVE_CLASS.good;
+      const mover = m.color === 'w' ? 'Trắng' : 'Đen';
+      return h('div', { class: `chess-coach is-${m.cls}`, style: `--cls:${info.color}`, 'aria-live': 'polite' },
+        h('div', { class: 'chess-coach-head' },
+          classBadge(m.cls, 'is-lg'),
+          h('p', { class: 'chess-coach-title' },
+            h('small', { text: `${Math.ceil(m.ply / 2)}${m.color === 'w' ? '.' : '…'} ${mover} · ${info.label}` }),
+            h('strong', { text: bestView ? `Nước tốt nhất: ${before.bestSan}` : t.title })),
+          h('span', { class: `chess-eval${pos && pos.wp >= 50 ? ' is-white' : ''}`, text: evalText(bestView ? before : pos) })),
+        !bestView && t.detail ? h('p', { class: 'chess-coach-text', text: t.detail }) : null,
+        bestView ? h('p', { class: 'chess-coach-text', text: `Thế cờ trước nước ${m.san}. Mũi tên xanh là nước máy chọn.` }) : null,
+        canBest
+          ? h('button', {
+              class: 'chess-coach-best', type: 'button', dataset: { focus: 'show-best' },
+              onclick: () => { V.showBest = !V.showBest; renderGame(); },
+            }, icon(bestView ? 'replay' : 'star'), bestView ? `Quay lại nước ${m.san}` : `Xem nước tốt nhất (${before.bestSan})`)
+          : null,
+        nav);
     }
 
     /* ---------------- Bảng phân tích ---------------- */
@@ -1094,10 +1248,10 @@ window.ThinkChess = (() => {
             class: 'hint',
             text: a.status === 'error'
               ? a.error || 'Phân tích bị lỗi.'
-              : 'Máy Stockfish trên máy chủ sẽ chấm từng nước: nước hay, thiếu chính xác, sai lầm, và độ chính xác của mỗi bên. Mất khoảng 1 phút.',
+              : 'Stockfish trên máy chủ chấm từng nước như huấn luyện viên: thiên tài, tuyệt vời, tốt nhất, theo sách… đến sai lầm nghiêm trọng, kèm độ chính xác và khai cuộc. Mất khoảng 1 phút.',
           }),
           h('button', { class: 'btn btn-primary', type: 'button', dataset: { focus: 'analyze' }, onclick: (e) => withBusy(e.currentTarget, () => requestAnalysis(g.id)) },
-            icon('chart'), a.status === 'error' ? 'Thử lại' : 'Phân tích bằng Stockfish'));
+            icon('chart'), a.status === 'error' ? 'Thử lại' : 'Đánh giá ván đấu'));
       }
       if (a.status === 'queued' || a.status === 'running') {
         const pct = a.total ? Math.round((a.progress / a.total) * 100) : 0;
@@ -1108,30 +1262,42 @@ window.ThinkChess = (() => {
           h('p', { class: 'hint', text: runningText(a) }));
       }
       const r = a.result;
-      const move = ply > 0 ? r.moves[ply - 1] : null;
-      const pos = r.positions[ply];
-      const sideCard = (color) => {
-        const n = r.counts[color];
-        return h('div', { class: 'chess-acc' },
-          h('div', { class: 'chess-acc-name' }, h('span', { class: `chess-swatch is-${color}` }), h('span', { text: sideName(g, color) })),
-          h('strong', { text: `${r.accuracy[color] ?? '—'}%` }),
-          h('small', { text: 'độ chính xác' }),
-          h('div', { class: 'chess-acc-counts' },
-            [['inaccuracy', 'thiếu chính xác'], ['mistake', 'sai lầm'], ['blunder', 'sai lầm nghiêm trọng']].map(([k, label]) =>
-              h('span', { 'aria-label': `${n[k]} ${label}` }, h('b', { class: `is-${k}`, text: MOVE_CLASS[k].symbol }), String(n[k])))));
-      };
-      const good = pos && pos.wp >= 50;
-      return h('div', { class: 'chess-analysis' },
-        head('Phân tích ván đấu', h('span', { class: 'chess-an-engine', text: r.engine })),
-        h('div', { class: 'chess-acc-row' }, sideCard('w'), sideCard('b')),
-        evalGraph(r, ply),
-        h('div', { class: 'chess-comment' },
-          h('span', { class: `chess-eval${good ? ' is-white' : ''}`, text: evalText(pos) }),
-          h('p', {
-            class: move && move.cls !== 'good' && move.cls !== 'best' ? `is-${move.cls}` : '',
-            text: move ? moveComment(move, r.positions[ply - 1]) : 'Thế cờ ban đầu. Bấm vào biểu đồ hoặc dùng nút ‹ › (phím ← →) để xem từng nước.',
-          })),
-        pos && pos.bestSan && ply < g.moves.length ? h('p', { class: 'hint', text: `Máy gợi ý đi tiếp: ${pos.bestSan}${P.arrows ? ' (mũi tên xanh trên bàn cờ)' : ''}.` }) : null);
+      const count = (color, k) => (r.counts && r.counts[color] && r.counts[color][k]) || 0;
+      const sideHead = (color) => h('div', { class: `chess-rv-side is-${color}` },
+        sideAvatar(g, color, 'avatar-sm'),
+        h('span', { class: 'chess-rv-name', text: sideName(g, color) }));
+      const rows = CLASS_ORDER.map((k) => {
+        const w = count('w', k);
+        const b = count('b', k);
+        const info = MOVE_CLASS[k];
+        return h('tr', { class: w || b ? '' : 'is-zero' },
+          h('td', { class: `chess-rv-n${w ? '' : ' is-zero'}`, style: w ? `color:${info.color}` : null, text: String(w) }),
+          h('th', { scope: 'row' }, classBadge(k), h('span', { text: info.label })),
+          h('td', { class: `chess-rv-n${b ? '' : ' is-zero'}`, style: b ? `color:${info.color}` : null, text: String(b) }));
+      });
+      const moments = (r.moves || []).filter((m) => m.cls === 'brilliant' || m.cls === 'great' || m.cls === 'blunder' || m.cls === 'miss' || m.cls === 'mistake');
+      return h('div', { class: 'chess-analysis chess-review' },
+        head('Tổng kết ván đấu', h('span', { class: 'chess-an-engine', text: r.engine })),
+        h('div', { class: 'chess-rv-top' },
+          sideHead('w'),
+          h('span', { class: 'chess-rv-vs', text: 'Độ chính xác' }),
+          sideHead('b')),
+        h('div', { class: 'chess-rv-acc' },
+          h('strong', { class: 'is-w', text: r.accuracy && r.accuracy.w != null ? String(r.accuracy.w) : '—' }),
+          h('strong', { class: 'is-b', text: r.accuracy && r.accuracy.b != null ? String(r.accuracy.b) : '—' })),
+        h('table', { class: 'chess-rv-table' }, h('tbody', {}, rows)),
+        r.opening ? h('p', { class: 'chess-rv-opening' }, classBadge('book'), h('span', {}, 'Khai cuộc: ', h('strong', { text: r.opening.name }), ` (${r.opening.eco})`)) : null,
+        moments.length
+          ? h('div', { class: 'chess-rv-moments' },
+              h('h4', { text: 'Khoảnh khắc đáng chú ý' }),
+              h('div', { class: 'chess-rv-chips' }, moments.slice(0, 12).map((m) => h('button', {
+                class: `chess-rv-chip${m.ply === ply ? ' is-on' : ''}`,
+                type: 'button',
+                style: `--cls:${MOVE_CLASS[m.cls].color}`,
+                'aria-label': `Nước ${Math.ceil(m.ply / 2)} ${m.san}, ${MOVE_CLASS[m.cls].label}`,
+                onclick: () => setPly(m.ply >= g.moves.length ? null : m.ply),
+              }, classBadge(m.cls), `${Math.ceil(m.ply / 2)}${m.color === 'w' ? '.' : '…'} ${m.san}`))))
+          : null);
     }
 
     // Biểu đồ khả năng thắng của Trắng qua từng nước; bấm để nhảy tới nước đó
@@ -1158,24 +1324,29 @@ window.ThinkChess = (() => {
       add('rect', { x: 0, y: 0, width: W, height: H, fill: '#26302C' });
       add('path', { d: `${line}L${W},${H}L0,${H}Z`, fill: '#F4F4F0' });
       add('line', { x1: 0, y1: H / 2, x2: W, y2: H / 2, stroke: 'rgba(128,128,128,.6)', 'stroke-width': 1, 'stroke-dasharray': '4 4', 'vector-effect': 'non-scaling-stroke' });
-      for (const m of r.moves) {
-        if (m.cls !== 'mistake' && m.cls !== 'blunder') continue;
-        add('line', { x1: x(m.ply), y1: 0, x2: x(m.ply), y2: H, stroke: MOVE_CLASS[m.cls].color, 'stroke-width': 1.5, opacity: 0.75, 'vector-effect': 'non-scaling-stroke' });
-      }
       add('line', { x1: x(ply), y1: 0, x2: x(ply), y2: H, stroke: '#0E7C66', 'stroke-width': 3, 'vector-effect': 'non-scaling-stroke' });
+      const wrap = h('div', { class: 'chess-graph-wrap' }, svg);
+      // Chấm màu ở các nước đáng chú ý (vẽ bằng HTML để không bị méo theo tỉ lệ biểu đồ)
+      for (const m of r.moves) {
+        if (!NOTABLE.has(m.cls) || m.cls === 'inaccuracy') continue;
+        const p = r.positions[m.ply];
+        if (!p) continue;
+        wrap.append(h('span', { class: 'chess-graph-dot', style: `left:${(n ? m.ply / n : 0) * 100}%;top:${100 - p.wp}%;--cls:${MOVE_CLASS[m.cls].color}` }));
+      }
       svg.addEventListener('click', (e) => {
         const box = svg.getBoundingClientRect();
         const i = Math.round(((e.clientX - box.left) / box.width) * n);
         const total = n;
         setPly(Math.max(0, Math.min(total, i)) >= total ? null : Math.max(0, i));
       });
-      return svg;
+      return wrap;
     }
     function navBtn(name, label, disabled, onclick) {
       return h('button', { class: 'icon-btn chess-nav-btn', type: 'button', 'aria-label': label, disabled, dataset: { focus: `nav-${name}` }, onclick }, icon(`nav-${name}`));
     }
     function setPly(p) {
       stopPlaying();
+      V.showBest = false;
       V.ply = p;
       V.selected = null;
       V.promo = null;
@@ -1213,6 +1384,10 @@ window.ThinkChess = (() => {
         const span = el.querySelector('.chess-clock-text');
         if (span.textContent !== txt) span.textContent = txt;
         el.classList.toggle('is-low', ms < 20000 && g.base >= 60000 && g.status === 'active');
+        if (color === myColor(g) && g.status === 'active' && g.base >= 30000 && ms > 0 && ms <= 10000 && g.turn === color && V.lowWarned !== g.id) {
+          V.lowWarned = g.id;
+          playSound('lowtime');
+        }
       }
       const st = document.getElementById('chess-status');
       if (st && g.status === 'active') {
@@ -1295,7 +1470,7 @@ window.ThinkChess = (() => {
     let dragging = null;
     let suppressClick = false;
 
-    function renderBoard({ fen, orientation, movable, lastMove, arrow }) {
+    function renderBoard({ fen, orientation, movable, lastMove, arrow, badge }) {
       const rows = parseFen(fen);
       let chess = null;
       let targets = new Map();
@@ -1343,6 +1518,11 @@ window.ThinkChess = (() => {
         });
       });
       if (arrow && /^[a-h][1-8][a-h][1-8]/.test(arrow)) board.append(arrowSvg(arrow, orientation));
+      // Huy hiệu loại nước ở góc ô vừa đi tới (khi xem lại ván đã phân tích)
+      if (badge && badge.cls) {
+        const sqEl = board.querySelector(`.sq[data-sq="${badge.sq}"]`);
+        if (sqEl) sqEl.append(classBadge(badge.cls, 'is-onboard'));
+      }
       if (V.promo) {
         const color = movable || 'w';
         board.append(h('div', { class: 'chess-promo' },
@@ -1462,6 +1642,7 @@ window.ThinkChess = (() => {
           playMove(`${d.from}${to}`);
         }
       } else {
+        if (to && to !== d.from) playSound('illegal');
         V.selected = d.from;
         renderGame();
       }
@@ -1729,7 +1910,7 @@ window.ThinkChess = (() => {
       ['lastMove', 'Tô màu nước vừa đi', 'Tô vàng ô đi và ô đến của nước gần nhất.'],
       ['coords', 'Tọa độ bàn cờ', 'Chữ a–h và số 1–8 ở mép bàn cờ.'],
       ['arrows', 'Mũi tên gợi ý khi phân tích', 'Khi xem lại ván đã phân tích, vẽ mũi tên nước tốt nhất của máy.'],
-      ['sound', 'Âm thanh', 'Tiếng quân cờ khi đi, ăn quân, chiếu tướng, bắt đầu và kết thúc ván.'],
+      ['sound', 'Âm thanh', 'Tiếng quân gỗ khi đi (nước của bạn và đối thủ khác nhau), ăn quân, nhập thành, chiếu tướng, phong cấp, sắp hết giờ, bắt đầu và kết thúc ván.'],
     ];
     function openPrefs() {
       const rows = PREF_ROWS.map(([key, title, hint]) => {
@@ -1786,6 +1967,7 @@ window.ThinkChess = (() => {
       openPrefs,
       onAnalysis,
       badge: todo,
+      summary,
     };
   }
 

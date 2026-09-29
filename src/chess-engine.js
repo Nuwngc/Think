@@ -68,9 +68,12 @@ function bestMove(job) {
   return result;
 }
 
-/** Chấm điểm một thế cờ bằng Stockfish mạnh nhất: { move, cp, mate, depth, pv } (điểm theo bên đang đi) */
-function evaluate({ fen, moves, movetime, depth, fresh, searchmoves }) {
-  return bestMove({ engine: 'stockfish-eval', fen, moves, movetime, depth, fresh, searchmoves });
+/**
+ * Chấm điểm một thế cờ bằng Stockfish mạnh nhất: { move, cp, mate, depth, pv, second? } (điểm theo bên đang đi).
+ * multipv: 2 để lấy thêm nước tốt thứ nhì (second).
+ */
+function evaluate({ fen, moves, movetime, depth, fresh, searchmoves, multipv }) {
+  return bestMove({ engine: 'stockfish-eval', fen, moves, movetime, depth, fresh, searchmoves, multipv });
 }
 
 function stop() {

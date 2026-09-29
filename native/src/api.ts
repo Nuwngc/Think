@@ -1,6 +1,7 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 
+import type { BlocksBoard, PendingScore } from "./blocks/types";
 import type { ChessAnalysis, ChessBot, ChessGame, ChessRating } from "./chess/types";
 import { API_URL } from "./config";
 import { getToken } from "./session";
@@ -272,6 +273,15 @@ export const api = {
   /* ---------------- Trang cá nhân, bảng tin ---------------- */
 
   profile: (userId: number) => request<{ stats: ProfileStats }>(`/api/users/${userId}/profile`),
+
+  /* ----- Trò chơi: bảng xếp hạng Xếp Khối ----- */
+  blocks: () => request<BlocksBoard>("/api/games/blocks"),
+
+  blocksSubmit: (scores: Omit<PendingScore, "uid">[]) =>
+    request<BlocksBoard & { accepted: string[]; rejected: { id: string; error: string }[]; newBest: boolean }>("/api/games/blocks/scores", {
+      method: "POST",
+      body: { scores },
+    }),
 
   /** Bảng tin (userId = null) hoặc bài của một người; before = mã bài cũ nhất đã có */
   posts: (userId: number | null, before?: number) =>

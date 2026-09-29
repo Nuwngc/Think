@@ -1,7 +1,7 @@
 // Chữ hiển thị cho cờ vua (dùng chung ý với bản web)
 import { Chess } from "chess.js";
 
-import type { AnalysedMove, AnalysedPosition, ChessGame, Color, MoveClass } from "./types";
+import type { AnalysedMove, AnalysedPosition, AnalysisResult, ChessGame, Color, MoveClass } from "./types";
 
 /** Các mức thời gian hay dùng: phút + giây cộng thêm mỗi nước */
 export const TIME_CONTROLS: { base: number; inc: number; label: string; kind: string }[] = [
@@ -117,33 +117,91 @@ export function material(fen: string) {
 
 /* ---------------- Phân tích ván ---------------- */
 
-/** Ký hiệu và tên của từng loại nước đi (giống ký hiệu quốc tế: ?! ? ??) */
-export const MOVE_CLASS: Record<MoveClass, { symbol: string; label: string; color: string }> = {
-  best: { symbol: "★", label: "Nước tốt nhất", color: "#1E9E7C" },
-  good: { symbol: "", label: "Nước tốt", color: "#6B7C75" },
-  inaccuracy: { symbol: "?!", label: "Thiếu chính xác", color: "#D99A0B" },
-  mistake: { symbol: "?", label: "Sai lầm", color: "#E07B24" },
-  blunder: { symbol: "??", label: "Sai lầm nghiêm trọng", color: "#D1402F" },
+/** Ký hiệu, tên, màu của từng loại nước đi (giống bản web: MOVE_CLASS trong public/chess-ui.js) */
+export const MOVE_CLASS: Record<MoveClass, { symbol: string; label: string; color: string; title: string; icon?: string }> = {
+  brilliant: { symbol: "!!", label: "Thiên tài", color: "#1FB3A9", title: "là nước thiên tài!" },
+  great: { symbol: "!", label: "Tuyệt vời", color: "#4F8FD9", title: "là nước tuyệt vời!" },
+  best: { symbol: "★", label: "Tốt nhất", color: "#7DB24A", title: "là nước tốt nhất", icon: "star" },
+  excellent: { symbol: "👍", label: "Rất tốt", color: "#93BD4F", title: "là nước rất tốt", icon: "thumb-up" },
+  good: { symbol: "✓", label: "Tốt", color: "#8FAE8A", title: "là nước tốt", icon: "check" },
+  book: { symbol: "📖", label: "Theo sách", color: "#A8845F", title: "là nước theo sách khai cuộc", icon: "menu-book" },
+  inaccuracy: { symbol: "?!", label: "Thiếu chính xác", color: "#E9B83E", title: "thiếu chính xác" },
+  mistake: { symbol: "?", label: "Sai lầm", color: "#E58A2B", title: "là sai lầm" },
+  miss: { symbol: "✕", label: "Bỏ lỡ", color: "#F06A5B", title: "là nước bỏ lỡ", icon: "close" },
+  blunder: { symbol: "??", label: "Sai lầm nghiêm trọng", color: "#D1373B", title: "là sai lầm nghiêm trọng" },
+  forced: { symbol: "→", label: "Bắt buộc", color: "#96A39E", title: "là nước bắt buộc", icon: "arrow-forward" },
 };
 
-/** Điểm đánh giá dễ đọc: +1.3 (Trắng hơn), -0.5, #3 (chiếu hết sau 3 nước), 1-0 khi đã chiếu hết */
+/** Thứ tự các loại trong bảng tổng kết */
+export const CLASS_ORDER: MoveClass[] = ["brilliant", "great", "best", "excellent", "good", "book", "inaccuracy", "mistake", "miss", "blunder"];
+/** Loại nước đáng chú ý: có dấu trong danh sách nước đi, chấm màu trên biểu đồ */
+export const NOTABLE = new Set<MoveClass>(["brilliant", "great", "inaccuracy", "mistake", "miss", "blunder"]);
+
+/** Điểm đánh giá dễ đọc: +1.3 (Trắng hơn), −0.5, M3 (chiếu hết sau 3 nước), 1-0 khi đã chiếu hết */
 export function evalText(p: Pick<AnalysedPosition, "cp" | "mate" | "wp" | "end"> | undefined) {
   if (!p) return "";
   if (p.end === "checkmate") return p.wp >= 50 ? "1-0" : "0-1";
   if (p.end === "draw") return "½-½";
-  if (p.mate != null) return `#${p.mate > 0 ? "" : "-"}${Math.abs(p.mate)}`;
+  if (p.mate != null) return `M${Math.abs(p.mate)}`;
   const v = (p.cp || 0) / 100;
   return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}`;
 }
 
-/** Nhận xét cho một nước đã đi (dùng dưới bàn cờ khi xem lại) */
+/** Đọc điểm cho trình đọc màn hình: nói rõ bên nào chiếu hết được */
+export function evalSpeech(p: Pick<AnalysedPosition, "cp" | "mate" | "wp" | "end"> | undefined) {
+  if (!p) return "";
+  if (p.end === "checkmate") return p.wp >= 50 ? "Trắng đã chiếu hết" : "Đen đã chiếu hết";
+  if (p.end === "draw") return "Hòa";
+  if (p.mate != null) return `${p.mate > 0 ? "Trắng" : "Đen"} chiếu hết được sau ${Math.abs(p.mate)} nước`;
+  return evalText(p);
+}
+
+const PIECE_OBJ: Record<string, string> = { n: "Mã", b: "Tượng", r: "Xe", q: "Hậu", p: "Tốt" };
+
+/** Nhận xét một nước kiểu huấn luyện viên: tiêu đề ("Nf3 là nước tốt nhất") + giải thích ngắn */
+export function coachText(m: AnalysedMove, before: AnalysedPosition | undefined, result?: Pick<AnalysisResult, "opening"> | null) {
+  const info = MOVE_CLASS[m.cls] || MOVE_CLASS.good;
+  const best = before?.bestSan && before.best !== m.uci ? before.bestSan : null;
+  const title = `${m.san} ${info.title}`;
+  let detail = "";
+  switch (m.cls) {
+    case "brilliant":
+      detail = `Thí ${(m.sac && PIECE_OBJ[m.sac]) || "quân"} rất đẹp mà thế cờ vẫn tốt nhất. Không dễ nhìn ra đâu!`;
+      break;
+    case "great":
+      detail = "Nước duy nhất giữ được thế cờ, các nước khác đều kém hẳn.";
+      break;
+    case "best":
+      detail = /#$/.test(m.san) ? "Chiếu hết!" : "Đúng nước máy chọn.";
+      break;
+    case "excellent":
+    case "good":
+      detail = best ? `Máy thích ${best} hơn một chút.` : "";
+      break;
+    case "book":
+      detail = result?.opening && m.ply <= result.opening.ply ? `Khai cuộc: ${result.opening.name}.` : "Nước quen thuộc trong lý thuyết khai cuộc.";
+      break;
+    case "miss":
+      detail =
+        m.missedMate && best
+          ? `Bạn đã có đường chiếu hết sau ${m.missedMate} nước, bắt đầu bằng ${best}.`
+          : `Đối thủ vừa đi sai mà chưa tận dụng được.${best ? ` Nên đi ${best}.` : ""}`;
+      break;
+    case "forced":
+      detail = "Chỉ có một nước đi hợp lệ.";
+      break;
+    default:
+      detail = best ? `Nước tốt nhất là ${best}.` : "";
+  }
+  if (m.allowsMate && m.cls !== "forced") detail += ` Đối thủ có thể chiếu hết sau ${m.allowsMate} nước.`;
+  return { title, detail: detail.trim() };
+}
+
+/** Nhận xét một dòng (dùng cho trình đọc màn hình / chỗ chật) */
 export function moveComment(m: AnalysedMove | undefined, before: AnalysedPosition | undefined) {
   if (!m) return "";
-  const info = MOVE_CLASS[m.cls];
-  const no = `${Math.ceil(m.ply / 2)}${m.color === "w" ? "." : "…"} ${m.san}${info.symbol && m.cls !== "best" ? info.symbol : ""}`;
-  if (m.cls === "best") return `${no}: nước tốt nhất.`;
-  if (m.cls === "good") return `${no}: nước tốt.${before?.bestSan ? ` Máy thích ${before.bestSan} hơn một chút.` : ""}`;
-  return `${no}: ${info.label.toLowerCase()}.${before?.bestSan ? ` Nước tốt nhất là ${before.bestSan}.` : ""}`;
+  const t = coachText(m, before);
+  return `${Math.ceil(m.ply / 2)}${m.color === "w" ? "." : "…"} ${t.title}.${t.detail ? ` ${t.detail}` : ""}`;
 }
 
 /** Tiêu đề và dòng mô tả một ván để chia sẻ (giống bản web: describe trong public/chess-ui.js) */

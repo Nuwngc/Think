@@ -231,6 +231,7 @@ window.ThinkSocial = (() => {
         bits.push(h('span', {}, h('strong', { text: String(stats.posts) }), ' bài viết'));
         bits.push(h('span', {}, h('strong', { text: String(stats.likes) }), ' lượt thích'));
         if (stats.chess) bits.push(h('span', {}, '♞ ELO ', h('strong', { text: String(stats.chess.rating) })));
+        if (stats.blocks) bits.push(h('span', {}, '🧩 Xếp Khối ', h('strong', { text: Number(stats.blocks.best).toLocaleString('vi-VN') })));
       }
       const actions = mine
         ? [h('button', { class: 'btn btn-sm', type: 'button', 'data-action': 'settings' }, icon('settings'), 'Chỉnh sửa trang cá nhân')]

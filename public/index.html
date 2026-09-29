@@ -18,10 +18,14 @@
   <link rel="preload" href="/fonts/be-vietnam-pro-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/be-vietnam-pro-vietnamese-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="/blocks.css">
   <script src="/theme.js"></script>
   <script src="/socket.io/socket.io.min.js" defer></script>
   <script src="/localdb.js" defer></script>
   <script src="/chess-ui.js" defer></script>
+  <script src="/blocks-core.js" defer></script>
+  <script src="/blocks.js" defer></script>
+  <script src="/games-ui.js" defer></script>
   <script src="/social-ui.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
@@ -65,12 +69,18 @@
     <symbol id="i-nav-prev" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
     <symbol id="i-nav-next" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
     <symbol id="i-nav-last" viewBox="0 0 24 24"><path d="M18 6v12"/><path d="m7 18 6-6-6-6"/></symbol>
+    <symbol id="i-gamepad" viewBox="0 0 24 24"><path d="M7.5 7h9A4.5 4.5 0 0 1 21 11.5v3.2a2.8 2.8 0 0 1-5 1.7L15 15H9l-1 1.4a2.8 2.8 0 0 1-5-1.7v-3.2A4.5 4.5 0 0 1 7.5 7Z"/><path d="M7.5 10v3.5M5.75 11.75h3.5"/><path d="M15.5 11h.01M17.5 13h.01"/></symbol>
+    <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M2 2l20 20"/><path d="M8.5 16.4a5 5 0 0 1 7 0"/><path d="M5 12.9a10 10 0 0 1 5.2-2.7"/><path d="M19 12.9a10 10 0 0 0-2.3-1.6"/><path d="M2 9a15 15 0 0 1 4.2-2.7"/><path d="M22 9a15 15 0 0 0-11.3-3.8"/><path d="M12 20h.01"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="m12 3.2 2.7 5.6 6.1.8-4.5 4.2 1.1 6-5.4-3-5.4 3 1.1-6-4.5-4.2 6.1-.8Z"/></symbol>
+    <symbol id="i-thumb" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M7 10.5v9H4.5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Zm2 9h7.9a2 2 0 0 0 2-1.6l1.3-6A2 2 0 0 0 18.2 9.5H14l.7-3.4A1.8 1.8 0 0 0 13 4l-4 5.9Z"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5a1.5 1.5 0 0 0 0 3H20v1H6.5A3.5 3.5 0 0 1 3 18.5V5.5Zm4 1v2h8v-2Z"/></symbol>
     <symbol id="i-group" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18.2 14.8c1.8.8 3 2.5 3.3 5.2"/></symbol>
   </svg>
 
   <div id="view-boot" class="screen boot">
     <img src="/icons/icon-192.png" alt="" width="64" height="64">
     <p id="boot-hint" class="boot-hint" role="status" hidden>Máy chủ đang thức dậy, chờ khoảng 1 phút nhé…</p>
+    <a class="boot-play" id="boot-play" href="/blocks.html" hidden><svg class="ic"><use href="#i-gamepad"/></svg>Chơi Xếp Khối trong lúc chờ</a>
   </div>
 
   <!-- Đăng nhập: nền đen chữ trắng -->
@@ -91,6 +101,7 @@
         <button class="btn btn-pill btn-block" type="submit">Đăng nhập</button>
       </form>
       <p class="auth-note">Chưa có tài khoản? Nhờ admin của nhóm tạo cho bạn.</p>
+      <p class="auth-note auth-play"><a href="/blocks.html"><svg class="ic"><use href="#i-gamepad"/></svg>Chơi Xếp Khối (không cần mạng)</a></p>
       <p class="auth-note bubble-only">Bong bóng chat chưa được liên kết. Mở app Think, vào Cá nhân, bấm "Bật bong bóng chat" để khỏi phải đăng nhập ở đây.</p>
     </div>
   </main>
@@ -137,14 +148,23 @@
         <p id="conn-status" class="conn-status" role="status" hidden>Đang kết nối lại… Nếu app vừa ngủ, máy chủ cần khoảng 1 phút để thức dậy.</p>
       </section>
 
-      <!-- Tab Cờ vua (public/chess-ui.js vẽ nội dung) -->
-      <section id="page-chess" class="tab-page" aria-label="Cờ vua" hidden>
-        <header class="side-head">
-          <h1 class="side-title">Cờ vua</h1>
-          <button class="icon-btn" type="button" data-action="chess-prefs" aria-label="Tùy chọn bàn cờ"><svg class="ic"><use href="#i-tune"/></svg></button>
-          <button class="icon-btn" type="button" data-action="chess-board" aria-label="Bảng xếp hạng"><svg class="ic"><use href="#i-leaderboard"/></svg></button>
-        </header>
-        <div class="page-body chess-home" id="chess-home"></div>
+      <!-- Tab Trò chơi: trang chọn game (public/games-ui.js) và Cờ vua (public/chess-ui.js vẽ nội dung) -->
+      <section id="page-games" class="tab-page" aria-label="Trò chơi" hidden>
+        <div id="games-hub" class="games-view">
+          <header class="side-head">
+            <h1 class="side-title">Trò chơi</h1>
+          </header>
+          <div class="page-body games-body" id="games-body"></div>
+        </div>
+        <div id="games-chess" class="games-view" hidden>
+          <header class="side-head">
+            <a class="icon-btn" href="#/games" data-action="games-home" aria-label="Về trang Trò chơi"><svg class="ic"><use href="#i-back"/></svg></a>
+            <h1 class="side-title">Cờ vua</h1>
+            <button class="icon-btn" type="button" data-action="chess-prefs" aria-label="Tùy chọn bàn cờ"><svg class="ic"><use href="#i-tune"/></svg></button>
+            <button class="icon-btn" type="button" data-action="chess-board" aria-label="Bảng xếp hạng"><svg class="ic"><use href="#i-leaderboard"/></svg></button>
+          </header>
+          <div class="page-body chess-home" id="chess-home"></div>
+        </div>
       </section>
 
       <!-- Tab Cá nhân: trang cá nhân (bài đăng, bảng tin, public/social-ui.js) và Cài đặt -->
@@ -370,9 +390,9 @@
           <span class="tab-icon"><svg class="ic"><use href="#i-chat"/></svg><span class="tab-badge" id="tab-badge" hidden></span></span>
           <span class="tab-label">Tin nhắn</span>
         </button>
-        <button class="tab" type="button" data-tab="chess" aria-label="Cờ vua">
-          <span class="tab-icon"><svg class="ic ic-knight"><use href="#i-knight"/></svg><span class="tab-badge" id="chess-badge" hidden></span></span>
-          <span class="tab-label">Cờ vua</span>
+        <button class="tab" type="button" data-tab="games" aria-label="Trò chơi">
+          <span class="tab-icon"><svg class="ic"><use href="#i-gamepad"/></svg><span class="tab-badge" id="chess-badge" hidden></span></span>
+          <span class="tab-label">Trò chơi</span>
         </button>
         <button class="tab" type="button" data-tab="me" aria-label="Cá nhân">
           <span class="tab-icon"><span class="avatar" id="tab-avatar"></span></span>
@@ -415,6 +435,7 @@
         </div>
       </div>
       <div id="chess-pane" class="chess-pane" hidden></div>
+      <div id="blocks-pane" class="blocks-pane" hidden></div>
       <div id="profile-pane" class="profile-pane" hidden></div>
     </section>
   </div>

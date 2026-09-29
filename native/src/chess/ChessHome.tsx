@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShallow } from "zustand/react/shallow";
 
 import { shortTime } from "../format";
-import { useStore } from "../store";
+import { showGamesHub, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Button, Icon, IconButton, Sheet, useStyles, type IconName } from "../ui";
 import { clockText, myColor, opponentColor, outcomeFor, reasonText, tcLabel } from "./format";
@@ -55,6 +55,7 @@ export function ChessHome() {
   return (
     <View style={[s.root, { paddingTop: insets.top }]}>
       <View style={s.header}>
+        <IconButton name="arrow-back" label="Về trang Trò chơi" onPress={showGamesHub} color={c.text} />
         <View style={{ flex: 1 }}>
           <Text style={s.brand}>Cờ vua</Text>
           <Text style={s.kicker}>Thách đấu bạn bè, leo bảng xếp hạng</Text>
@@ -363,7 +364,7 @@ function LeaderboardSheet({ visible, onClose }: { visible: boolean; onClose: () 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: c.bg },
-    header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: 12, paddingBottom: 10 },
+    header: { flexDirection: "row", alignItems: "center", paddingLeft: 8, paddingRight: 20, paddingTop: 12, paddingBottom: 10 },
     brand: { color: c.text, fontSize: 30, fontWeight: "800", letterSpacing: -1.2 },
     kicker: { color: c.muted, fontSize: 13, marginTop: 1 },
     hero: { backgroundColor: c.jade, borderRadius: 22, padding: 18, gap: 10 },

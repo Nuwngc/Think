@@ -2,6 +2,7 @@
 // Trang cá nhân và bảng tin: đăng bài (chữ, ảnh, ván cờ), thả tim, bình luận.
 // Mọi thành viên trong nhóm đều xem được bài của nhau (nhóm riêng, tài khoản do admin cấp).
 const { get, all, run, transaction } = require('./db');
+const { bestOf } = require('./games');
 
 const MAX_POST = 2000;
 const MAX_COMMENT = 1000;
@@ -117,7 +118,7 @@ function setupSocial({ app, io, requireAuth, requireReady, takeUpload, removeUpl
     const posts = get('SELECT COUNT(*) AS n FROM posts WHERE user_id = ?', u.id).n;
     const likes = get('SELECT COUNT(*) AS n FROM post_likes l JOIN posts p ON p.id = l.post_id WHERE p.user_id = ?', u.id).n;
     const chess = get('SELECT rating, games, wins FROM chess_ratings WHERE user_id = ?', u.id);
-    res.json({ stats: { posts, likes, chess: chess ? { rating: chess.rating, games: chess.games, wins: chess.wins } : null } });
+    res.json({ stats: { posts, likes, chess: chess ? { rating: chess.rating, games: chess.games, wins: chess.wins } : null, blocks: bestOf(u.id) } });
   }));
 
   // Bảng tin: bài mới của cả nhóm
