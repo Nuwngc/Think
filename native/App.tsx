@@ -9,6 +9,8 @@ import { AppState, Platform, View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { BlocksScreen } from "./src/blocks/BlocksScreen";
+import { openStandalone, useBlocks } from "./src/blocks/store";
 import { loadPrefs } from "./src/chess/prefs";
 import { prepareImage, recoverPick } from "./src/images";
 import { parseResponse, runQuickAction, setupNotifications, watchPushToken, type NotificationAction } from "./src/notifications";
@@ -18,7 +20,7 @@ import { LoginScreen } from "./src/screens/LoginScreen";
 import { MainScreen } from "./src/screens/MainScreen";
 import { ToastHost } from "./src/screens/ToastHost";
 import { openComments } from "./src/social/store";
-import { boot, openChess, openConversation, sendImages, setTab, showToast, startLifecycle, useStore } from "./src/store";
+import { boot, openBlocks, openChess, openConversation, sendImages, setTab, showToast, startLifecycle, useStore } from "./src/store";
 import { loadThemeMode, useColors, useThemeMode } from "./src/theme";
 import { confirm } from "./src/ui";
 import { checkForUpdate } from "./src/update";
@@ -112,6 +114,17 @@ export default function App() {
     }
   }, [phase, offline, pickChecked]);
 
+  const standalone = useBlocks((s) => s.standalone);
+  useEffect(() => {
+    // Máy chủ vừa trả lời trong lúc đang chơi: chơi tiếp ngay trong app (ván vẫn giữ nguyên)
+    if (phase === "ready" && standalone) {
+      // Người dùng vừa chạm một thông báo (mở chat / ván cờ) thì để yên chỗ đó
+      const st = useStore.getState();
+      if (st.currentId == null && st.tab === "chats") openBlocks();
+      openStandalone(false);
+    }
+  }, [phase, standalone]);
+
   // Ẩn màn hình chờ khi đã có gì để hiện (tối đa 2,5 giây)
   const themeLoaded = useThemeMode((s) => s.loaded);
   const ready = (fontsLoaded || Boolean(fontError)) && phase !== "boot" && themeLoaded;
@@ -134,7 +147,10 @@ export default function App() {
       <KeyboardProvider>
         <StatusBar style={c.scheme === "dark" ? "light" : "dark"} />
         <View style={{ flex: 1, backgroundColor: c.bg }}>
-          {phase === "login" ? (
+          {standalone && phase !== "ready" ? (
+            // Chơi Xếp Khối ngay từ màn đăng nhập / màn chờ máy chủ (không cần mạng)
+            <BlocksScreen onBack={() => openStandalone(false)} />
+          ) : phase === "login" ? (
             <LoginScreen />
           ) : phase === "force" ? (
             <ForcePasswordScreen />

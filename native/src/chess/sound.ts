@@ -3,7 +3,8 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-aud
 import { usePrefs } from "./prefs";
 import { SOURCES, type SoundName } from "./soundFiles";
 
-// Âm thanh cờ vua (tự tổng hợp bằng scripts/chess-sounds.py, dùng chung với bản web)
+// Âm thanh cờ vua kiểu các trang cờ lớn: tiếng quân gỗ giòn, nước mình và nước đối thủ khác tiếng
+// (tự tổng hợp bằng scripts/chess-sounds.py, dùng chung với bản web)
 
 export type { SoundName };
 
@@ -45,11 +46,12 @@ export function playSound(name: SoundName) {
   }
 }
 
-/** Tiếng hợp với nước đi (theo ký hiệu: x = ăn quân, + / # = chiếu, O-O = nhập thành) */
-export function soundForSan(san: string | undefined): SoundName {
-  if (!san) return "move";
+/** Tiếng hợp với nước đi (theo ký hiệu: + / # = chiếu, = phong cấp, x = ăn quân, O-O = nhập thành). byMe: nước của mình */
+export function soundForSan(san: string | undefined, byMe = true): SoundName {
+  if (!san) return byMe ? "move" : "move-opp";
   if (/[+#]/.test(san)) return "check";
+  if (san.includes("=")) return "promote";
   if (san.includes("x")) return "capture";
   if (san.startsWith("O-O")) return "castle";
-  return "move";
+  return byMe ? "move" : "move-opp";
 }

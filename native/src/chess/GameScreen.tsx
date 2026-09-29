@@ -6,9 +6,9 @@ import { shareGame } from "../social/store";
 import { hideToast, leaveGame, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Button, confirm, Icon, IconButton, useStyles } from "../ui";
-import { AnalysisPanel } from "./Analysis";
+import { AnalysisPanel, EvalBar, EvalGraph, ReviewCoach } from "./Analysis";
 import { Board, PieceImage } from "./Board";
-import { clockText, material, MOVE_CLASS, myColor, opponentColor, outcomeFor, reasonText, replay, resultTitle, tcLabel } from "./format";
+import { clockText, material, MOVE_CLASS, myColor, NOTABLE, opponentColor, outcomeFor, reasonText, replay, resultTitle, tcLabel } from "./format";
 import { SideAvatar, useNow, useSide } from "./parts";
 import { loadPrefs, usePrefs } from "./prefs";
 import { PrefsSheet } from "./Sheets";
@@ -83,6 +83,7 @@ function Game({ g }: { g: ChessGame }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [bestView, setBestView] = useState(false);
   const prefs = usePrefs();
   const analysis = useChess((st) => st.analyses[g.id]);
   const result = analysis?.status === "done" ? analysis.result : undefined;
@@ -111,27 +112,49 @@ function Game({ g }: { g: ChessGame }) {
   const total = g.moves.length;
   const ply = viewPly == null ? total : Math.min(viewPly, total);
   const live = ply === total;
-  const fen = live ? g.fen : fens[ply] || g.fen;
-  const lastMove = ply > 0 ? g.moves[ply - 1] : null;
+  // Xem lại ván đã phân tích (kiểu "Game Review"): thanh đánh giá, huy hiệu trên ô, nhận xét từng nước
+  const review = !active && result && Array.isArray(result.moves) ? result : undefined;
+  const reviewMove = review && ply > 0 ? review.moves[ply - 1] : undefined;
+  const beforePos = review && ply > 0 ? review.positions[ply - 1] : undefined;
+  // "Xem nước tốt nhất": thế cờ trước nước vừa đi, mũi tên nước máy chọn
+  const showBest = Boolean(bestView && reviewMove && beforePos?.best && beforePos.best !== reviewMove.uci);
+  const fen = showBest ? fens[ply - 1] : live ? g.fen : fens[ply] || g.fen;
+  const lastMove = !showBest && ply > 0 ? g.moves[ply - 1] : null;
   const movable = live && active && mine && g.turn === mine && !sending ? mine : null;
   const mat = useMemo(() => material(fen), [fen]);
+  useEffect(() => setBestView(false), [ply]);
 
-  // Cỡ bàn cờ: vừa chiều ngang, chừa chỗ cho hai thanh người chơi và nút bên dưới
-  const size = Math.floor(Math.min(width, 560, Math.max(240, height - insets.top - insets.bottom - 300)) / 8) * 8;
+  // Cỡ bàn cờ: vừa chiều ngang, chừa chỗ cho hai thanh người chơi và nút bên dưới (và thanh đánh giá khi xem lại)
+  const size = Math.floor(Math.min(width - (review ? 18 : 0), 560, Math.max(240, height - insets.top - insets.bottom - 300)) / 8) * 8;
 
-  // Tự cuộn danh sách nước đi tới nước mới nhất
+  // Tự cuộn danh sách nước đi tới nước mới nhất; khi xem lại thì tới nước đang xem
   const movesRef = useRef<ScrollView>(null);
+  const moveX = useRef<Record<number, number>>({});
   useEffect(() => {
     if (live) setTimeout(() => movesRef.current?.scrollToEnd({ animated: true }), 50);
-  }, [total, live]);
+    else if (ply > 0 && moveX.current[ply] != null) movesRef.current?.scrollTo({ x: Math.max(0, moveX.current[ply] - 120), animated: true });
+  }, [total, live, ply]);
+
+  // Còn 10 giây: tiếng tích tắc (một lần mỗi ván)
+  const myMs = mine && g.clocks ? Math.max(0, g.clocks[mine] - (g.turn === mine && g.moves.length >= 2 ? elapsed : 0)) : null;
+  const lowWarned = useRef(false);
+  useEffect(() => {
+    if (!active || !mine || g.turn !== mine || g.base < 30000 || myMs == null || myMs <= 0 || myMs > 10000 || lowWarned.current) return;
+    lowWarned.current = true;
+    playSound("lowtime");
+  }, [active, mine, g.turn, g.base, myMs]);
 
   // Âm thanh: mỗi khi bàn cờ tiến thêm đúng một nước (đi quân, đối thủ đi, xem lại từng nước)
   const lastPly = useRef(ply);
   useEffect(() => {
     const before = lastPly.current;
     lastPly.current = ply;
-    if (ply === before + 1) playSound(soundForSan(san[ply - 1]));
-  }, [ply, san]);
+    if (ply === before + 1) {
+      // Nước của mình và của đối thủ có tiếng khác nhau (người xem: Trắng là "mình")
+      const mover = ply % 2 === 1 ? "w" : "b";
+      playSound(soundForSan(san[ply - 1], mine ? mover === mine : mover === "w"));
+    }
+  }, [ply, san, mine]);
   // Bắt đầu / kết thúc ván
   const lastStatus = useRef(g.status);
   useEffect(() => {
@@ -215,7 +238,8 @@ function Game({ g }: { g: ChessGame }) {
       />
 
       <PlayerBar g={g} color={top} elapsed={elapsed} captured={mat.captured[top]} lead={mat.lead[top]} />
-      <View style={{ alignItems: "center" }}>
+      <View style={{ flexDirection: "row", justifyContent: "center", gap: 4 }}>
+        {review ? <EvalBar pos={showBest ? beforePos : review.positions[ply]} height={size} orientation={bottom} /> : null}
         <Board
           fen={fen}
           size={size}
@@ -223,10 +247,12 @@ function Game({ g }: { g: ChessGame }) {
           movable={movable}
           lastMove={lastMove}
           onMove={(uci) => playMove(g.id, uci)}
+          onIllegal={() => playSound("illegal")}
           hints={prefs.hints}
           showLast={prefs.lastMove}
           coords={prefs.coords}
-          arrow={!active && prefs.arrows && result && ply < total ? result.positions[ply]?.best : null}
+          arrow={review && prefs.arrows ? (showBest ? beforePos?.best : ply < total ? review.positions[ply]?.best : null) : null}
+          badge={showBest && beforePos?.best ? { sq: beforePos.best.slice(2, 4), cls: "best" } : reviewMove ? { sq: reviewMove.uci.slice(2, 4), cls: reviewMove.cls } : null}
         />
       </View>
       <PlayerBar g={g} color={bottom} elapsed={elapsed} captured={mat.captured[bottom]} lead={mat.lead[bottom]} />
@@ -240,15 +266,21 @@ function Game({ g }: { g: ChessGame }) {
             {san.length === 0 ? <Text style={s.muted}>Chưa có nước đi nào</Text> : null}
             {san.map((m, i) => {
               const cls = result?.moves[i]?.cls;
-              const mark = cls && cls !== "best" && cls !== "good" ? MOVE_CLASS[cls] : null;
+              const mark = cls && NOTABLE.has(cls) ? MOVE_CLASS[cls] : null;
               return (
-                <View key={i} style={s.moveItem}>
+                <View
+                  key={i}
+                  style={s.moveItem}
+                  onLayout={(e) => {
+                    moveX.current[i + 1] = e.nativeEvent.layout.x;
+                  }}
+                >
                   {i % 2 === 0 ? <Text style={s.moveNo}>{i / 2 + 1}.</Text> : null}
                   <Pressable
                     onPress={() => jump(i + 1)}
                     style={[s.move, ply === i + 1 && { backgroundColor: c.jadeWash }]}
                     accessibilityRole="button"
-                    accessibilityLabel={`Xem nước ${m}${mark ? `, ${mark.label}` : ""}`}
+                    accessibilityLabel={`Xem nước ${m}${cls ? `, ${MOVE_CLASS[cls].label}` : ""}`}
                   >
                     <Text style={[s.moveText, ply === i + 1 && { color: c.accent }, mark && { color: mark.color }]}>
                       {m}
@@ -264,6 +296,12 @@ function Game({ g }: { g: ChessGame }) {
         </View>
 
         <View style={s.body}>
+          {review ? (
+            <>
+              <ReviewCoach r={review} ply={ply} total={total} onJump={(p) => jump(p)} bestView={showBest} onToggleBest={() => setBestView((v) => !v)} />
+              <EvalGraph r={review} ply={ply} onJump={(p) => jump(p)} />
+            </>
+          ) : null}
           {!live && active ? (
             <Pressable onPress={() => jump(null)} style={[s.banner, { backgroundColor: c.turmericWash }]} accessibilityRole="button">
               <Icon name="history" size={18} color={c.text2} />

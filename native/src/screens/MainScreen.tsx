@@ -2,13 +2,14 @@ import { useEffect, type ReactNode } from "react";
 import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { KnightIcon } from "../chess/Board";
+import { BlocksScreen } from "../blocks/BlocksScreen";
 import { ChessHome } from "../chess/ChessHome";
 import { GameScreen } from "../chess/GameScreen";
 import { chessBadge, useChess } from "../chess/store";
 import { SocialHost } from "../social/SocialHost";
 import { closeUser, useSocial } from "../social/store";
-import { closeConversation, closeSettings, leaveGame, setTab, unreadTotal, useStore, type Tab } from "../store";
+import { GamesHome } from "../games/GamesHome";
+import { closeConversation, closeSettings, leaveGame, setTab, showGamesHub, unreadTotal, useStore, type Tab } from "../store";
 import { useColors } from "../theme";
 import { Badge, Icon, type IconName } from "../ui";
 import { AdminScreen } from "./AdminScreen";
@@ -21,6 +22,7 @@ export function MainScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const tab = useStore((s) => s.tab);
+  const gamesView = useStore((s) => s.gamesView);
   const currentId = useStore((s) => s.currentId);
   const isAdmin = useStore((s) => s.me?.role === "admin");
   const unread = useStore((s) => unreadTotal(s.convs));
@@ -31,6 +33,7 @@ export function MainScreen() {
   const settingsOpen = useStore((s) => s.settingsOpen);
 
   // Nút Quay lại của Android: đóng khung chat / ván cờ / trang cá nhân người khác / Cài đặt, rồi về tab Tin nhắn, rồi mới thoát app
+  // (game Xếp Khối tự xử lý nút Quay lại khi đang mở)
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       const s = useStore.getState();
@@ -38,8 +41,12 @@ export function MainScreen() {
         closeConversation();
         return true;
       }
-      if (s.tab === "chess" && useChess.getState().openId != null) {
+      if (s.tab === "games" && s.gamesView === "chess" && useChess.getState().openId != null) {
         leaveGame();
+        return true;
+      }
+      if (s.tab === "games" && s.gamesView !== "hub") {
+        showGamesHub();
         return true;
       }
       if (useSocial.getState().viewUser != null) {
@@ -62,8 +69,10 @@ export function MainScreen() {
   const full =
     currentId != null ? (
       <ChatScreen key={currentId} convId={currentId} />
-    ) : tab === "chess" && gameId != null ? (
+    ) : tab === "games" && gamesView === "chess" && gameId != null ? (
       <GameScreen key={gameId} id={gameId} />
+    ) : tab === "games" && gamesView === "blocks" ? (
+      <BlocksScreen onBack={showGamesHub} />
     ) : viewUser != null ? (
       <UserProfileScreen key={viewUser} userId={viewUser} />
     ) : null;
@@ -76,8 +85,12 @@ export function MainScreen() {
           <View style={{ flex: 1 }}>
             {shown === "chats" ? (
               <ChatListScreen />
-            ) : shown === "chess" ? (
-              <ChessHome />
+            ) : shown === "games" ? (
+              gamesView === "chess" ? (
+                <ChessHome />
+              ) : (
+                <GamesHome />
+              )
             ) : shown === "me" ? (
               settingsOpen ? (
                 <SettingsScreen />
@@ -91,12 +104,12 @@ export function MainScreen() {
           <View style={[styles.nav, { backgroundColor: c.surface, borderTopColor: c.line, paddingBottom: Math.max(insets.bottom, 8) }]}>
             <NavItem icon="chat-bubble" label="Tin nhắn" active={shown === "chats"} badge={unread} onPress={() => setTab("chats")} />
             <NavItem
-              label="Cờ vua"
-              active={shown === "chess"}
+              icon="sports-esports"
+              label="Trò chơi"
+              active={shown === "games"}
               badge={chessTodo}
-              badgeLabel="việc cần làm"
-              onPress={() => setTab("chess")}
-              renderIcon={(color, bg) => <KnightIcon size={24} color={color} hole={bg} />}
+              badgeLabel="việc cần làm ở Cờ vua"
+              onPress={() => setTab("games")}
             />
             <NavItem icon="person" label="Cá nhân" active={shown === "me"} onPress={() => setTab("me")} />
             {isAdmin ? <NavItem icon="admin-panel-settings" label="Quản trị" active={shown === "admin"} onPress={() => setTab("admin")} /> : null}

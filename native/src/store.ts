@@ -5,6 +5,7 @@ import { create } from "zustand";
 
 import { api, ApiError, setAuthHandlers } from "./api";
 import { clearSnapshot, loadSnapshot, saveSnapshot } from "./cache";
+import { bindBlocks, onScoreEvent, resetBlocksBoard, sync as syncBlocks } from "./blocks/store";
 import { bindChess, closeGame, loadChess, onAnalysisEvent, onChessEvent, openGame, resetChess, useChess } from "./chess/store";
 import { API_URL } from "./config";
 import { convTitle, previewText, type Names } from "./format";
@@ -38,7 +39,9 @@ import type { ChatItem, Conversation, Me, Message, PendingMessage, Reaction, Use
    ========================================================= */
 
 export type Phase = "boot" | "login" | "force" | "ready";
-export type Tab = "chats" | "chess" | "me" | "admin";
+export type Tab = "chats" | "games" | "me" | "admin";
+/** Trong tab Trò chơi: trang chọn game, Cờ vua, hay đang chơi Xếp Khối */
+export type GamesView = "hub" | "chess" | "blocks";
 export type Connection = "connecting" | "online" | "offline";
 
 export type MsgBox = {
@@ -51,7 +54,7 @@ export type MsgBox = {
   stale: boolean;
 };
 
-/** chessGameId: chạm để mở ván cờ đó (0 = mở tab Cờ vua) */
+/** chessGameId: chạm để mở ván cờ đó (0 = mở mục Cờ vua) */
 export type Toast = { id: number; text: string; title?: string; convId?: number; senderId?: number; chessGameId?: number };
 
 export type UpdateInfo = { versionCode: number; versionName: string; apk: string; notes?: string };
@@ -67,6 +70,7 @@ type State = {
   drafts: Record<number, string>;
   replying: Record<number, ChatItem | undefined>;
   tab: Tab;
+  gamesView: GamesView;
   /** Đang mở màn Cài đặt (trong tab Cá nhân) */
   settingsOpen: boolean;
   currentId: number | null;
@@ -94,6 +98,7 @@ const initial: State = {
   drafts: {},
   replying: {},
   tab: "chats",
+  gamesView: "hub",
   settingsOpen: false,
   currentId: null,
   atBottom: true,
@@ -286,6 +291,7 @@ async function enterApp() {
     else closeConversation();
   }
   loadChess();
+  syncBlocks(); // gửi điểm Xếp Khối chơi lúc mất mạng
   setupPush().catch(() => undefined);
 }
 
@@ -326,6 +332,7 @@ function resetAll(notice: string | null) {
   saveTimer = null;
   resetChess();
   resetSocial();
+  resetBlocksBoard();
   set({ ...initial, phase: "login", notice, appActive: get().appActive, update: get().update });
   lastBadge = 0;
   setBadge(0);
@@ -389,6 +396,7 @@ async function resync() {
     });
     if (useChess.getState().loaded) loadChess();
     refreshSocial();
+    syncBlocks();
     const current = get().currentId;
     if (current != null) {
       if (!get().convs[current]) {
@@ -458,9 +466,9 @@ export async function openConversation(id: number) {
       return;
     }
   }
-  // Đang trong một ván cờ thì giữ tab Cờ vua: đóng chat là quay lại ván
-  const keepChess = get().tab === "chess" && useChess.getState().openId != null;
-  set({ currentId: id, atBottom: true, tab: keepChess ? "chess" : "chats" });
+  // Đang trong một ván cờ thì giữ tab Trò chơi: đóng chat là quay lại ván
+  const keepChess = inChess() && useChess.getState().openId != null;
+  set({ currentId: id, atBottom: true, tab: keepChess ? "games" : "chats" });
   hideToastFor(id);
   dismissConversation(id);
   const box = get().msgs[id];
@@ -473,10 +481,34 @@ export function closeConversation() {
   set({ currentId: null });
 }
 
+const inChess = () => get().tab === "games" && get().gamesView === "chess";
+
+/** Rời mục Cờ vua: đóng ván đang mở (để thông báo về ván đó không bị nuốt mất) */
+function leaveChessView() {
+  if (useChess.getState().openId != null) closeGame();
+}
+
 export function setTab(tab: Tab) {
-  set({ tab, currentId: null, settingsOpen: false });
+  // Bấm lại tab Trò chơi khi đang ở trong một game: về trang chọn game
+  const gamesView = tab === "games" && get().tab === "games" ? "hub" : get().gamesView === "blocks" ? "hub" : get().gamesView;
+  if (!(tab === "games" && gamesView === "chess")) leaveChessView();
+  set({ tab, currentId: null, settingsOpen: false, gamesView });
   closeUser();
-  if (tab === "chess" && !useChess.getState().loading) loadChess();
+  if (tab === "games" && !useChess.getState().loading) loadChess();
+  if (tab === "games") syncBlocks();
+}
+
+/** Trang chọn game (trong tab Trò chơi) */
+export function showGamesHub() {
+  leaveChessView();
+  set({ tab: "games", gamesView: "hub", currentId: null });
+}
+
+/** Mở game Xếp Khối */
+export function openBlocks() {
+  leaveChessView();
+  set({ tab: "games", gamesView: "blocks", currentId: null });
+  closeUser();
 }
 
 /** Màn Cài đặt (đổi tên, ảnh bìa, giao diện, mật khẩu…) nằm trong tab Cá nhân */
@@ -492,11 +524,11 @@ export function closeSettings() {
 /** Mở ván từ chỗ khác (bảng tin, tin nhắn, thông báo…): bấm Quay lại thì về đúng chỗ đó */
 let chessReturn: { gameId: number; tab: Tab; currentId: number | null } | null = null;
 
-/** Mở tab Cờ vua; có gameId thì mở luôn ván đó */
+/** Mở mục Cờ vua; có gameId thì mở luôn ván đó */
 export function openChess(gameId?: number | null) {
   const s = get();
-  chessReturn = gameId && s.tab !== "chess" ? { gameId, tab: s.tab, currentId: s.currentId } : null;
-  set({ tab: "chess", currentId: null });
+  chessReturn = gameId && !inChess() ? { gameId, tab: s.tab, currentId: s.currentId } : null;
+  set({ tab: "games", gamesView: "chess", currentId: null });
   if (get().toast?.chessGameId != null) hideToast();
   if (gameId) openGame(gameId);
   else {
@@ -510,7 +542,7 @@ export function leaveGame() {
   const back = chessReturn;
   const leaving = useChess.getState().openId;
   closeGame(); // xóa luôn chessReturn (qua bindChess.closed)
-  if (!back || back.gameId !== leaving || get().tab !== "chess") return;
+  if (!back || back.gameId !== leaving || !inChess()) return;
   set({ tab: back.tab, currentId: back.currentId != null && get().convs[back.currentId] ? back.currentId : null });
 }
 
@@ -893,6 +925,7 @@ function connectSocket() {
   s.on("chess:game", (data) => onChessEvent("chess:game", data));
   s.on("chess:challenge", (data) => onChessEvent("chess:challenge", data));
   s.on("chess:analysis", onAnalysisEvent);
+  s.on("games:score", onScoreEvent);
   for (const name of ["post:new", "post:likes", "post:comment", "post:comment-deleted", "post:deleted"]) {
     s.on(name, (data) => onSocialEvent(name, data));
   }
@@ -1052,11 +1085,17 @@ bindChess({
   nameOf: (id) => namesOf(get()).nameOf(id),
   toast: (text, extra) => {
     // Đang xem đúng ván đó thì thôi
-    if (extra?.chessGameId && useChess.getState().openId === extra.chessGameId && get().tab === "chess" && get().currentId == null) return;
+    if (extra?.chessGameId && useChess.getState().openId === extra.chessGameId && inChess() && get().currentId == null) return;
     showToast(text, extra || {}, 4500);
   },
-  onTab: () => get().tab === "chess" && get().currentId == null && get().appActive,
+  onTab: () => inChess() && get().currentId == null && get().appActive,
   showChess: () => openChess(),
+});
+
+bindBlocks({
+  meId: () => (get().phase === "ready" ? (get().me?.id ?? null) : null),
+  online: () => !get().offline,
+  toast: (text) => showToast(text),
 });
 
 bindSocial({

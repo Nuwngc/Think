@@ -86,6 +86,7 @@ async function ensureStockfish() {
 async function runStockfish({ moves, skill, movetime }) {
   await ensureStockfish();
   sfSend(`setoption name Skill Level value ${Math.max(0, Math.min(20, skill | 0))}`);
+  sfSend('setoption name MultiPV value 1');
   sfSend(`position startpos${moves && moves.length ? ` moves ${moves.join(' ')}` : ''}`);
   const ready = sfUntil('readyok', 10000);
   sfSend('isready');
@@ -98,25 +99,54 @@ async function runStockfish({ moves, skill, movetime }) {
   return move;
 }
 
-// Chấm điểm một thế cờ (phân tích ván): nước tốt nhất và điểm đánh giá, tính theo bên đang đi
-async function evalStockfish({ fen, moves, movetime, depth, fresh, searchmoves }) {
+// Đọc một dòng "info ..." của Stockfish: điểm (theo bên đang đi), độ sâu, dãy nước chính
+function parseInfo(text) {
+  if (!text) return null;
+  const out = { move: null, cp: null, mate: null, depth: 0, pv: [] };
+  const cp = / score cp (-?\d+)/.exec(text);
+  const mate = / score mate (-?\d+)/.exec(text);
+  const depth = / depth (\d+)/.exec(text);
+  const pv = / pv (.+)$/.exec(text);
+  if (cp) out.cp = Number(cp[1]);
+  if (mate) out.mate = Number(mate[1]);
+  if (depth) out.depth = Number(depth[1]);
+  if (pv) {
+    // Bản Stockfish này ghi thêm "bmc ..." sau dãy nước: chỉ lấy các nước đi hợp lệ ở đầu
+    const list = pv[1].trim().split(/\s+/);
+    const end = list.findIndex((m) => !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m));
+    out.pv = (end < 0 ? list : list.slice(0, end)).slice(0, 6);
+    out.move = out.pv[0] || null;
+  }
+  return out;
+}
+
+// Chấm điểm một thế cờ (phân tích ván): nước tốt nhất và điểm đánh giá, tính theo bên đang đi.
+// multipv = 2: trả thêm nước tốt thứ nhì (second), để biết nước tốt nhất có phải "nước duy nhất" không.
+async function evalStockfish({ fen, moves, movetime, depth, fresh, searchmoves, multipv }) {
   await ensureStockfish();
   sfSend('setoption name Skill Level value 20');
+  const lines = Math.max(1, Math.min(3, Number(multipv) || 1));
+  sfSend(`setoption name MultiPV value ${lines}`);
   if (fresh) sfSend('ucinewgame');
   // Có danh sách nước từ đầu ván thì gửi cả lịch sử, để máy biết thế cờ lặp lại (hòa 3 lần)
   sfSend(Array.isArray(moves) ? `position startpos${moves.length ? ` moves ${moves.join(' ')}` : ''}` : `position fen ${fen}`);
   const ready = sfUntil('readyok', 10000);
   sfSend('isready');
   await ready;
-  let last = null;
+  // Dòng mới nhất cho từng hạng (multipv 1, 2…); dòng "lowerbound/upperbound" là điểm tạm, chỉ dùng khi không có gì khác
+  const last = new Map();
+  const loose = new Map();
   const done = new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       sfWaiter = null;
       reject(new Error('Stockfish không trả lời (phân tích)'));
     }, Math.max(5000, movetime * 4 + 5000));
     sfWaiter = (text) => {
-      if (text.startsWith('info') && / score /.test(text) && !/ multipv [2-9]/.test(text)) last = text;
-      else if (text.startsWith('bestmove')) {
+      if (text.startsWith('info') && / score /.test(text) && / pv /.test(text)) {
+        const k = Number((/ multipv (\d+)/.exec(text) || [])[1] || 1);
+        if (/ (lower|upper)bound/.test(text)) loose.set(k, text);
+        else last.set(k, text);
+      } else if (text.startsWith('bestmove')) {
         clearTimeout(timer);
         sfWaiter = null;
         resolve(text);
@@ -127,21 +157,21 @@ async function evalStockfish({ fen, moves, movetime, depth, fresh, searchmoves }
   const only = Array.isArray(searchmoves) && searchmoves.length ? ` searchmoves ${searchmoves.filter((m) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m)).join(' ')}` : '';
   sfSend(`go${depth ? ` depth ${depth | 0}` : ''} movetime ${Math.max(30, movetime | 0)}${only}`);
   const line = await done;
+  if (lines > 1) sfSend('setoption name MultiPV value 1');
   const best = line.split(/\s+/)[1];
+  const top = parseInfo(last.get(1) || loose.get(1));
   const out = { move: best && best !== '(none)' ? best : null, cp: null, mate: null, depth: 0, pv: [] };
-  if (last) {
-    const cp = / score cp (-?\d+)/.exec(last);
-    const mate = / score mate (-?\d+)/.exec(last);
-    const depth = / depth (\d+)/.exec(last);
-    const pv = / pv (.+)$/.exec(last);
-    if (cp) out.cp = Number(cp[1]);
-    if (mate) out.mate = Number(mate[1]);
-    if (depth) out.depth = Number(depth[1]);
-    if (pv) {
-      // Bản Stockfish này ghi thêm "bmc ..." sau dãy nước: chỉ lấy các nước đi hợp lệ ở đầu
-      const list = pv[1].trim().split(/\s+/);
-      const end = list.findIndex((m) => !/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m));
-      out.pv = (end < 0 ? list : list.slice(0, end)).slice(0, 6);
+  if (top) {
+    out.cp = top.cp;
+    out.mate = top.mate;
+    out.depth = top.depth;
+    out.pv = top.pv;
+  }
+  if (lines > 1) {
+    const second = parseInfo(last.get(2) || loose.get(2));
+    // Dòng thứ nhì từ lượt tìm nông hơn nhiều (hết giờ giữa chừng) thì điểm chưa đáng tin: bỏ
+    if (second && second.move && second.move !== out.move && second.depth >= out.depth - 2) {
+      out.second = { move: second.move, cp: second.cp, mate: second.mate, depth: second.depth };
     }
   }
   return out;

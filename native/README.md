@@ -15,7 +15,9 @@ App có tên **Think Beta** (mã gói `com.nuwngc.think.beta`), cài **song song
 - Quản trị (admin): tạo tài khoản (hiện mật khẩu tạm để gửi), đặt lại mật khẩu, khóa / mở khóa, cấp quyền admin, xem bộ nhớ máy chủ, tự dọn / dọn thủ công.
 - **Thông báo đẩy** khi đóng app, bấm **Trả lời** hoặc **Đã đọc** ngay trong thông báo (cần bước 3 bên dưới).
 - **Lưu trên máy**: mở app là thấy ngay tin nhắn cũ kể cả khi máy chủ đang ngủ hoặc mất mạng, tự kết nối lại.
-- **Cờ vua** (tab Cờ vua): thách đấu bạn bè có chọn thời gian, đồng hồ, **điểm ELO**, **bảng xếp hạng**, chơi với 8 máy cờ (có Stockfish), thông báo khi có người thách hoặc tới lượt đi, **lịch sử và xem lại ván** (tự chạy), **Stockfish phân tích ván** (độ chính xác, ?! ? ??, biểu đồ, mũi tên gợi ý), **bật/tắt chỉ dẫn** và **âm thanh** quân cờ, **chia sẻ ván** lên trang cá nhân hoặc vào cuộc trò chuyện (hiện thành thẻ bấm được để mở ván). Trong chat riêng có nút quân mã để thách nhanh. Chơi chéo được với người dùng bản web. Chi tiết ở mục 14 của README chính.
+- **Tab Trò chơi**: trang chọn game (Xếp Khối, Cờ vua) và bảng xếp hạng tuần của cả nhóm.
+- **Xếp Khối** (kiểu Block Blast): kéo khối vào bàn 8×8, xóa hàng / cột, combo, hiệu ứng nổ, âm thanh, **chơi được khi mất mạng** (có nút chơi ngay ở màn đăng nhập / màn chờ máy chủ), điểm tự gửi lên **bảng xếp hạng** tuần này / mọi lúc khi có mạng. Chi tiết ở mục 16 của README chính.
+- **Cờ vua** (tab Trò chơi → Cờ vua): thách đấu bạn bè có chọn thời gian, đồng hồ, **điểm ELO**, **bảng xếp hạng**, chơi với 8 máy cờ (có Stockfish), thông báo khi có người thách hoặc tới lượt đi, **lịch sử và xem lại ván** (tự chạy), **đánh giá ván kiểu Game Review** (Thiên tài !!, Tuyệt vời !, Tốt nhất, Theo sách, Sai lầm ??…, thanh đánh giá, huy hiệu trên bàn cờ, nhận xét từng nước, xem nước tốt nhất, bảng tổng kết, tên khai cuộc), **bật/tắt chỉ dẫn** và **âm thanh** quân gỗ (nước mình / đối thủ khác tiếng, sắp hết giờ, đi sai), **chia sẻ ván** lên trang cá nhân hoặc vào cuộc trò chuyện (hiện thành thẻ bấm được để mở ván). Trong chat riêng có nút quân mã để thách nhanh. Chơi chéo được với người dùng bản web. Chi tiết ở mục 14 của README chính.
 - Giao diện sáng / tối theo máy hoặc tự chọn trong Cài đặt. Chạy từ Android 7 trở lên.
 
 Chưa có (so với app bong bóng chat hiện tại): **bong bóng chat nổi** kiểu Messenger. Muốn bong bóng thì vẫn dùng app Think cũ.
@@ -107,7 +109,9 @@ native/
   src/cache.ts             Lưu bản sao trên máy để mở app nhanh / khi mất mạng
   src/format.ts            Chữ, giờ, tin hệ thống — giống bản web
   src/screens/             Các màn hình
-  src/chess/               Cờ vua: bàn cờ, ván cờ, thách đấu, bảng xếp hạng (luật: chess.js)
+  src/games/               Tab Trò chơi (trang chọn game)
+  src/blocks/              Xếp Khối: engine.ts (luật, giống public/blocks-core.js), store.ts (lưu trên máy, gửi điểm), BlocksScreen.tsx
+  src/chess/               Cờ vua: bàn cờ, ván cờ, thách đấu, bảng xếp hạng, đánh giá ván (luật: chess.js)
   src/social/              Trang cá nhân, bảng tin, bình luận, chia sẻ ván cờ (store.ts: dữ liệu; SocialHost.tsx: các bảng)
   src/theme.ts             Màu sáng / tối và lựa chọn giao diện (lưu trên máy)
   credentials/             Khóa ký app đã khóa (không có mã thì không mở được)

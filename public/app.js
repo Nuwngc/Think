@@ -281,12 +281,18 @@
   }
   const toast = (text) => pushToast(h('div', { class: 'toast', role: 'status', text }), 3400);
 
-  // Cờ vua (public/chess-ui.js): tab riêng, ván cờ mở ở cột phải
+  // Tab Trò chơi (public/games-ui.js): trang chọn game, Xếp Khối (public/blocks.js) và Cờ vua (public/chess-ui.js).
+  // Ván cờ / game Xếp Khối mở ở cột phải (toàn màn hình trên điện thoại)
+  let games = null;
   const chess = window.ThinkChess
     ? window.ThinkChess.create({
         api, h, icon, avatarEl, userOf, nameOf, state, toast, pushToast, navigate, goBack, withBusy, shortTime, fold,
         share: (game) => social && social.shareGame(game),
+        onChange: () => games && games.refresh(),
       })
+    : null;
+  games = window.ThinkGames
+    ? window.ThinkGames.create({ h, icon, api, state, navigate, goBack, toast, chess, nameOf, userOf, avatarEl })
     : null;
 
   // Trang cá nhân và bảng tin (public/social-ui.js)
@@ -344,6 +350,7 @@
     state.currentId = null;
     state.everConnected = false;
     if (chess) chess.reset();
+    if (games) games.reset();
     if (social) social.reset();
     $('#conv-list').replaceChildren();
     $('#messages').replaceChildren();
@@ -383,12 +390,13 @@
     // Trang cá nhân của một người (#/u/5) mở ở cột phải; bài đăng (#/p/9, từ thông báo) mở bình luận
     const userPage = /^#\/u\/(\d+)$/.exec(hash);
     const postPage = /^#\/p\/(\d+)$/.exec(hash);
+    const gamesView = hash === '#/chess' || chessGame ? 'chess' : hash === '#/blocks' ? 'blocks' : hash === '#/games' ? 'hub' : null;
     const tab = hash === '#/me' || hash === '#/settings' || postPage ? 'me'
       : hash === '#/admin' ? 'admin'
-        : hash === '#/chess' || chessGame ? 'chess'
+        : gamesView ? 'games'
           : userPage ? (state.tab || 'chats')
             : 'chats';
-    if (tab === 'chess' && !chess) {
+    if (tab === 'games' && (!games || (gamesView === 'chess' && !chess))) {
       navigate('#/', { replace: true });
       return;
     }
@@ -412,7 +420,8 @@
     else if (!sheet) closeConversation();
     showTab(tab);
     showMeView(hash === '#/settings' ? 'settings' : 'profile');
-    if (chess) chess.route(tab === 'chess', chessGame ? Number(chessGame[1]) : null);
+    if (chess) chess.route(tab === 'games' && gamesView === 'chess', chessGame ? Number(chessGame[1]) : null);
+    if (games) games.route(tab === 'games' ? gamesView : null);
     if (social) {
       social.route(userPage ? Number(userPage[1]) : null);
       if (postPage) {
@@ -436,7 +445,11 @@
   window.addEventListener('popstate', route);
   window.addEventListener('hashchange', route);
 
-  /* ----- Thanh điều hướng dưới: Tin nhắn / Cá nhân / Quản trị ----- */
+  /* ----- Thanh điều hướng dưới: Tin nhắn / Trò chơi / Cá nhân / Quản trị ----- */
+  // Phần cuộn đang hiện của một tab (tab Trò chơi có hai phần: trang chọn game và Cờ vua)
+  function visibleBody(tab) {
+    return [...$$(`#page-${tab} .page-body`)].find((el) => !el.closest('[hidden]')) || null;
+  }
   function showTab(tab) {
     const changed = state.tab !== tab;
     state.tab = tab;
@@ -449,14 +462,14 @@
     if (!changed || !state.me) return;
     if (tab === 'me' && !$('#me-settings').hidden) renderSettings();
     if (tab === 'admin') renderAdmin();
-    const body = $(`#page-${tab} .page-body:not([hidden])`);
+    const body = visibleBody(tab);
     if (body) body.scrollTop = 0;
   }
 
   // Từ Tin nhắn sang tab khác thì thêm một bước lịch sử, để nút Back quay về Tin nhắn thay vì thoát app
   function switchTab(tab) {
     if (tab === state.tab) {
-      const scroller = tab === 'chats' ? $('#conv-list') : $(`#page-${tab} .page-body:not([hidden])`);
+      const scroller = tab === 'chats' ? $('#conv-list') : visibleBody(tab);
       if (scroller) scroller.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' });
       return;
     }
@@ -1989,6 +2002,7 @@ ${sections}
       socket.on('chess:challenge', (data) => chess.onEvent('chess:challenge', data));
       socket.on('chess:analysis', (data) => chess.onAnalysis(data));
     }
+    if (games) socket.on('games:score', (data) => games.onScore(data));
     socket.on('storage:changed', (result) => {
       if (state.tab === 'admin') loadStorage();
       if (result && result.auto) toast(`Máy chủ sắp đầy nên đã tự dọn ${fmtNum(result.images)} ảnh và ${fmtNum(result.messages)} tin nhắn cũ nhất.`);
@@ -3427,6 +3441,12 @@ ${sections}
         break;
       }
       case 'chess-board': if (chess) chess.openLeaderboard(); break;
+      case 'games-home':
+        // Về trang chọn game: vừa từ đó sang thì lùi lại, không thì thay đường dẫn
+        e.preventDefault();
+        if (history.state && history.state.fromHub) history.back();
+        else navigate('#/games', { replace: true });
+        break;
       case 'chess-prefs': if (chess) chess.openPrefs(); break;
       case 'open-app': if (NATIVE && NATIVE.openApp) NATIVE.openApp(location.hash || '#/'); break;
       case 'chat-title':
@@ -3491,7 +3511,8 @@ ${sections}
     connectSocket();
     renderBanner();
     route();
-    if (chess) chess.load(); // để hiện số việc cần làm ở tab Cờ vua
+    if (chess) chess.load(); // để hiện số việc cần làm ở tab Trò chơi
+    if (games) games.sync(); // gửi điểm Xếp Khối chơi lúc offline
     syncPush();
     if (LocalDB.ready()) {
       cacheMe(state.me);
@@ -3515,7 +3536,10 @@ ${sections}
       }
     }
     // Máy chủ miễn phí (Render Free) ngủ khi không ai dùng: báo cho người dùng biết là đang chờ
-    const slowHint = offline ? null : setTimeout(() => { $('#boot-hint').hidden = false; }, 3500);
+    const slowHint = offline ? null : setTimeout(() => {
+      $('#boot-hint').hidden = false;
+      $('#boot-play').hidden = false; // chơi Xếp Khối (trang riêng, không cần máy chủ) trong lúc chờ
+    }, 3500);
     await connectServer(slowHint);
   }
 

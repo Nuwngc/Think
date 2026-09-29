@@ -26,6 +26,7 @@ const push = require('./src/push');
 const fcm = require('./src/fcm');
 const { setupChess } = require('./src/chess');
 const { setupSocial, cleanText } = require('./src/social');
+const { setupGames } = require('./src/games');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -437,6 +438,11 @@ app.get('/manifest.webmanifest', (req, res) => {
         { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
         { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
         { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ],
+      // Nhấn giữ biểu tượng app: vào thẳng trò chơi (Xếp Khối mở được cả khi mất mạng)
+      shortcuts: [
+        { name: 'Xếp Khối', short_name: 'Xếp Khối', url: '/blocks.html', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
+        { name: 'Cờ vua', short_name: 'Cờ vua', url: '/#/chess', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
       ],
     })
   );
@@ -1245,6 +1251,16 @@ setupSocial({
     const actor = actorId != null ? get('SELECT avatar FROM users WHERE id = ?', actorId) : null;
     return push.sendToUser(uid, { icon: actor?.avatar || '/icons/icon-192.png', ...payload });
   },
+  nameOf: (uid) => get('SELECT display_name FROM users WHERE id = ?', uid)?.display_name || 'Ai đó',
+});
+
+/* ---------------- API: trò chơi trên máy (Xếp Khối) — chỉ giữ điểm cho bảng xếp hạng (src/games.js) ---------------- */
+
+setupGames({
+  app,
+  io,
+  requireAuth,
+  requireReady,
   nameOf: (uid) => get('SELECT display_name FROM users WHERE id = ?', uid)?.display_name || 'Ai đó',
 });
 

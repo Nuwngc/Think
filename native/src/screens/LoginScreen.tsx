@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { API_URL } from "../config";
+import { openStandalone } from "../blocks/store";
 import { login, useStore } from "../store";
 import { useColors } from "../theme";
 import { Button, Field, FormError, Icon, IconButton, KeyboardAware } from "../ui";
@@ -106,6 +107,7 @@ export function LoginScreen() {
               Máy chủ đang thức dậy sau khi ngủ, có thể mất tới 1 phút. Đừng tắt app nhé.
             </Text>
           ) : null}
+          <Button title="Chơi Xếp Khối (không cần mạng)" icon="sports-esports" kind="ghost" onPress={() => openStandalone(true)} />
           <Text style={[styles.hint, { color: c.muted }]}>
             Chưa có tài khoản? Nhờ admin của nhóm tạo cho bạn.{"\n"}Máy chủ: {API_URL.replace(/^https?:\/\//, "")}
           </Text>

@@ -9,12 +9,14 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - **Trang cá nhân và bảng tin** (mục 15): đăng bài (chữ + ảnh), thả tim ❤️, bình luận, xem trang của từng người; **chia sẻ ván cờ** lên trang cá nhân hoặc gửi vào cuộc trò chuyện.
 - Phòng chung cho cả nhóm, nhắn riêng 1-1, và **nhóm chat riêng** tự tạo (đặt tên, thêm/xóa người, rời nhóm, có trưởng nhóm).
 - Gửi ảnh (tự nén trên máy trước khi gửi), dán ảnh bằng Ctrl+V trên máy tính.
-- Thanh điều hướng dưới cùng: **Tin nhắn**, **Cờ vua**, **Cá nhân** (trang cá nhân + bảng tin; nút ⚙ **Cài đặt**: tên, giới thiệu, ảnh bìa, giao diện sáng/tối, thông báo, lưu trên máy, đổi mật khẩu) và **Quản trị** (chỉ admin thấy).
+- Thanh điều hướng dưới cùng: **Tin nhắn**, **Trò chơi** (Cờ vua + Xếp Khối), **Cá nhân** (trang cá nhân + bảng tin; nút ⚙ **Cài đặt**: tên, giới thiệu, ảnh bìa, giao diện sáng/tối, thông báo, lưu trên máy, đổi mật khẩu) và **Quản trị** (chỉ admin thấy).
 - **Lưu trên máy người dùng**: tin nhắn và ảnh được giữ lại trên điện thoại, mở app là xem được ngay kể cả khi mất mạng hay máy chủ đang thức dậy. Tải lịch sử chat thành file, tải ảnh về máy.
 - **Bộ nhớ máy chủ**: thanh hiển thị dung lượng đã dùng, **tự dọn ảnh và tin nhắn cũ nhất khi sắp đầy**, dọn thủ công có xem trước.
 - **App Android có bong bóng chat** (Android 8 trở lên): tin nhắn mới hiện thành bong bóng nổi như Messenger, chạm vào để trả lời ngay; thông báo có ảnh từng người gửi, ô **Trả lời** và nút **Đã đọc**. Tải app ngay trên web (Cá nhân → Cài app lên máy).
 - **App Think Beta** (thư mục `native/`): app thật viết bằng React Native, không phải trang web trong khung. GitHub tự build file APK mỗi lần sửa code (mục 13).
-- **Cờ vua** (mục 14): thách đấu bạn bè, chọn thời gian (1+0 … 30+0 hoặc không giới hạn), đồng hồ do máy chủ giữ, **điểm ELO và bảng xếp hạng**, chơi với 8 máy cờ mã nguồn mở (có Stockfish), **xem lại ván**, **Stockfish phân tích ván** (độ chính xác, nước sai lầm), bật/tắt chỉ dẫn, âm thanh quân cờ. Có trên cả web lẫn App Think Beta.
+- **Trò chơi** (mục 16): tab riêng chứa **Cờ vua** và **Xếp Khối**, có bảng xếp hạng tuần của cả nhóm.
+- **Cờ vua** (mục 14): thách đấu bạn bè, chọn thời gian (1+0 … 30+0 hoặc không giới hạn), đồng hồ do máy chủ giữ, **điểm ELO và bảng xếp hạng**, chơi với 8 máy cờ mã nguồn mở (có Stockfish), **xem lại ván**, **đánh giá ván kiểu Game Review**: mỗi nước được xếp loại **Thiên tài !!, Tuyệt vời !, Tốt nhất, Rất tốt, Tốt, Theo sách, Thiếu chính xác ?!, Sai lầm ?, Bỏ lỡ, Sai lầm nghiêm trọng ??**, có thanh đánh giá, nhận xét từng nước, tên khai cuộc. Âm thanh quân gỗ giòn kiểu các trang cờ lớn. Có trên cả web lẫn App Think Beta.
+- **Xếp Khối** (mục 16): game xếp khối 8×8 (kiểu Block Blast) có combo, hiệu ứng nổ, âm thanh, **chơi được khi mất mạng** (kể cả lúc máy chủ đang ngủ), điểm tự gửi lên **bảng xếp hạng** tuần này / mọi lúc khi có mạng.
 - **Trả lời tin nhắn** (chạm giữ → Trả lời, hoặc vuốt ngang tin nhắn) và **thả cảm xúc** ❤️ 😆 😮 😢 😡 👍, xem được ai đã thả.
 - Realtime: đang nhập…, đang hoạt động / hoạt động X phút trước, "Đã xem" (nhóm hiện ảnh người đã xem), thu hồi tin nhắn.
 - Thông báo đầy đủ:
@@ -364,7 +366,7 @@ Máy chủ tự hỗ trợ app này (đăng nhập bằng mã phiên, thông bá
 
 ## 14. Cờ vua
 
-Tab **Cờ vua** có trên bản web và App Think Beta (cùng dữ liệu, chơi chéo được: người dùng web đấu với người dùng app).
+Mục **Cờ vua** (trong tab Trò chơi) có trên bản web và App Think Beta (cùng dữ liệu, chơi chéo được: người dùng web đấu với người dùng app).
 
 - **Thách đấu**: bấm **Thách đấu**, chọn người, thời gian mỗi bên (1+0, 2+1, 3+0, 3+2, 5+0, 5+3, 10+0, 15+10, 30+0 hoặc **không giới hạn**; "5+3" là 5 phút, đi xong mỗi nước cộng 3 giây), màu quân và có **tính điểm ELO** hay không. Trong khung chat riêng có nút quân mã để thách nhanh người đó. Người được thách nhận thông báo, bấm **Nhận** là vào ván ngay. Lời thách đấu tự hết hạn sau 15 phút.
 - **Đồng hồ** chạy trên máy chủ nên không gian lận được, mạng chập chờn cũng không lệch. Ván có giờ: mỗi bên phải đi nước đầu trong 1 phút, không thì ván tự hủy (không ai mất điểm). Hết giờ là thua, trừ khi đối thủ không còn đủ quân để chiếu hết (hòa).
@@ -380,14 +382,15 @@ Tab **Cờ vua** có trên bản web và App Think Beta (cùng dữ liệu, chơ
 
   Máy cờ chạy trong một luồng riêng, lần lượt từng ván, nên Render Free (0,1 CPU) vẫn chịu được; máy mạnh nhất nghĩ khoảng 1,5 giây mỗi nước.
 - **Xem lại ván**: mọi ván đã xong nằm trong **Lịch sử** (nút ở mục "Ván gần đây"). Mở một ván để xem từng nước (nút ‹ ›, trên máy tính dùng phím ← → Home End) hoặc bấm **Xem lại từ đầu** để tự chạy mỗi giây một nước.
-- **Phân tích ván** (ván đã xong): bấm **Phân tích bằng Stockfish**. Máy chủ chấm từng nước (khoảng 1 phút, xong có thông báo), rồi hiện:
-  - **độ chính xác** của mỗi bên (cách tính giống lichess) và số nước **thiếu chính xác ?!**, **sai lầm ?**, **sai lầm nghiêm trọng ??**;
-  - **biểu đồ** thế trận qua từng nước (bấm vào để nhảy tới nước đó), ký hiệu ?! ? ?? ngay trong danh sách nước đi;
-  - nhận xét cho từng nước kèm **nước tốt nhất**, và **mũi tên xanh** chỉ nước máy gợi ý trên bàn cờ.
+- **Đánh giá ván** (ván đã xong, kiểu "Game Review"): bấm **Đánh giá ván đấu**. Máy chủ cho Stockfish chấm từng thế cờ (khoảng 1 phút, xong có thông báo), rồi hiện:
+  - **huy hiệu loại nước** ngay trên ô vừa đi tới và trong danh sách nước: **Thiên tài !!** (thí quân mà vẫn là nước tốt nhất), **Tuyệt vời !** (nước duy nhất giữ được thế cờ), **Tốt nhất ★**, **Rất tốt**, **Tốt**, **Theo sách** (nước khai cuộc có tên), **Thiếu chính xác ?!**, **Sai lầm ?**, **Bỏ lỡ ✕** (đối thủ vừa sai mà không tận dụng, hoặc bỏ lỡ chiếu hết), **Sai lầm nghiêm trọng ??**; nước chỉ có một cách đi là **Bắt buộc**;
+  - **nhận xét như huấn luyện viên** cho từng nước ("Nxe5 là nước thiên tài! Thí Hậu rất đẹp…", "Nước tốt nhất là…", "Đối thủ có thể chiếu hết sau 2 nước"), nút **Xem nước tốt nhất** (hiện thế cờ trước nước đó với mũi tên xanh), nút Nước trước / Nước sau;
+  - **thanh đánh giá** cạnh bàn cờ, **biểu đồ** thế trận có chấm màu ở các nước đáng chú ý (bấm để nhảy tới);
+  - **bảng tổng kết**: độ chính xác mỗi bên (cách tính của lichess: trung bình có trọng số theo độ biến động + trung bình điều hòa), số nước từng loại của mỗi bên, **tên khai cuộc** (mã ECO), danh sách **khoảnh khắc đáng chú ý**.
 
-  Nước đã đi được chấm cùng thế cờ gốc với nước tốt nhất (lệnh `searchmoves` của Stockfish) nên không bị "báo sai" vì độ sâu tìm kiếm khác nhau. Mỗi ván chỉ phân tích một lần rồi lưu lại; máy chủ phân tích lần lượt từng ván, xen kẽ với lượt đi của máy cờ nên ván đang chơi không bị chậm. Ván đang chơi thì không phân tích được (tránh gian lận).
-- **Tùy chọn bàn cờ** (nút ⚙ trên đầu tab Cờ vua và trong ván): bật/tắt **chỉ dẫn nước đi** (chấm ở ô đi được), **tô màu nước vừa đi**, **tọa độ bàn cờ**, **mũi tên gợi ý khi phân tích**, **âm thanh**. Lưu riêng trên từng máy.
-- **Âm thanh**: tiếng quân cờ khi đi, ăn quân, nhập thành, chiếu tướng, bắt đầu và kết thúc ván. Các tiếng này tự tổng hợp bằng `scripts/chess-sounds.py` (không lấy của ai), dùng chung cho web (`public/chess/sounds/`) và app (`native/assets/sounds/`).
+  Cách xếp loại: so khả năng thắng (theo điểm Stockfish) trước và sau nước đi, ngưỡng tụt 2 / 5 / 10 / 20 điểm phần trăm cho Rất tốt / Tốt / Thiếu chính xác / Sai lầm / Sai lầm nghiêm trọng. Máy chấm hai nước tốt nhất mỗi thế cờ (MultiPV 2) để biết nước nào là "nước duy nhất". Nước đã đi được chấm cùng thế cờ gốc với nước tốt nhất (lệnh `searchmoves`) nên không bị báo sai vì độ sâu tìm kiếm. Sách khai cuộc lấy từ [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings) (CC0), gọn trong `src/chess-openings.tsv` (tạo lại bằng `scripts/build-openings.js`). Ván đã phân tích từ bản cũ tự được xếp loại lại khi mở. Mỗi ván chỉ phân tích một lần; ván đang chơi không phân tích được (tránh gian lận).
+- **Tùy chọn bàn cờ** (nút ⚙ trên đầu mục Cờ vua và trong ván): bật/tắt **chỉ dẫn nước đi** (chấm ở ô đi được), **tô màu nước vừa đi**, **tọa độ bàn cờ**, **mũi tên gợi ý khi phân tích**, **âm thanh**. Lưu riêng trên từng máy.
+- **Âm thanh** (phong cách các trang cờ lớn): tiếng quân gỗ giòn khi đi — **nước của mình và của đối thủ nghe khác nhau** —, ăn quân ("cạch"), nhập thành (hai tiếng), chiếu tướng, phong cấp, **còn 10 giây** (tích tắc), đi sai (kéo quân vào ô không đi được), bắt đầu và kết thúc ván. Các tiếng này tự tổng hợp bằng `scripts/chess-sounds.py` (mô phỏng quân gỗ va bàn gỗ, không lấy file của trang nào), dùng chung cho web (`public/chess/sounds/`) và app (`native/assets/sounds/`).
 - Luật cờ dùng [chess.js](https://github.com/jhlywa/chess.js) (BSD-2-Clause) ở cả máy chủ, web và app. Hình quân cờ là bộ **cburnett** của Colin M.L. Burnett (GPLv2+, xem `public/chess/pieces/LICENSE.txt`).
 
 ## 15. Trang cá nhân và bảng tin
@@ -402,6 +405,20 @@ Có trên bản web và App Think Beta (cùng dữ liệu).
 - **Ảnh bìa**: Cài đặt → Ảnh bìa (hoặc nút "Ảnh bìa" trên trang cá nhân), tối đa 4 MB, khung 16:6. Gỡ ảnh bìa thì dùng nền màu mặc định.
 - **Giao diện sáng / tối**: Cài đặt → Giao diện. Lưu riêng trên từng máy.
 
+## 16. Trò chơi và Xếp Khối
+
+Tab **Trò chơi** (thay cho tab Cờ vua cũ) có trên bản web và App Think Beta: thẻ **Xếp Khối** và **Cờ vua** (điểm ELO, việc cần làm), cùng **bảng xếp hạng tuần** của cả nhóm. Đường dẫn trên web: `#/games`, `#/chess`, `#/blocks`. Nhấn giữ biểu tượng app Think (bản cài từ web) có lối tắt **Xếp Khối** và **Cờ vua**.
+
+**Xếp Khối** (kiểu Block Blast):
+
+- Bàn 8×8, mỗi lượt có 3 khối (đủ hình: 1 ô, thanh 2–5 ô, vuông 2×2 và 3×3, chữ nhật, góc, chữ L/J/T/S/Z, góc lớn). **Kéo khối vào bàn** (trên điện thoại khối nổi lên trên ngón tay để không bị che); hàng / cột sắp đầy **sáng lên cùng màu khối** trước khi thả. Thả sai chỗ thì khối bay về khay. Cũng có thể **chạm chọn khối rồi chạm ô** để đặt; trên máy tính dùng phím 1–3, mũi tên, Enter; trình đọc màn hình có con trỏ riêng.
+- **Điểm**: mỗi ô đặt được 1 điểm; ăn 1 / 2 / 3 / 4 / 5 / 6 hàng cùng lúc được 10 / 25 / 45 / 70 / 100 / 135 điểm, nhân với **combo** (ăn hàng liên tiếp, tối đa ×10; đặt 3 khối liền không ăn hàng nào thì mất combo); **dọn sạch bàn** +300. Hết chỗ đặt cả 3 khối là hết ván. Khối mới luôn được chọn sao cho đặt được ít nhất một khối.
+- Hiệu ứng: ô nổ tung lan dần từ chỗ vừa đặt, điểm bay lên, lời khen **Tốt lắm! / Tuyệt vời! / Xuất sắc! / Không thể tin nổi! / Sạch bàn!**, huy hiệu **Combo ×N**, bảng **Kỷ lục mới!**.
+- **Âm thanh** như game gốc: cầm khối, đặt khối "cộp", ăn hàng lấp lánh (càng nhiều hàng càng dày), combo nốt cao dần, dọn sạch bàn, kỷ lục, hết ván, thả sai. Tự tổng hợp bằng `scripts/blocks-sounds.py`. Bật/tắt bằng nút loa trong game.
+- **Chơi khi mất mạng**: ván đang chơi, kỷ lục và các ván chưa gửi đều lưu trên máy. Bản web có trang riêng **`/blocks.html`** được lưu sẵn (service worker), mở tức thì kể cả khi máy chủ đang ngủ hay mất mạng — màn chờ máy chủ và màn đăng nhập đều có nút **Chơi Xếp Khối**. App Think Beta cũng có nút này ở màn đăng nhập / màn chờ.
+- **Bảng xếp hạng** (nút biểu đồ trong game): **Tuần này** (từ 0 giờ thứ Hai, giờ Việt Nam) và **Mọi lúc**, kèm kỷ lục, hạng, số ván của bạn. Điểm các ván chơi lúc mất mạng tự gửi lên khi có mạng (mỗi ván có mã riêng nên gửi lại không bị tính trùng; ván cũ hơn 30 ngày không nhận). Ai vừa **vượt lên số 1** thì cả nhóm thấy thông báo nhỏ. Kỷ lục Xếp Khối hiện trên trang cá nhân.
+- Máy chủ chỉ giữ điểm (bảng `game_scores`, `game_bests` trong `src/games.js`), kiểm tra điểm hợp lệ (mỗi nước tối đa 1.700 điểm), giới hạn 30 lần gửi / 10 phút mỗi người. Luật game giống hệt nhau ở web (`public/blocks-core.js`) và app (`native/src/blocks/engine.ts`) — có kiểm thử so khớp.
+
 ## Cấu trúc thư mục
 
 ```
@@ -415,15 +432,20 @@ src/push.js          Thông báo đẩy (Web Push / VAPID)
 src/fcm.js           Thông báo đẩy cho App Think Beta (Firebase Cloud Messaging)
 src/chess.js         Cờ vua: thách đấu, đồng hồ, ELO, bảng xếp hạng, API /api/chess
 src/chess-engine.js  Hàng đợi gửi việc cho máy cờ; src/chess-worker.js chạy máy cờ trong luồng riêng
-src/chess-analysis.js Phân tích ván đã xong bằng Stockfish (độ chính xác, xếp loại nước đi)
+src/chess-analysis.js Đánh giá ván đã xong bằng Stockfish (xếp loại thiên tài … sai lầm nghiêm trọng, độ chính xác)
+src/chess-openings.js Sách khai cuộc (dữ liệu src/chess-openings.tsv, lichess-org/chess-openings, CC0)
+src/games.js         Trò chơi trên máy (Xếp Khối): điểm, bảng xếp hạng tuần / mọi lúc (API /api/games)
 src/social.js        Trang cá nhân và bảng tin: bài đăng, thả tim, bình luận (API /api/posts)
 src/engines/         GarboChess-JS (giữ nguyên giấy phép BSD ở đầu file)
 scripts/admin.js     Công cụ dòng lệnh cho chủ server
 scripts/tunnel.js    Mở link HTTPS tạm thời (npm run share / npm run tunnel)
-scripts/chess-sounds.py Tạo lại âm thanh cờ vua (cần Python + numpy)
+scripts/chess-sounds.py Tạo lại âm thanh cờ vua (cần Python + numpy + scipy)
+scripts/blocks-sounds.py Tạo lại âm thanh Xếp Khối (cần Python + numpy + scipy)
+scripts/build-openings.js Tạo lại sách khai cuộc từ bộ dữ liệu lichess
 public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu trên máy), sw.js (service worker),
-                     chess-ui.js (tab Cờ vua), social-ui.js (trang cá nhân, bảng tin), theme.js (nền sáng/tối),
-                     chess/pieces/ (hình quân cờ), chess/sounds/ (âm thanh)
+                     games-ui.js (tab Trò chơi), chess-ui.js (Cờ vua), blocks-core.js + blocks.js + blocks.css (Xếp Khối),
+                     blocks.html + blocks-page.js (trang Xếp Khối chơi offline), social-ui.js (trang cá nhân, bảng tin),
+                     theme.js (nền sáng/tối), chess/pieces/ (hình quân cờ), chess/sounds/, blocks/sounds/ (âm thanh)
 public/download/     File cài app Android (think.apk) và version.json
 android/             Mã app Android: mở web bằng Chrome, bong bóng chat, trả lời trong thông báo (build.sh để build)
 native/              App Think Beta (React Native / Expo), xem native/README.md

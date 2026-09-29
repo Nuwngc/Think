@@ -3,8 +3,9 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Line, Polygon, SvgXml } from "react-native-svg";
 
+import { ClassBadge } from "./Analysis";
 import { PIECES } from "./pieces";
-import type { Color } from "./types";
+import type { Color, MoveClass } from "./types";
 
 // Bàn cờ: chạm quân để chọn (hiện chấm ở các ô đi được), chạm ô đích để đi. Phong cấp thì chọn quân.
 
@@ -96,6 +97,10 @@ export type BoardProps = {
   coords?: boolean;
   /** Mũi tên gợi ý (dạng e2e4), vd nước tốt nhất máy tìm được */
   arrow?: string | null;
+  /** Huy hiệu loại nước (thiên tài, sai lầm…) ở góc ô vừa đi tới, khi xem lại ván đã phân tích */
+  badge?: { sq: string; cls: MoveClass } | null;
+  /** Chạm vào ô không đi được khi đang chọn quân (để phát tiếng báo) */
+  onIllegal?: () => void;
 };
 
 const ARROW = "rgba(21,120,90,0.78)";
@@ -137,7 +142,7 @@ function Arrow({ uci, cell, orientation }: { uci: string; cell: number; orientat
   );
 }
 
-export function Board({ fen, size, orientation, movable, lastMove, onMove, hints = true, showLast = true, coords = true, arrow }: BoardProps) {
+export function Board({ fen, size, orientation, movable, lastMove, onMove, hints = true, showLast = true, coords = true, arrow, badge, onIllegal }: BoardProps) {
   const cell = Math.floor(size / 8);
   const chess = useMemo(() => {
     try {
@@ -174,11 +179,11 @@ export function Board({ fen, size, orientation, movable, lastMove, onMove, hints
     return null;
   }, [chess]);
 
-  const state = useRef({ selected, targets, canMove, chess, movable, onMove });
-  state.current = { selected, targets, canMove, chess, movable, onMove };
+  const state = useRef({ selected, targets, canMove, chess, movable, onMove, onIllegal });
+  state.current = { selected, targets, canMove, chess, movable, onMove, onIllegal };
 
   const press = useCallback((sq: Square) => {
-    const { selected: sel, targets: tg, canMove: can, chess: ch, movable: mv, onMove: done } = state.current;
+    const { selected: sel, targets: tg, canMove: can, chess: ch, movable: mv, onMove: done, onIllegal: bad } = state.current;
     if (!can) return;
     const moves = sel ? tg.get(sq) : undefined;
     if (sel && moves?.length) {
@@ -192,7 +197,10 @@ export function Board({ fen, size, orientation, movable, lastMove, onMove, hints
     }
     const p = ch.get(sq);
     if (p && p.color === mv) setSelected(sel === sq ? null : sq);
-    else setSelected(null);
+    else {
+      if (sel) bad?.(); // đang chọn quân mà chạm ô không đi được
+      setSelected(null);
+    }
   }, []);
 
   const board = chess.board();
@@ -231,6 +239,18 @@ export function Board({ fen, size, orientation, movable, lastMove, onMove, hints
         </View>
       ))}
       {arrow && /^[a-h][1-8][a-h][1-8]/.test(arrow) ? <Arrow uci={arrow} cell={cell} orientation={orientation} /> : null}
+      {badge && /^[a-h][1-8]$/.test(badge.sq) ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: center(badge.sq, cell, orientation).x + cell / 2 - Math.max(16, cell * 0.4) - 1,
+            top: center(badge.sq, cell, orientation).y - cell / 2 + 1,
+          }}
+        >
+          <ClassBadge cls={badge.cls} size={Math.max(16, Math.round(cell * 0.4))} />
+        </View>
+      ) : null}
       {promo ? (
         <View style={[StyleSheet.absoluteFill, styles.promoWrap]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setPromo(null)} accessibilityLabel="Hủy phong cấp" />

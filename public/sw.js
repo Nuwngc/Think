@@ -1,5 +1,5 @@
 /* Service worker: lưu giao diện để mở nhanh + hiện thông báo đẩy kể cả khi đã đóng app */
-const CACHE = 'think-v7';
+const CACHE = 'think-v8';
 // Ảnh trong tin nhắn và ảnh đại diện đã xem được giữ lại trên máy (tên file không bao giờ đổi),
 // nên vẫn hiện được khi mất mạng hoặc khi máy chủ đã dọn ảnh cũ. Tắt "Lưu trên máy" thì không giữ nữa.
 const MEDIA = 'think-media';
@@ -11,10 +11,18 @@ const SHELL = [
   '/localdb.js',
   '/chess-ui.js',
   '/social-ui.js',
+  '/games-ui.js',
   '/theme.js',
   '/vendor/chess.js',
   ...['K', 'Q', 'R', 'B', 'N', 'P'].flatMap((p) => [`/chess/pieces/w${p}.svg`, `/chess/pieces/b${p}.svg`]),
-  ...['move', 'capture', 'castle', 'check', 'start', 'end'].map((n) => `/chess/sounds/${n}.wav`),
+  ...['move', 'move-opp', 'capture', 'castle', 'check', 'promote', 'start', 'end', 'illegal', 'lowtime'].map((n) => `/chess/sounds/${n}.wav`),
+  // Game Xếp Khối chơi được khi mất mạng: lưu sẵn cả trang riêng lẫn âm thanh
+  '/blocks.html',
+  '/blocks.css',
+  '/blocks-core.js',
+  '/blocks.js',
+  '/blocks-page.js',
+  ...['pick', 'place', 'invalid', 'clear1', 'clear2', 'clear3', 'combo1', 'combo2', 'combo3', 'combo4', 'combo5', 'combo6', 'combo7', 'combo8', 'allclear', 'best', 'gameover', 'start'].map((n) => `/blocks/sounds/${n}.wav`),
   '/manifest.webmanifest',
   '/socket.io/socket.io.min.js',
   '/icons/icon-192.png',
@@ -57,8 +65,34 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (url.pathname.startsWith('/socket.io/') && url.search) return;
+  // Game Xếp Khối (và phông chữ): dùng bản trên máy ngay, cập nhật ngầm. Máy chủ đang ngủ
+  // (giữ yêu cầu tới cả phút) hay mất mạng thì vẫn mở game tức thì.
+  if (OFFLINE_FIRST.test(url.pathname)) {
+    event.respondWith(cacheFirst(req, event));
+    return;
+  }
   event.respondWith(networkFirst(req));
 });
+
+const OFFLINE_FIRST = /^\/(blocks(\.html|\.css|\.js|-core\.js|-page\.js|\/sounds\/[\w-]+\.wav)|fonts\/)/;
+
+async function cacheFirst(req, event) {
+  const cached = await caches.match(req, { ignoreSearch: true }).catch(() => null);
+  const update = fetch(req)
+    .then((res) => {
+      if (res.ok && res.type === 'basic') {
+        const copy = res.clone();
+        caches.open(CACHE).then((cache) => cache.put(req, copy)).catch(() => {});
+      }
+      return res;
+    })
+    .catch(() => null);
+  if (cached) {
+    event.waitUntil(update); // lần sau có bản mới
+    return cached;
+  }
+  return (await update) || Response.error();
+}
 
 // Ảnh: có sẵn trên máy thì dùng luôn, chưa có thì tải về rồi cất lại
 async function mediaFirst(req) {

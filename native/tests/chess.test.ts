@@ -24,7 +24,7 @@ vi.mock("../src/api", () => {
 });
 
 import { ApiError } from "../src/api";
-import { clockText, evalText, material, moveComment, outcomeFor, replay, resultTitle, tcLabel } from "../src/chess/format";
+import { clockText, coachText, evalText, material, MOVE_CLASS, moveComment, outcomeFor, replay, resultTitle, tcLabel } from "../src/chess/format";
 import {
   bindChess,
   chessBadge,
@@ -232,18 +232,30 @@ describe("phân tích và lịch sử", () => {
   it("ghi điểm đánh giá dễ đọc", () => {
     expect(evalText({ cp: 134, mate: null, wp: 60 })).toBe("+1.3");
     expect(evalText({ cp: -50, mate: null, wp: 45 })).toBe("−0.5");
-    expect(evalText({ cp: null, mate: 3, wp: 100 })).toBe("#3");
-    expect(evalText({ cp: null, mate: -2, wp: 0 })).toBe("#-2");
+    expect(evalText({ cp: null, mate: 3, wp: 100 })).toBe("M3");
+    expect(evalText({ cp: null, mate: -2, wp: 0 })).toBe("M2");
     expect(evalText({ cp: null, mate: null, wp: 0, end: "checkmate" })).toBe("0-1");
     expect(evalText({ cp: 0, mate: null, wp: 50, end: "draw" })).toBe("½-½");
   });
 
-  it("nhận xét nước đi", () => {
+  it("nhận xét nước đi kiểu huấn luyện viên", () => {
     const before = { cp: 20, mate: null, wp: 52, best: "d8e7", bestSan: "Qe7" };
-    expect(moveComment({ ply: 6, uci: "g8f6", san: "Nf6", color: "b", cls: "blunder", loss: 48, accuracy: 3 }, before)).toBe(
-      "3… Nf6??: sai lầm nghiêm trọng. Nước tốt nhất là Qe7.",
+    expect(moveComment({ ply: 6, uci: "g8f6", san: "Nf6", color: "b", cls: "blunder", loss: 48, accuracy: 3, allowsMate: 1 }, before)).toBe(
+      "3… Nf6 là sai lầm nghiêm trọng. Nước tốt nhất là Qe7. Đối thủ có thể chiếu hết sau 1 nước.",
     );
-    expect(moveComment({ ply: 1, uci: "e2e4", san: "e4", color: "w", cls: "best", loss: 0, accuracy: 100 }, before)).toBe("1. e4: nước tốt nhất.");
+    const best = { cp: 20, mate: null, wp: 52, best: "e2e4", bestSan: "e4" };
+    expect(moveComment({ ply: 1, uci: "e2e4", san: "e4", color: "w", cls: "best", loss: 0, accuracy: 100 }, best)).toBe("1. e4 là nước tốt nhất. Đúng nước máy chọn.");
+    expect(coachText({ ply: 9, uci: "f3e5", san: "Nxe5", color: "w", cls: "brilliant", loss: 0, accuracy: 100, sac: "q" }, best)).toEqual({
+      title: "Nxe5 là nước thiên tài!",
+      detail: "Thí Hậu rất đẹp mà thế cờ vẫn tốt nhất. Không dễ nhìn ra đâu!",
+    });
+    expect(coachText({ ply: 3, uci: "g1f3", san: "Nf3", color: "w", cls: "book", loss: 0, accuracy: 100 }, best, { opening: { eco: "C40", name: "King's Knight Opening", ply: 3 } }).detail).toBe(
+      "Khai cuộc: King's Knight Opening.",
+    );
+    expect(coachText({ ply: 20, uci: "a2a3", san: "a3", color: "w", cls: "miss", loss: 30, accuracy: 20, missedMate: 2 }, { ...best, best: "d1h5", bestSan: "Qh5+" }).detail).toBe(
+      "Bạn đã có đường chiếu hết sau 2 nước, bắt đầu bằng Qh5+.",
+    );
+    expect(Object.keys(MOVE_CLASS)).toEqual(expect.arrayContaining(["brilliant", "great", "best", "excellent", "good", "book", "inaccuracy", "mistake", "miss", "blunder"]));
   });
 
   it("kết quả phân tích không bị tin tiến độ cũ đè lên, xong thì báo", async () => {
