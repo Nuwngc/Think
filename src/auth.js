@@ -63,7 +63,7 @@ function findSession(token) {
   const hash = sha256(token);
   const row = get(
     `SELECT s.token_hash, s.last_used AS session_last_used,
-            u.id, u.username, u.display_name, u.avatar, u.role, u.disabled, u.must_change_password, u.last_seen
+            u.id, u.username, u.display_name, u.avatar, u.cover, u.bio, u.created_at, u.role, u.disabled, u.must_change_password, u.last_seen
        FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = ?`,
     hash

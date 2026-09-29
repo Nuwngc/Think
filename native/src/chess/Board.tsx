@@ -261,6 +261,41 @@ export function Board({ fen, size, orientation, movable, lastMove, onMove, hints
   );
 }
 
+/** Bàn cờ nhỏ chỉ để xem (thẻ ván cờ trong bảng tin, bảng chia sẻ). Đọc thẳng FEN, không cần chess.js. */
+export const MiniBoard = memo(function MiniBoard({ fen, size, orientation = "w" }: { fen: string; size: number; orientation?: Color }) {
+  const cell = Math.floor(size / 8);
+  const rows = useMemo(() => {
+    const out: (string | null)[][] = [];
+    for (const rank of String(fen || "").split(" ")[0].split("/").slice(0, 8)) {
+      const row: (string | null)[] = [];
+      for (const ch of rank) {
+        if (/\d/.test(ch)) for (let i = 0; i < Number(ch); i++) row.push(null);
+        else row.push(ch === ch.toUpperCase() ? `w${ch}` : `b${ch.toUpperCase()}`);
+      }
+      out.push(row.slice(0, 8));
+    }
+    while (out.length < 8) out.push([]);
+    return out;
+  }, [fen]);
+  const order = orientation === "w" ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
+  return (
+    <View style={{ width: cell * 8, height: cell * 8, borderRadius: 6, overflow: "hidden" }} pointerEvents="none" accessible={false}>
+      {order.map((r) => (
+        <View key={r} style={styles.row}>
+          {order.map((f) => {
+            const code = rows[r][f];
+            return (
+              <View key={f} style={{ width: cell, height: cell, backgroundColor: (r + f) % 2 === 0 ? BOARD_COLORS.light : BOARD_COLORS.dark }}>
+                {code ? <PieceImage code={code} size={cell} /> : null}
+              </View>
+            );
+          })}
+        </View>
+      ))}
+    </View>
+  );
+});
+
 /** Biểu tượng quân mã (tô được màu) cho thanh điều hướng */
 export function KnightIcon({ size = 24, color, hole }: { size?: number; color: string; hole: string }) {
   const xml = useMemo(

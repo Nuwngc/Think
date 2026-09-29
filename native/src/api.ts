@@ -9,6 +9,9 @@ import type {
   Conversation,
   Me,
   Message,
+  Post,
+  PostComment,
+  ProfileStats,
   Reaction,
   StoragePayload,
   StorageSettings,
@@ -140,6 +143,13 @@ export const api = {
 
   updateName: (displayName: string) => request<{ user: Me }>("/api/me", { method: "PATCH", body: { displayName } }),
 
+  /** Đổi tên và/hoặc lời giới thiệu (gửi trường nào đổi trường đó) */
+  updateProfile: (body: { displayName?: string; bio?: string }) => request<{ user: Me }>("/api/me", { method: "PATCH", body }),
+
+  uploadCover: (fileUri: string, mime: string) => uploadRaw<{ user: Me }>("/api/me/cover", fileUri, mime),
+
+  removeCover: () => request<{ user: Me }>("/api/me/cover", { method: "DELETE" }),
+
   uploadAvatar: (fileUri: string, mime: string) => uploadRaw<{ user: Me }>("/api/me/avatar", fileUri, mime),
 
   removeAvatar: () => request<{ user: Me }>("/api/me/avatar", { method: "DELETE" }),
@@ -258,6 +268,34 @@ export const api = {
   chessAnalysis: (id: number) => request<{ analysis: ChessAnalysis }>(`/api/chess/games/${id}/analysis`),
 
   chessAnalyze: (id: number) => request<{ analysis: ChessAnalysis }>(`/api/chess/games/${id}/analysis`, { method: "POST", body: {} }),
+
+  /* ---------------- Trang cá nhân, bảng tin ---------------- */
+
+  profile: (userId: number) => request<{ stats: ProfileStats }>(`/api/users/${userId}/profile`),
+
+  /** Bảng tin (userId = null) hoặc bài của một người; before = mã bài cũ nhất đã có */
+  posts: (userId: number | null, before?: number) =>
+    request<{ posts: Post[]; hasMore: boolean }>(
+      `${userId == null ? "/api/posts" : `/api/users/${userId}/posts`}?limit=20${before ? `&before=${before}` : ""}`,
+    ),
+
+  post: (id: number) => request<{ post: Post }>(`/api/posts/${id}`),
+
+  createPost: (body: { text: string; image?: string; gameId?: number }) => request<{ post: Post }>("/api/posts", { method: "POST", body }),
+
+  deletePost: (id: number) => request<{ ok: true }>(`/api/posts/${id}`, { method: "DELETE" }),
+
+  likePost: (id: number, liked: boolean) =>
+    request<{ liked: boolean; likes: number }>(`/api/posts/${id}/like`, { method: "POST", body: { liked } }),
+
+  postLikes: (id: number) => request<{ userIds: number[] }>(`/api/posts/${id}/likes`),
+
+  comments: (postId: number) => request<{ comments: PostComment[] }>(`/api/posts/${postId}/comments`),
+
+  addComment: (postId: number, text: string) =>
+    request<{ comment: PostComment; comments: number }>(`/api/posts/${postId}/comments`, { method: "POST", body: { text } }),
+
+  deleteComment: (id: number) => request<{ ok: true; comments: number }>(`/api/comments/${id}`, { method: "DELETE" }),
 
   /* ---------------- Quản trị ---------------- */
 

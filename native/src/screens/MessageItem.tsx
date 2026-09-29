@@ -3,9 +3,11 @@ import { memo, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { fileUrl } from "../api";
-import { hm, imageSize, isEmojiOnly, linkParts, reactionSummary, type Names } from "../format";
+import { KnightIcon } from "../chess/Board";
+import { chessShareOf, hm, imageSize, isEmojiOnly, linkParts, reactionSummary, type ChessShare, type Names } from "../format";
 import { isPending } from "../messages";
 import { currentToken } from "../session";
+import { openChess } from "../store";
 import { useColors, type Colors } from "../theme";
 import type { ChatItem, Conversation, User } from "../types";
 import { Avatar, Icon, useStyles } from "../ui";
@@ -105,6 +107,8 @@ function Bubble(p: MessageRowProps & { mine: boolean }) {
   const emoji = !hasImage && !purged && !quote && isEmojiOnly(m.text);
   if (emoji) return <Text style={s.emoji}>{m.text}</Text>;
   const imageOnly = (hasImage || purged) && !m.text && !quote;
+  // Ván cờ được chia sẻ: hiện thành thẻ bấm được để mở ván
+  const shared = !hasImage && !purged ? chessShareOf(m.text) : null;
 
   return (
     <View
@@ -118,7 +122,9 @@ function Bubble(p: MessageRowProps & { mine: boolean }) {
     >
       {quote ? <Quote {...p} mine={mine} /> : null}
       {hasImage ? <MessageImage {...p} localUri={localUri} /> : purged ? <GoneImage text="Ảnh đã được dọn khỏi máy chủ" /> : null}
-      {m.text ? (
+      {shared ? (
+        <ChessCard share={shared} mine={mine} />
+      ) : m.text ? (
         <Text style={[s.text, { color: fg }, (hasImage || purged) && { paddingHorizontal: 8, paddingVertical: 6 }]} selectable={false}>
           {linkParts(m.text).map((part, i) =>
             part.url ? (
@@ -132,6 +138,30 @@ function Bubble(p: MessageRowProps & { mine: boolean }) {
         </Text>
       ) : null}
     </View>
+  );
+}
+
+function ChessCard({ share, mine }: { share: ChessShare; mine: boolean }) {
+  const c = useColors();
+  const s = useStyles(makeStyles);
+  const fg = mine ? "#fff" : c.text;
+  const sub = mine ? "rgba(255,255,255,0.86)" : c.text2;
+  return (
+    <Pressable
+      onPress={() => openChess(share.id)}
+      style={({ pressed }) => [s.chess, { backgroundColor: mine ? c.quoteMine : c.quoteTheirs, opacity: pressed ? 0.8 : 1 }]}
+      accessibilityRole="button"
+      accessibilityLabel={`Ván cờ ${share.title}. ${share.sub}. Chạm để xem lại ván`}
+    >
+      <View style={[s.chessIcon, { backgroundColor: mine ? "#F2F4DA" : c.surface }]}>
+        <KnightIcon size={30} color="#2B4A3F" hole={mine ? "#F2F4DA" : c.surface} />
+      </View>
+      <View style={{ flexShrink: 1, gap: 2 }}>
+        <Text style={[s.chessTitle, { color: fg }]}>{share.title}</Text>
+        {share.sub ? <Text style={[s.chessSub, { color: sub }]}>{share.sub}</Text> : null}
+        <Text style={[s.chessLink, { color: mine ? "#fff" : c.accent }]}>Chạm để xem lại ván</Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -225,6 +255,11 @@ const makeStyles = (c: Colors) =>
     quoteName: { fontSize: 12.5, fontWeight: "800" },
     quoteText: { fontSize: 13.5, lineHeight: 18 },
     image: { borderRadius: 14, backgroundColor: c.field },
+    chess: { flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, marginVertical: 2, maxWidth: 290 },
+    chessIcon: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+    chessTitle: { fontSize: 15, fontWeight: "800", lineHeight: 20 },
+    chessSub: { fontSize: 13, lineHeight: 18 },
+    chessLink: { fontSize: 13, fontWeight: "800", marginTop: 2 },
     gone: { flexDirection: "row", alignItems: "center", gap: 8, padding: 14, borderRadius: 14, maxWidth: 240 },
     goneText: { flexShrink: 1, fontSize: 13 },
     reacts: { marginTop: -6, zIndex: 1 },

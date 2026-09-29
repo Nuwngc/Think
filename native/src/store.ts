@@ -9,6 +9,7 @@ import { bindChess, closeGame, loadChess, onAnalysisEvent, onChessEvent, openGam
 import { API_URL } from "./config";
 import { convTitle, previewText, type Names } from "./format";
 import type { PreparedImage } from "./images";
+import { bindSocial, closeUser, onSocialEvent, refreshSocial, resetSocial } from "./social/store";
 import {
   isPending,
   lastServerId,
@@ -66,6 +67,8 @@ type State = {
   drafts: Record<number, string>;
   replying: Record<number, ChatItem | undefined>;
   tab: Tab;
+  /** Đang mở màn Cài đặt (trong tab Cá nhân) */
+  settingsOpen: boolean;
   currentId: number | null;
   atBottom: boolean;
   appActive: boolean;
@@ -91,6 +94,7 @@ const initial: State = {
   drafts: {},
   replying: {},
   tab: "chats",
+  settingsOpen: false,
   currentId: null,
   atBottom: true,
   appActive: AppState.currentState === "active" || Platform.OS === "web",
@@ -321,6 +325,7 @@ function resetAll(notice: string | null) {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = null;
   resetChess();
+  resetSocial();
   set({ ...initial, phase: "login", notice, appActive: get().appActive, update: get().update });
   lastBadge = 0;
   setBadge(0);
@@ -383,6 +388,7 @@ async function resync() {
       return { msgs, offline: false };
     });
     if (useChess.getState().loaded) loadChess();
+    refreshSocial();
     const current = get().currentId;
     if (current != null) {
       if (!get().convs[current]) {
@@ -468,12 +474,28 @@ export function closeConversation() {
 }
 
 export function setTab(tab: Tab) {
-  set({ tab, currentId: null });
+  set({ tab, currentId: null, settingsOpen: false });
+  closeUser();
   if (tab === "chess" && !useChess.getState().loading) loadChess();
 }
 
+/** Màn Cài đặt (đổi tên, ảnh bìa, giao diện, mật khẩu…) nằm trong tab Cá nhân */
+export function openSettings() {
+  set({ tab: "me", currentId: null, settingsOpen: true });
+  closeUser();
+}
+
+export function closeSettings() {
+  set({ settingsOpen: false });
+}
+
+/** Mở ván từ chỗ khác (bảng tin, tin nhắn, thông báo…): bấm Quay lại thì về đúng chỗ đó */
+let chessReturn: { gameId: number; tab: Tab; currentId: number | null } | null = null;
+
 /** Mở tab Cờ vua; có gameId thì mở luôn ván đó */
 export function openChess(gameId?: number | null) {
+  const s = get();
+  chessReturn = gameId && s.tab !== "chess" ? { gameId, tab: s.tab, currentId: s.currentId } : null;
   set({ tab: "chess", currentId: null });
   if (get().toast?.chessGameId != null) hideToast();
   if (gameId) openGame(gameId);
@@ -481,6 +503,15 @@ export function openChess(gameId?: number | null) {
     closeGame();
     loadChess();
   }
+}
+
+/** Nút Quay lại trong ván cờ */
+export function leaveGame() {
+  const back = chessReturn;
+  const leaving = useChess.getState().openId;
+  closeGame(); // xóa luôn chessReturn (qua bindChess.closed)
+  if (!back || back.gameId !== leaving || get().tab !== "chess") return;
+  set({ tab: back.tab, currentId: back.currentId != null && get().convs[back.currentId] ? back.currentId : null });
 }
 
 export function setAtBottom(atBottom: boolean) {
@@ -597,6 +628,32 @@ export function sendText(convId: number, raw: string) {
   addLocal(m);
   deliver(m);
   return true;
+}
+
+/**
+ * Gửi một tin soạn sẵn (vd chia sẻ ván cờ) vào một cuộc trò chuyện bất kỳ, không đụng tới bản nháp hay tin đang
+ * trả lời của khung chat đó. Trả về true nếu đã gửi; lỗi thì đã báo và tin nằm lại trong khung chat để gửi lại.
+ */
+export async function sendPrepared(convId: number, text: string) {
+  const me = get().me;
+  if (!me || !text.trim()) return false;
+  const m: PendingMessage = {
+    id: null,
+    clientId: newClientId(),
+    conversationId: convId,
+    senderId: me.id,
+    kind: "text",
+    text: text.trim(),
+    image: null,
+    deleted: false,
+    createdAt: Date.now(),
+    replyTo: null,
+    reactions: [],
+    status: "sending",
+  };
+  patchBox(convId, (b) => ({ list: [...b.list, m] }));
+  await deliver(m);
+  return !get().msgs[convId]?.list.some((x) => isPending(x) && x.clientId === m.clientId && x.status === "failed");
 }
 
 export async function sendImages(convId: number, images: PreparedImage[]) {
@@ -836,6 +893,9 @@ function connectSocket() {
   s.on("chess:game", (data) => onChessEvent("chess:game", data));
   s.on("chess:challenge", (data) => onChessEvent("chess:challenge", data));
   s.on("chess:analysis", onAnalysisEvent);
+  for (const name of ["post:new", "post:likes", "post:comment", "post:comment-deleted", "post:deleted"]) {
+    s.on(name, (data) => onSocialEvent(name, data));
+  }
 }
 
 export function reportVisibility() {
@@ -985,6 +1045,9 @@ export function startLifecycle() {
 }
 
 bindChess({
+  closed: () => {
+    chessReturn = null;
+  },
   meId: () => get().me?.id ?? 0,
   nameOf: (id) => namesOf(get()).nameOf(id),
   toast: (text, extra) => {
@@ -994,6 +1057,13 @@ bindChess({
   },
   onTab: () => get().tab === "chess" && get().currentId == null && get().appActive,
   showChess: () => openChess(),
+});
+
+bindSocial({
+  meId: () => get().me?.id ?? 0,
+  isAdmin: () => get().me?.role === "admin",
+  toast: (text) => showToast(text),
+  showMe: () => set({ tab: "me", currentId: null, settingsOpen: false }),
 });
 
 export const selectors = {

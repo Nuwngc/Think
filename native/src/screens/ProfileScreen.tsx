@@ -1,318 +1,59 @@
-import { useEffect, useState } from "react";
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useShallow } from "zustand/react/shallow";
 
-import { api } from "../api";
-import { API_URL, PUSH_CONFIGURED, UPDATE_URL } from "../config";
-import { pickAvatar } from "../images";
-import { applyMe, changePassword, logout, showToast, turnPushOff, turnPushOn, useStore } from "../store";
+import { ProfileView } from "../social/ProfileView";
+import { closeUser } from "../social/store";
+import { openSettings, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
-import { Avatar, Button, Card, confirm, Field, FormError, Icon, KeyboardAware, SectionLabel, Sheet, SheetItem, useStyles } from "../ui";
-import { checkForUpdate, currentVersionCode, currentVersionName } from "../update";
+import { IconButton, useStyles } from "../ui";
 
+/** Tab Cá nhân: trang cá nhân của mình (ảnh bìa, giới thiệu, đăng bài, Bảng tin / Bài của tôi) */
 export function ProfileScreen() {
   const c = useColors();
   const s = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
-  const { me, push, update } = useStore(useShallow((st) => ({ me: st.me, push: st.push, update: st.update })));
-  const [name, setName] = useState(me?.displayName || "");
-  const [savingName, setSavingName] = useState(false);
-  const [avatarMenu, setAvatarMenu] = useState(false);
-  const [avatarBusy, setAvatarBusy] = useState(false);
-  const [pwOpen, setPwOpen] = useState(false);
-  const [pushBusy, setPushBusy] = useState(false);
-  const [checking, setChecking] = useState(false);
-
-  useEffect(() => setName(me?.displayName || ""), [me?.displayName]);
-  if (!me) return null;
-
-  const saveName = async () => {
-    setSavingName(true);
-    try {
-      const { user } = await api.updateName(name.trim());
-      applyMe(user);
-      showToast("Đã đổi tên hiển thị.");
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Chưa đổi được tên.");
-    } finally {
-      setSavingName(false);
-    }
-  };
-
-  const changeAvatar = async () => {
-    setAvatarMenu(false);
-    try {
-      const img = await pickAvatar();
-      if (!img) return;
-      setAvatarBusy(true);
-      const { user } = await api.uploadAvatar(img.uri, img.mime);
-      applyMe(user);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Chưa đổi được ảnh đại diện.");
-    } finally {
-      setAvatarBusy(false);
-    }
-  };
-
-  const removeAvatar = async () => {
-    setAvatarMenu(false);
-    setAvatarBusy(true);
-    try {
-      const { user } = await api.removeAvatar();
-      applyMe(user);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Chưa xóa được ảnh.");
-    } finally {
-      setAvatarBusy(false);
-    }
-  };
-
-  const togglePush = async (on: boolean) => {
-    setPushBusy(true);
-    try {
-      if (!on) {
-        await turnPushOff();
-        return;
-      }
-      const state = await turnPushOn();
-      if (state === "denied") {
-        const open = await confirm(
-          "Thông báo đang bị chặn",
-          "Mở Cài đặt của điện thoại, chọn Thông báo và bật cho Think.",
-          "Mở Cài đặt",
-          false,
-        );
-        if (open) Linking.openSettings();
-      } else if (state === "server-off") {
-        showToast("Máy chủ chưa bật thông báo cho app. Nhờ admin xem hướng dẫn trong README.");
-      } else if (state === "error") {
-        showToast("Chưa bật được thông báo. Kiểm tra mạng rồi thử lại.");
-      }
-    } finally {
-      setPushBusy(false);
-    }
-  };
-
-  const pushText =
-    push === "on"
-      ? "Đang bật. Có tin mới khi đóng app, điện thoại sẽ báo."
-      : push === "denied"
-        ? "Điện thoại đang chặn thông báo của Think."
-        : push === "server-off"
-          ? "Máy chủ chưa bật thông báo cho app."
-          : push === "unavailable"
-            ? Platform.OS === "web"
-              ? "Bản chạy thử trên trình duyệt không có thông báo."
-              : PUSH_CONFIGURED
-                ? "Máy này chưa dùng được thông báo."
-                : "Bản app này chưa được cấu hình thông báo (thiếu google-services.json)."
-            : push === "error"
-              ? "Chưa bật được. Chạm để thử lại."
-              : "Đang tắt.";
-
+  const meId = useStore((st) => st.me?.id);
+  if (meId == null) return null;
   return (
-    <KeyboardAware bottomInset={false} style={{ backgroundColor: c.bg }}>
-      <ScrollView contentContainerStyle={[s.content, { paddingTop: insets.top + 12 }]} keyboardShouldPersistTaps="handled">
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <View style={[s.header, { paddingTop: insets.top + 6, backgroundColor: c.surface }]}>
         <Text style={s.h1}>Cá nhân</Text>
-
-        <Card style={s.profile}>
-          <Pressable onPress={() => setAvatarMenu(true)} accessibilityRole="button" accessibilityLabel="Đổi ảnh đại diện" style={{ opacity: avatarBusy ? 0.5 : 1 }}>
-            <Avatar user={me} size={84} dot={false} />
-            <View style={[s.camera, { backgroundColor: c.jade, borderColor: c.surface }]}>
-              <Icon name="photo-camera" size={16} color="#fff" />
-            </View>
-          </Pressable>
-          <Text style={s.name}>{me.displayName}</Text>
-          <Text style={s.muted}>
-            @{me.username} · {me.role === "admin" ? "Admin" : "Thành viên"}
-          </Text>
-          <View style={s.inline}>
-            <View style={{ flex: 1 }}>
-              <Field label="Tên hiển thị" value={name} onChangeText={setName} maxLength={40} />
-            </View>
-            <Button
-              title="Lưu"
-              small
-              onPress={saveName}
-              busy={savingName}
-              disabled={!name.trim() || name.trim() === me.displayName}
-              style={{ marginTop: 22 }}
-            />
-          </View>
-        </Card>
-
-        <SectionLabel>THÔNG BÁO</SectionLabel>
-        <Card>
-          <View style={s.settingRow}>
-            <View style={[s.settingIcon, { backgroundColor: c.jadeWash }]}>
-              <Icon name={push === "on" ? "notifications-active" : "notifications-off"} size={20} color={c.accent} />
-            </View>
-            <Pressable style={{ flex: 1 }} onPress={() => togglePush(push !== "on")} disabled={pushBusy}>
-              <Text style={s.settingTitle}>Thông báo tin nhắn mới</Text>
-              <Text style={s.muted}>{pushText}</Text>
-            </Pressable>
-            <Switch
-              value={push === "on"}
-              onValueChange={togglePush}
-              disabled={pushBusy || push === "unavailable"}
-              trackColor={{ false: c.line, true: c.jadeWash }}
-              thumbColor={push === "on" ? c.jade : "#fff"}
-              accessibilityLabel="Thông báo tin nhắn mới"
-            />
-          </View>
-          {push === "on" ? (
-            <Pressable
-              style={({ pressed }) => [s.linkRow, pressed && { backgroundColor: c.field }]}
-              onPress={() =>
-                api
-                  .testPush()
-                  .then(() => showToast("Đã gửi thông báo thử. Nếu app đang mở, hãy thoát ra màn hình chính để xem."))
-                  .catch((err) => showToast(err instanceof Error ? err.message : "Chưa gửi được."))
-              }
-            >
-              <Text style={[s.link, { color: c.accent }]}>Gửi thử một thông báo</Text>
-            </Pressable>
-          ) : null}
-        </Card>
-        {push === "on" ? (
-          <Text style={[s.muted, s.note]}>
-            Bấm “Trả lời” ngay trong thông báo để nhắn lại mà không cần mở app. Nếu thông báo đến chậm, vào Cài đặt điện thoại → Pin → cho Think chạy
-            nền không giới hạn.
-          </Text>
-        ) : null}
-
-        <SectionLabel>BẢO MẬT</SectionLabel>
-        <Card>
-          <Pressable style={({ pressed }) => [s.settingRow, pressed && { backgroundColor: c.field }]} onPress={() => setPwOpen(true)} accessibilityRole="button">
-            <View style={[s.settingIcon, { backgroundColor: c.jadeWash }]}>
-              <Icon name="key" size={20} color={c.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.settingTitle}>Đổi mật khẩu</Text>
-              <Text style={s.muted}>Đổi xong, các máy khác sẽ bị đăng xuất</Text>
-            </View>
-            <Icon name="chevron-right" color={c.muted} />
-          </Pressable>
-        </Card>
-
-        <SectionLabel>ỨNG DỤNG</SectionLabel>
-        <Card>
-          <View style={s.settingRow}>
-            <View style={[s.settingIcon, { backgroundColor: c.jadeWash }]}>
-              <Icon name="system-update" size={20} color={c.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.settingTitle}>Think Beta {currentVersionName()}</Text>
-              <Text style={s.muted}>
-                {update
-                  ? `Có bản mới ${update.versionName}${update.notes ? `: ${update.notes}` : ""}`
-                  : `Bản số ${currentVersionCode() || "?"} · Máy chủ ${API_URL.replace(/^https?:\/\//, "")}`}
-              </Text>
-            </View>
-          </View>
-          {update ? (
-            <View style={{ padding: 12, paddingTop: 0 }}>
-              <Button title={`Tải bản ${update.versionName}`} icon="download" onPress={() => Linking.openURL(update.apk)} />
-            </View>
-          ) : UPDATE_URL && Platform.OS === "android" ? (
-            <Pressable
-              style={({ pressed }) => [s.linkRow, pressed && { backgroundColor: c.field }]}
-              disabled={checking}
-              onPress={async () => {
-                setChecking(true);
-                const found = await checkForUpdate({ force: true });
-                setChecking(false);
-                if (!found) showToast("Bạn đang dùng bản mới nhất.");
-              }}
-            >
-              <Text style={[s.link, { color: c.accent }]}>{checking ? "Đang kiểm tra…" : "Kiểm tra bản mới"}</Text>
-            </Pressable>
-          ) : null}
-        </Card>
-
-        <View style={{ height: 18 }} />
-        <Button
-          title="Đăng xuất"
-          kind="danger"
-          icon="logout"
-          onPress={async () => {
-            if (await confirm("Đăng xuất?", "Tin nhắn lưu trên máy này sẽ được xóa. Đăng nhập lại là thấy đủ.", "Đăng xuất")) logout();
-          }}
-        />
-        <View style={{ height: 24 }} />
-      </ScrollView>
-
-      <Sheet visible={avatarMenu} onClose={() => setAvatarMenu(false)} title="Ảnh đại diện">
-        <SheetItem icon="photo-library" label="Chọn ảnh mới" onPress={changeAvatar} />
-        {me.avatar ? <SheetItem icon="delete-outline" label="Xóa ảnh hiện tại" danger onPress={removeAvatar} /> : null}
-      </Sheet>
-
-      <PasswordSheet visible={pwOpen} onClose={() => setPwOpen(false)} />
-    </KeyboardAware>
+        <IconButton name="settings" label="Cài đặt" onPress={openSettings} color={c.text} />
+      </View>
+      <ProfileView userId={meId} own />
+    </View>
   );
 }
 
-function PasswordSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const [current, setCurrent] = useState("");
-  const [next, setNext] = useState("");
-  const [again, setAgain] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!visible) {
-      setCurrent("");
-      setNext("");
-      setAgain("");
-      setError(null);
-      setBusy(false);
-    }
-  }, [visible]);
-
-  const submit = async () => {
-    if (next.length < 6) return setError("Mật khẩu mới cần ít nhất 6 ký tự.");
-    if (next !== again) return setError("Hai lần nhập mật khẩu mới chưa giống nhau.");
-    setBusy(true);
-    setError(null);
-    try {
-      await changePassword(current, next);
-      onClose();
-      showToast("Đã đổi mật khẩu. Các máy khác đã bị đăng xuất.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Chưa đổi được mật khẩu.");
-      setBusy(false);
-    }
-  };
-
+/** Trang cá nhân của người khác (mở từ bài đăng, bình luận, bảng xếp hạng…) */
+export function UserProfileScreen({ userId }: { userId: number }) {
+  const c = useColors();
+  const s = useStyles(makeStyles);
+  const insets = useSafeAreaInsets();
+  const user = useStore((st) => st.users[userId]);
   return (
-    <Sheet
-      visible={visible}
-      onClose={onClose}
-      title="Đổi mật khẩu"
-      footer={<Button title="Đổi mật khẩu" onPress={submit} busy={busy} />}
-    >
-      <Field label="Mật khẩu hiện tại" value={current} onChangeText={setCurrent} secureTextEntry autoCapitalize="none" autoComplete="current-password" />
-      <Field label="Mật khẩu mới" value={next} onChangeText={setNext} secureTextEntry autoCapitalize="none" autoComplete="new-password" />
-      <Field label="Nhập lại mật khẩu mới" value={again} onChangeText={setAgain} secureTextEntry autoCapitalize="none" onSubmitEditing={submit} />
-      <FormError text={error} />
-    </Sheet>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <View style={[s.header, s.headerBack, { paddingTop: insets.top + 6, backgroundColor: c.surface }]}>
+        <IconButton name="arrow-back" label="Quay lại" onPress={closeUser} color={c.text} />
+        <View style={{ flex: 1 }}>
+          <Text style={s.title} numberOfLines={1}>
+            {user?.displayName || "Trang cá nhân"}
+          </Text>
+          {user ? <Text style={s.sub}>@{user.username}</Text> : null}
+        </View>
+      </View>
+      <View style={{ flex: 1, paddingBottom: insets.bottom }}>
+        <ProfileView userId={userId} own={false} />
+      </View>
+    </View>
   );
 }
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
-    content: { paddingHorizontal: 16, paddingBottom: 24 },
-    h1: { color: c.text, fontSize: 28, fontWeight: "800", letterSpacing: -0.8, marginBottom: 14, marginHorizontal: 4 },
-    profile: { alignItems: "center", padding: 18, gap: 6 },
-    camera: { position: "absolute", right: -2, bottom: -2, width: 30, height: 30, borderRadius: 15, borderWidth: 2.5, alignItems: "center", justifyContent: "center" },
-    name: { color: c.text, fontSize: 20, fontWeight: "800", marginTop: 6 },
-    muted: { color: c.muted, fontSize: 13, lineHeight: 18 },
-    note: { marginTop: 8, marginHorizontal: 6 },
-    inline: { flexDirection: "row", gap: 10, alignItems: "flex-start", alignSelf: "stretch", marginTop: 10 },
-    settingRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14 },
-    settingIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-    settingTitle: { color: c.text, fontSize: 15.5, fontWeight: "700" },
-    linkRow: { paddingVertical: 12, paddingHorizontal: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line },
-    link: { fontSize: 14.5, fontWeight: "700" },
+    header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingLeft: 18, paddingRight: 8, paddingBottom: 8 },
+    headerBack: { justifyContent: "flex-start", gap: 6, paddingLeft: 6 },
+    h1: { color: c.text, fontSize: 28, fontWeight: "800", letterSpacing: -0.8 },
+    title: { color: c.text, fontSize: 17, fontWeight: "800" },
+    sub: { color: c.muted, fontSize: 12.5 },
   });

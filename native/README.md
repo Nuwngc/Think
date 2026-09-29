@@ -10,12 +10,13 @@ App có tên **Think Beta** (mã gói `com.nuwngc.think.beta`), cài **song song
 - Danh sách chat: tìm không cần dấu, lọc Chưa đọc / Nhóm / Riêng tư, số tin chưa đọc.
 - Chat: gửi chữ, **gửi ảnh** (chọn trong máy hoặc chụp, tự thu nhỏ), **trả lời tin**, **thả cảm xúc**, **thu hồi**, sao chép, xem ảnh lớn và **lưu/chia sẻ ảnh**, "đang nhập…", "Đã gửi / Đã xem", tin cũ tải thêm khi kéo lên.
 - Nhắn riêng, **tạo nhóm**, đổi tên nhóm, thêm / xóa người, rời nhóm.
-- Cá nhân: đổi tên, ảnh đại diện, mật khẩu, bật/tắt thông báo, kiểm tra bản mới.
+- **Trang cá nhân + bảng tin** (tab Cá nhân): ảnh bìa, lời giới thiệu, số bài / lượt thích / ELO; đăng bài có chữ và ảnh, **thả tim**, **bình luận**, xem trang của người khác (có nút Nhắn tin, Thách cờ). Mục **Bảng tin** (cả nhóm) và **Bài của tôi**, cập nhật ngay không cần tải lại. Chi tiết ở mục 15 của README chính.
+- **Cài đặt** (nút ⚙ ở trang cá nhân): đổi tên, lời giới thiệu, ảnh đại diện, **ảnh bìa**, **giao diện sáng / tối** (Theo máy, Nền sáng, Nền tối), bật/tắt thông báo, đổi mật khẩu (mục Bảo mật), kiểm tra bản mới.
 - Quản trị (admin): tạo tài khoản (hiện mật khẩu tạm để gửi), đặt lại mật khẩu, khóa / mở khóa, cấp quyền admin, xem bộ nhớ máy chủ, tự dọn / dọn thủ công.
 - **Thông báo đẩy** khi đóng app, bấm **Trả lời** hoặc **Đã đọc** ngay trong thông báo (cần bước 3 bên dưới).
 - **Lưu trên máy**: mở app là thấy ngay tin nhắn cũ kể cả khi máy chủ đang ngủ hoặc mất mạng, tự kết nối lại.
-- **Cờ vua** (tab Cờ vua): thách đấu bạn bè có chọn thời gian, đồng hồ, **điểm ELO**, **bảng xếp hạng**, chơi với 8 máy cờ (có Stockfish), thông báo khi có người thách hoặc tới lượt đi, **lịch sử và xem lại ván** (tự chạy), **Stockfish phân tích ván** (độ chính xác, ?! ? ??, biểu đồ, mũi tên gợi ý), **bật/tắt chỉ dẫn** và **âm thanh** quân cờ. Trong chat riêng có nút quân mã để thách nhanh. Chơi chéo được với người dùng bản web. Chi tiết ở mục 14 của README chính.
-- Giao diện sáng / tối theo máy. Chạy từ Android 7 trở lên.
+- **Cờ vua** (tab Cờ vua): thách đấu bạn bè có chọn thời gian, đồng hồ, **điểm ELO**, **bảng xếp hạng**, chơi với 8 máy cờ (có Stockfish), thông báo khi có người thách hoặc tới lượt đi, **lịch sử và xem lại ván** (tự chạy), **Stockfish phân tích ván** (độ chính xác, ?! ? ??, biểu đồ, mũi tên gợi ý), **bật/tắt chỉ dẫn** và **âm thanh** quân cờ, **chia sẻ ván** lên trang cá nhân hoặc vào cuộc trò chuyện (hiện thành thẻ bấm được để mở ván). Trong chat riêng có nút quân mã để thách nhanh. Chơi chéo được với người dùng bản web. Chi tiết ở mục 14 của README chính.
+- Giao diện sáng / tối theo máy hoặc tự chọn trong Cài đặt. Chạy từ Android 7 trở lên.
 
 Chưa có (so với app bong bóng chat hiện tại): **bong bóng chat nổi** kiểu Messenger. Muốn bong bóng thì vẫn dùng app Think cũ.
 
@@ -107,6 +108,8 @@ native/
   src/format.ts            Chữ, giờ, tin hệ thống — giống bản web
   src/screens/             Các màn hình
   src/chess/               Cờ vua: bàn cờ, ván cờ, thách đấu, bảng xếp hạng (luật: chess.js)
+  src/social/              Trang cá nhân, bảng tin, bình luận, chia sẻ ván cờ (store.ts: dữ liệu; SocialHost.tsx: các bảng)
+  src/theme.ts             Màu sáng / tối và lựa chọn giao diện (lưu trên máy)
   credentials/             Khóa ký app đã khóa (không có mã thì không mở được)
   tests/                   Kiểm thử (npm test)
 ```

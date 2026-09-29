@@ -57,6 +57,16 @@ export async function pickAvatar(): Promise<PreparedImage | null> {
   return { uri: out.uri, width: out.width, height: out.height, mime: "image/jpeg" };
 }
 
+/** Chọn ảnh bìa trang cá nhân: cắt theo khung 16:6, cạnh dài tối đa 1500px */
+export async function pickCover(): Promise<PreparedImage | null> {
+  const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [16, 6], quality: 1 });
+  if (res.canceled || !res.assets[0]) return null;
+  const a = res.assets[0];
+  const actions = (a.width || 0) > 1500 ? [{ resize: { width: 1500 } }] : [];
+  const out = await manipulateAsync(a.uri, actions, { compress: 0.85, format: SaveFormat.JPEG });
+  return { uri: out.uri, width: out.width, height: out.height, mime: "image/jpeg" };
+}
+
 /** Thu nhỏ ảnh trên máy trước khi gửi (cạnh dài tối đa 1600px, JPEG) để gửi nhanh và nhẹ. Giữ nguyên ảnh động GIF. */
 export async function prepareImage(asset: ImagePicker.ImagePickerAsset): Promise<PreparedImage> {
   const mime = asset.mimeType || "";

@@ -17,8 +17,9 @@ import { ForcePasswordScreen } from "./src/screens/ForcePasswordScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { MainScreen } from "./src/screens/MainScreen";
 import { ToastHost } from "./src/screens/ToastHost";
-import { boot, openChess, openConversation, sendImages, showToast, startLifecycle, useStore } from "./src/store";
-import { useColors } from "./src/theme";
+import { openComments } from "./src/social/store";
+import { boot, openChess, openConversation, sendImages, setTab, showToast, startLifecycle, useStore } from "./src/store";
+import { loadThemeMode, useColors, useThemeMode } from "./src/theme";
 import { confirm } from "./src/ui";
 import { checkForUpdate } from "./src/update";
 
@@ -29,13 +30,19 @@ function handleResponse(resp: unknown) {
   const a: NotificationAction | null = parseResponse(resp as any);
   if (!a || seen.has(a.key)) return;
   seen.add(a.key);
-  if (a.action === "open" && (a.conversationId || a.type === "chess")) {
+  if (a.action === "open" && (a.conversationId || a.type === "chess" || (a.type === "post" && a.postId))) {
     const go =
       a.type === "chess"
         ? () => openChess(a.gameId)
-        : () => {
-            if (a.conversationId) openConversation(a.conversationId);
-          };
+        : a.type === "post"
+          ? () => {
+              // Thả tim / bình luận bài của bạn: mở trang cá nhân và bảng bình luận của bài đó
+              setTab("me");
+              if (a.postId) openComments(a.postId);
+            }
+          : () => {
+              if (a.conversationId) openConversation(a.conversationId);
+            };
     if (useStore.getState().phase === "ready") go();
     else pendingOpen = go;
   } else if ((a.action === "reply" || a.action === "read") && AppState.currentState === "active") {
@@ -65,6 +72,7 @@ export default function App() {
   const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
+    loadThemeMode();
     startLifecycle();
     boot();
     loadPrefs();
@@ -105,7 +113,8 @@ export default function App() {
   }, [phase, offline, pickChecked]);
 
   // Ẩn màn hình chờ khi đã có gì để hiện (tối đa 2,5 giây)
-  const ready = (fontsLoaded || Boolean(fontError)) && phase !== "boot";
+  const themeLoaded = useThemeMode((s) => s.loaded);
+  const ready = (fontsLoaded || Boolean(fontError)) && phase !== "boot" && themeLoaded;
   useEffect(() => {
     if (splashDone) return;
     const hide = () => {

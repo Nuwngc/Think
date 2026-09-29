@@ -187,6 +187,8 @@ export type NotificationAction = {
   conversationId: number | null;
   /** Ván cờ (thông báo cờ vua) */
   gameId: number | null;
+  /** Bài đăng (thông báo thả tim, bình luận) */
+  postId: number | null;
   text: string;
   identifier: string | null;
   title: string;
@@ -209,6 +211,7 @@ export function parseResponse(resp: RawResponse | null | undefined): Notificatio
   }
   const convId = Number(data?.conversationId);
   const gameId = Number(data?.gameId);
+  const postId = Number(data?.postId);
   const id = resp.actionIdentifier || "";
   const action = id === "reply" ? "reply" : id === "read" ? "read" : id === Notifications.DEFAULT_ACTION_IDENTIFIER ? "open" : "other";
   return {
@@ -216,6 +219,7 @@ export function parseResponse(resp: RawResponse | null | undefined): Notificatio
     type: typeof data?.type === "string" ? data.type : "message",
     conversationId: Number.isInteger(convId) && convId > 0 ? convId : null,
     gameId: Number.isInteger(gameId) && gameId > 0 ? gameId : null,
+    postId: Number.isInteger(postId) && postId > 0 ? postId : null,
     text: String(resp.userText || "").trim(),
     identifier: request?.identifier || null,
     title: String(content.title || "Think"),

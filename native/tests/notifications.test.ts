@@ -36,6 +36,14 @@ describe("phản hồi thông báo", () => {
     expect(a).toMatchObject({ action: "open", type: "chess", gameId: 7, conversationId: null });
   });
 
+  it("đọc thông báo thả tim / bình luận bài đăng", () => {
+    const a = parseResponse({
+      actionIdentifier: "expo.modules.notifications.actions.DEFAULT",
+      notification: { date: 6, request: { identifier: "post-5", content: { dataString: '{"type":"post","postId":"5"}' } } },
+    });
+    expect(a).toMatchObject({ action: "open", type: "post", postId: 5, conversationId: null, gameId: null });
+  });
+
   it("bỏ qua dữ liệu hỏng", () => {
     expect(parseResponse(null)).toBeNull();
     expect(parseResponse({ actionIdentifier: "read", notification: { request: { content: { dataString: "{hỏng" } } } })?.conversationId).toBeNull();

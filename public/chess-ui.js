@@ -341,7 +341,8 @@ window.ThinkChess = (() => {
       }
       const pane = $('#chess-pane');
       if (gameId != null) {
-        if (S.openId !== gameId) {
+        const justOpened = S.openId !== gameId;
+        if (justOpened) {
           S.openId = gameId;
           V.ply = null;
           V.flip = false;
@@ -358,7 +359,10 @@ window.ThinkChess = (() => {
         $('#chat-pane').hidden = true;
         pane.hidden = false;
         renderGame();
-        if (!S.games.has(gameId)) fetchGame(gameId);
+        // Ván của người khác (được chia sẻ): luôn lấy bản mới, và tự cập nhật khi ván còn đang chơi
+        const cached = S.games.get(gameId);
+        if (!cached || (justOpened && !myColor(cached))) fetchGame(gameId);
+        if (justOpened) watchGame(gameId);
         loadRules().then(
           () => S.openId === gameId && renderGame(),
           () => {
@@ -370,6 +374,7 @@ window.ThinkChess = (() => {
       }
       if (S.openId != null || !pane.hidden) {
         S.openId = null;
+        watchGame(null);
         stopTicker();
         stopPlaying();
         pane.hidden = true;
@@ -407,15 +412,33 @@ window.ThinkChess = (() => {
       return el;
     }
 
-    async function fetchGame(id) {
+    async function fetchGame(id, { quiet = false } = {}) {
       try {
         const { game } = await api(`/api/chess/games/${id}`);
         upsert([game]);
         refresh();
       } catch (err) {
+        if (quiet) return;
         toast(err.message);
         if (S.openId === id) navigate('#/chess', { replace: true });
       }
+    }
+
+    // Người xem không nhận sự kiện realtime của ván (chỉ hai người chơi nhận): hỏi lại máy chủ mỗi 3 giây
+    let watchTimer = null;
+    function watchGame(id) {
+      clearInterval(watchTimer);
+      watchTimer = null;
+      if (id == null) return;
+      watchTimer = setInterval(() => {
+        const g = S.games.get(id);
+        if (S.openId !== id || (g && (g.status !== 'active' || myColor(g)))) {
+          clearInterval(watchTimer);
+          watchTimer = null;
+          return;
+        }
+        if (g && !document.hidden) fetchGame(id, { quiet: true });
+      }, 3000);
     }
 
     const openGameHash = (id) => `#/chess/g/${id}`;
@@ -928,8 +951,11 @@ window.ThinkChess = (() => {
       const head = h('header', { class: 'chat-head' },
         back,
         h('div', { class: 'chat-title' },
-          h('h2', { text: mine ? `Với ${oppName}` : 'Ván cờ' }),
+          h('h2', { text: mine ? `Với ${oppName}` : `${sideName(g, 'w')} vs ${sideName(g, 'b')}` }),
           h('p', { text: `${tcLabel(g)} · ${g.bot ? 'Chơi với máy' : g.rated ? 'Tính điểm ELO' : 'Giao hữu'}` })),
+        host.share && (g.status !== 'active' || total > 0)
+          ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Chia sẻ ván cờ', dataset: { focus: 'share' }, onclick: () => host.share(g) }, icon('share'))
+          : null,
         h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Tùy chọn bàn cờ', onclick: openPrefs }, icon('tune')),
         h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Xoay bàn cờ', dataset: { focus: 'flip' }, onclick: () => { V.flip = !V.flip; renderGame(); } }, icon('flip')));
 
@@ -1057,6 +1083,10 @@ window.ThinkChess = (() => {
     function analysisPanel(g, ply, a) {
       const head = (title, extra) => h('div', { class: 'chess-an-head' }, icon('chart'), h('h3', { text: title }), extra || null);
       if (!a || a.status === 'loading') return h('div', { class: 'chess-analysis' }, head('Phân tích ván đấu'), h('p', { class: 'hint', text: 'Đang tải…' }));
+      if ((a.status === 'none' || a.status === 'error') && !myColor(g)) {
+        // Người xem (ván được chia sẻ): chỉ người chơi mới yêu cầu phân tích được
+        return h('div', { class: 'chess-analysis' }, head('Phân tích ván đấu'), h('p', { class: 'hint', text: 'Ván này chưa được phân tích. Người chơi có thể bấm phân tích bằng Stockfish.' }));
+      }
       if (a.status === 'none' || a.status === 'error') {
         return h('div', { class: 'chess-analysis' },
           head('Phân tích ván đấu'),
@@ -1759,5 +1789,43 @@ window.ThinkChess = (() => {
     };
   }
 
-  return { create, _test: { tcLabel, clockText, material, parseFen, outcomeFor } };
+  // Bàn cờ nhỏ chỉ để xem (bài đăng có ván cờ)
+  function miniBoard(fen, orientation = 'w') {
+    const el = document.createElement('div');
+    el.className = 'chess-board is-mini';
+    el.setAttribute('aria-hidden', 'true');
+    const rows = parseFen(fen);
+    const order = orientation === 'w' ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
+    for (const r of order) {
+      for (const f of order) {
+        const sq = document.createElement('span');
+        sq.className = `sq ${(r + f) % 2 ? 'is-dark' : 'is-light'}`;
+        const code = rows[r][f];
+        if (code) {
+          const img = document.createElement('img');
+          img.className = 'pc';
+          img.src = pieceSrc(code);
+          img.alt = '';
+          img.draggable = false;
+          sq.append(img);
+        }
+        el.append(sq);
+      }
+    }
+    return el;
+  }
+
+  // Mô tả ván để chia sẻ: "An vs Bình" / "Trắng thắng do chiếu hết · 5+3 · 24 nước"
+  function describe(g, nameOf) {
+    const side = (c) => (g.bot && g.botColor === c ? g.bot.name : nameOf(c === 'w' ? g.whiteId : g.blackId));
+    const title = `${side('w')} (Trắng) vs ${side('b')} (Đen)`;
+    let state;
+    if (g.status === 'active') state = 'Đang chơi';
+    else if (g.status === 'aborted') state = 'Ván bị hủy';
+    else if (g.result === '1/2-1/2') state = `Hòa (${reasonText(g.reason)})`;
+    else state = `${g.result === '1-0' ? side('w') : side('b')} thắng do ${reasonText(g.reason)}`;
+    return { title, sub: `${state} · ${tcLabel(g)} · ${g.moves.length} nước` };
+  }
+
+  return { create, miniBoard, text: { describe, tcLabel, reasonText }, _test: { tcLabel, clockText, material, parseFen, outcomeFor } };
 })();

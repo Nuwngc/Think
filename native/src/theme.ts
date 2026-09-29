@@ -1,4 +1,6 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useColorScheme } from "react-native";
+import { create } from "zustand";
 
 // Màu của Think: ngọc bích (jade) + nghệ (turmeric), giống bản web (public/app.css)
 const light = {
@@ -67,8 +69,42 @@ const dark: Colors = {
   meterCrit: "#C2443A",
 };
 
+/* ---------------- Nền sáng / tối: theo máy, hoặc tự chọn trong Cài đặt ---------------- */
+
+export type ThemeMode = "system" | "light" | "dark";
+
+const THEME_KEY = "think.theme";
+
+export const useThemeMode = create<{ mode: ThemeMode; loaded: boolean }>(() => ({ mode: "system", loaded: false }));
+
+let loading: Promise<void> | null = null;
+
+/** Đọc lựa chọn đã lưu (gọi một lần lúc mở app) */
+export function loadThemeMode() {
+  if (!loading) {
+    loading = AsyncStorage.getItem(THEME_KEY)
+      .then((v) => {
+        // Người dùng đã chọn trong lúc đang đọc thì giữ lựa chọn mới
+        if (!useThemeMode.getState().loaded && (v === "light" || v === "dark" || v === "system")) useThemeMode.setState({ mode: v });
+      })
+      .catch(() => undefined)
+      .finally(() => useThemeMode.setState({ loaded: true }));
+  }
+  return loading;
+}
+
+export function setThemeMode(mode: ThemeMode) {
+  useThemeMode.setState({ mode, loaded: true });
+  AsyncStorage.setItem(THEME_KEY, mode).catch(() => undefined);
+}
+
+export const resolveScheme = (mode: ThemeMode, system: string | null | undefined): "light" | "dark" =>
+  mode === "system" ? (system === "dark" ? "dark" : "light") : mode;
+
 export function useColors(): Colors {
-  return useColorScheme() === "dark" ? dark : light;
+  const system = useColorScheme();
+  const mode = useThemeMode((s) => s.mode);
+  return resolveScheme(mode, system) === "dark" ? dark : light;
 }
 
 export const radius = { sm: 10, md: 14, lg: 20, xl: 26 };

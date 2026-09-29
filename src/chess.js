@@ -517,8 +517,15 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     res.json({ players: rows.map(ratingPublic), me: ratingPublic(ratingOf(req.user.id)) });
   }));
 
+  // Xem một ván: người chơi xem mọi lúc; người khác xem được ván đang chơi / đã xong (ván được chia sẻ)
+  function viewable(req, id) {
+    const g = loadGame(id);
+    if (g && ['active', 'finished', 'aborted'].includes(g.status)) return g;
+    return mine(req, id);
+  }
+
   app.get('/api/chess/games/:id', ...auth, handle((req, res) => {
-    res.json({ game: serialize(mine(req, req.params.id)) });
+    res.json({ game: serialize(viewable(req, req.params.id)) });
   }));
 
   // Lịch sử các ván đã xong của tôi, mới nhất trước (?before=<endedAt>&limit=30)
@@ -540,7 +547,7 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
   }));
 
   // Phân tích ván đã xong bằng Stockfish (src/chess-analysis.js)
-  setupAnalysis({ app, auth, handle, mine, ChessError, emitTo, humanIds, movesOf });
+  setupAnalysis({ app, auth, handle, mine, viewable, ChessError, emitTo, humanIds, movesOf });
 
   // Gửi lời thách đấu
   function createChallenge(uid, body) {
@@ -762,7 +769,13 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     scheduleBot(g);
   }
 
-  return { serialize, BOTS };
+  // Ván cờ gọn để hiện trong bài đăng / tin nhắn chia sẻ
+  function gameForShare(id) {
+    const g = loadGame(id);
+    return g ? serialize(g) : null;
+  }
+
+  return { serialize, BOTS, gameForShare };
 }
 
 module.exports = { setupChess, eloDeltas, cannotMate, BOTS, BASE_MINUTES, START_FEN };

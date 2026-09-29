@@ -5,10 +5,11 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 **Tính năng**
 
 - Tài khoản do admin cấp, không ai tự đăng ký được. Lần đầu đăng nhập bắt buộc đổi mật khẩu tạm.
-- Mỗi người tự đổi được: tên hiển thị, mật khẩu, ảnh đại diện.
+- Mỗi người tự đổi được: tên hiển thị, lời giới thiệu, ảnh đại diện, **ảnh bìa**, mật khẩu.
+- **Trang cá nhân và bảng tin** (mục 15): đăng bài (chữ + ảnh), thả tim ❤️, bình luận, xem trang của từng người; **chia sẻ ván cờ** lên trang cá nhân hoặc gửi vào cuộc trò chuyện.
 - Phòng chung cho cả nhóm, nhắn riêng 1-1, và **nhóm chat riêng** tự tạo (đặt tên, thêm/xóa người, rời nhóm, có trưởng nhóm).
 - Gửi ảnh (tự nén trên máy trước khi gửi), dán ảnh bằng Ctrl+V trên máy tính.
-- Thanh điều hướng dưới cùng: **Tin nhắn**, **Cá nhân** (đổi tên, mật khẩu, ảnh đại diện, thông báo, lưu trên máy) và **Quản trị** (chỉ admin thấy).
+- Thanh điều hướng dưới cùng: **Tin nhắn**, **Cờ vua**, **Cá nhân** (trang cá nhân + bảng tin; nút ⚙ **Cài đặt**: tên, giới thiệu, ảnh bìa, giao diện sáng/tối, thông báo, lưu trên máy, đổi mật khẩu) và **Quản trị** (chỉ admin thấy).
 - **Lưu trên máy người dùng**: tin nhắn và ảnh được giữ lại trên điện thoại, mở app là xem được ngay kể cả khi mất mạng hay máy chủ đang thức dậy. Tải lịch sử chat thành file, tải ảnh về máy.
 - **Bộ nhớ máy chủ**: thanh hiển thị dung lượng đã dùng, **tự dọn ảnh và tin nhắn cũ nhất khi sắp đầy**, dọn thủ công có xem trước.
 - **App Android có bong bóng chat** (Android 8 trở lên): tin nhắn mới hiện thành bong bóng nổi như Messenger, chạm vào để trả lời ngay; thông báo có ảnh từng người gửi, ô **Trả lời** và nút **Đã đọc**. Tải app ngay trên web (Cá nhân → Cài app lên máy).
@@ -22,7 +23,7 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
   - Số tin chưa đọc trên biểu tượng app và trên tiêu đề tab.
   - Âm báo + thông báo nhỏ trong app khi đang mở.
 - Admin: tạo tài khoản, đặt lại mật khẩu, khóa / mở khóa, cấp quyền admin. Khóa ai là người đó bị đăng xuất ngay.
-- Màn đăng nhập nền đen chữ trắng; bên trong app tự sáng / tối theo máy. Tìm kiếm không cần gõ dấu.
+- Màn đăng nhập nền đen chữ trắng; bên trong app **tự chọn nền sáng / tối** (Cài đặt → Giao diện: Theo máy, Nền sáng, Nền tối). Tìm kiếm không cần gõ dấu.
 
 Chỉ cần Node.js, không cần cài database riêng (dùng SQLite có sẵn trong Node 22.13 trở lên).
 
@@ -197,7 +198,7 @@ Bấm **Create Web Service**. Trong tab **Logs**, thấy dòng `Firebase chưa c
    Để trống ô mật khẩu tạm thì app tự tạo. Bấm **Sao chép** hoặc **Chia sẻ** để gửi thông tin qua Zalo/Messenger.
 3. Bạn bè đăng nhập bằng mật khẩu tạm, app bắt đặt mật khẩu riêng rồi mới vào chat.
 
-Muốn đổi tên, ảnh đại diện, mật khẩu: bấm tab **Cá nhân** ở thanh dưới cùng.
+Muốn đổi tên, lời giới thiệu, ảnh đại diện, ảnh bìa, mật khẩu: bấm tab **Cá nhân** ở thanh dưới cùng rồi bấm nút ⚙ **Cài đặt** (đổi mật khẩu nằm trong mục **Bảo mật**).
 
 ## 6. Cài app và bật thông báo
 
@@ -389,6 +390,18 @@ Tab **Cờ vua** có trên bản web và App Think Beta (cùng dữ liệu, chơ
 - **Âm thanh**: tiếng quân cờ khi đi, ăn quân, nhập thành, chiếu tướng, bắt đầu và kết thúc ván. Các tiếng này tự tổng hợp bằng `scripts/chess-sounds.py` (không lấy của ai), dùng chung cho web (`public/chess/sounds/`) và app (`native/assets/sounds/`).
 - Luật cờ dùng [chess.js](https://github.com/jhlywa/chess.js) (BSD-2-Clause) ở cả máy chủ, web và app. Hình quân cờ là bộ **cburnett** của Colin M.L. Burnett (GPLv2+, xem `public/chess/pieces/LICENSE.txt`).
 
+## 15. Trang cá nhân và bảng tin
+
+Có trên bản web và App Think Beta (cùng dữ liệu).
+
+- **Trang cá nhân**: ảnh bìa, ảnh đại diện, tên, lời giới thiệu (tối đa 160 ký tự), ngày tham gia, số bài viết, số lượt thích nhận được và điểm ELO cờ vua. Bấm tên / ảnh của ai (trong bài đăng, bình luận) để xem trang của người đó, có nút **Nhắn tin** và **Thách cờ**.
+- **Đăng bài**: ô "Bạn đang nghĩ gì?" ở tab Cá nhân. Mỗi bài có chữ (tối đa 2000 ký tự) và/hoặc một ảnh (tự thu nhỏ trên máy trước khi gửi). Người đăng và admin xóa được bài.
+- **Bảng tin**: tab Cá nhân có hai mục **Bảng tin** (bài mới của cả nhóm) và **Bài của tôi**. Bài mới, lượt thích, bình luận hiện ngay không cần tải lại.
+- **Thả tim, bình luận**: bấm ❤️ để thích (bấm lại để bỏ), "Ai đã thích?" để xem ai thích. Bình luận xóa được bởi người viết, chủ bài hoặc admin. Có người thích / bình luận bài của bạn thì bạn nhận thông báo (khi không mở app).
+- **Chia sẻ ván cờ**: trong một ván cờ bấm nút chia sẻ ⇪ rồi chọn **Đăng lên trang cá nhân** (bài có bàn cờ nhỏ, bấm để xem lại ván) hoặc **Gửi vào cuộc trò chuyện** (hiện thành thẻ ván cờ trong chat, bấm để mở). Người không chơi ván đó vẫn xem lại được từng nước và kết quả phân tích (nếu người chơi đã phân tích), nhưng không yêu cầu phân tích hay đăng lại được.
+- **Ảnh bìa**: Cài đặt → Ảnh bìa (hoặc nút "Ảnh bìa" trên trang cá nhân), tối đa 4 MB, khung 16:6. Gỡ ảnh bìa thì dùng nền màu mặc định.
+- **Giao diện sáng / tối**: Cài đặt → Giao diện. Lưu riêng trên từng máy.
+
 ## Cấu trúc thư mục
 
 ```
@@ -403,12 +416,14 @@ src/fcm.js           Thông báo đẩy cho App Think Beta (Firebase Cloud Messa
 src/chess.js         Cờ vua: thách đấu, đồng hồ, ELO, bảng xếp hạng, API /api/chess
 src/chess-engine.js  Hàng đợi gửi việc cho máy cờ; src/chess-worker.js chạy máy cờ trong luồng riêng
 src/chess-analysis.js Phân tích ván đã xong bằng Stockfish (độ chính xác, xếp loại nước đi)
+src/social.js        Trang cá nhân và bảng tin: bài đăng, thả tim, bình luận (API /api/posts)
 src/engines/         GarboChess-JS (giữ nguyên giấy phép BSD ở đầu file)
 scripts/admin.js     Công cụ dòng lệnh cho chủ server
 scripts/tunnel.js    Mở link HTTPS tạm thời (npm run share / npm run tunnel)
 scripts/chess-sounds.py Tạo lại âm thanh cờ vua (cần Python + numpy)
 public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu trên máy), sw.js (service worker),
-                     chess-ui.js (tab Cờ vua), chess/pieces/ (hình quân cờ), chess/sounds/ (âm thanh)
+                     chess-ui.js (tab Cờ vua), social-ui.js (trang cá nhân, bảng tin), theme.js (nền sáng/tối),
+                     chess/pieces/ (hình quân cờ), chess/sounds/ (âm thanh)
 public/download/     File cài app Android (think.apk) và version.json
 android/             Mã app Android: mở web bằng Chrome, bong bóng chat, trả lời trong thông báo (build.sh để build)
 native/              App Think Beta (React Native / Expo), xem native/README.md

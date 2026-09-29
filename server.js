@@ -25,6 +25,7 @@ const auth = require('./src/auth');
 const push = require('./src/push');
 const fcm = require('./src/fcm');
 const { setupChess } = require('./src/chess');
+const { setupSocial, cleanText } = require('./src/social');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -168,10 +169,13 @@ function publicUser(u) {
     username: u.username,
     displayName: u.display_name,
     avatar: u.avatar || null,
+    cover: u.cover || null,
+    bio: u.bio || '',
     role: u.role,
     disabled: Boolean(u.disabled),
     online: isOnline(u.id),
     lastSeen: u.last_seen || null,
+    joinedAt: u.created_at || null,
   };
 }
 const meUser = (u) => ({ ...publicUser(u), mustChangePassword: Boolean(u.must_change_password) });
@@ -597,9 +601,22 @@ app.post('/api/me/password', requireAuth, async (req, res) => {
 });
 
 app.patch('/api/me', requireAuth, requireReady, (req, res) => {
-  const name = normDisplayName(req.body?.displayName);
-  if (!name) return res.status(400).json({ error: 'Tên hiển thị cần từ 1 đến 40 ký tự.' });
-  run('UPDATE users SET display_name = ? WHERE id = ?', name, req.user.id);
+  // Đổi tên hiển thị và/hoặc lời giới thiệu (gửi trường nào đổi trường đó). Kiểm tra hết rồi mới lưu.
+  let name;
+  let bio;
+  if (req.body?.displayName !== undefined) {
+    name = normDisplayName(req.body.displayName);
+    if (!name) return res.status(400).json({ error: 'Tên hiển thị cần từ 1 đến 40 ký tự.' });
+  }
+  if (req.body?.bio !== undefined) {
+    try {
+      bio = cleanText(req.body.bio, 160).replace(/\n+/g, ' ');
+    } catch {
+      return res.status(400).json({ error: 'Lời giới thiệu tối đa 160 ký tự.' });
+    }
+  }
+  if (name !== undefined) run('UPDATE users SET display_name = ? WHERE id = ?', name, req.user.id);
+  if (bio !== undefined) run('UPDATE users SET bio = ? WHERE id = ?', bio || null, req.user.id);
   const user = get('SELECT * FROM users WHERE id = ?', req.user.id);
   io.emit('user:updated', publicUser(user));
   res.json({ user: meUser(user) });
@@ -630,10 +647,36 @@ app.delete('/api/me/avatar', requireAuth, requireReady, (req, res) => {
   res.json({ user: meUser(user) });
 });
 
+// Ảnh bìa trang cá nhân (máy người dùng đã thu nhỏ trước khi gửi)
+app.post('/api/me/cover', requireAuth, requireReady, rawImage, (req, res) => {
+  const kind = sniffImage(req.body);
+  if (!kind) return res.status(400).json({ error: 'File này không phải ảnh JPG, PNG, WEBP hoặc GIF.' });
+  if (req.body.length > 4 * 1024 * 1024) return res.status(413).json({ error: 'Ảnh bìa tối đa 4 MB.' });
+  const name = `${req.user.id}-cover-${crypto.randomBytes(6).toString('hex')}.${kind}`;
+  fs.writeFileSync(path.join(AVATAR_DIR, name), req.body);
+  cloud.saveFile(`uploads/avatars/${name}`);
+  storage.recordUpload(`/uploads/avatars/${name}`, 'avatar', req.body.length, req.user.id);
+  const old = get('SELECT cover FROM users WHERE id = ?', req.user.id)?.cover;
+  run('UPDATE users SET cover = ? WHERE id = ?', `/uploads/avatars/${name}`, req.user.id);
+  removeUpload(old);
+  const user = get('SELECT * FROM users WHERE id = ?', req.user.id);
+  io.emit('user:updated', publicUser(user));
+  res.json({ user: meUser(user) });
+});
+
+app.delete('/api/me/cover', requireAuth, requireReady, (req, res) => {
+  const old = get('SELECT cover FROM users WHERE id = ?', req.user.id)?.cover;
+  run('UPDATE users SET cover = NULL WHERE id = ?', req.user.id);
+  removeUpload(old);
+  const user = get('SELECT * FROM users WHERE id = ?', req.user.id);
+  io.emit('user:updated', publicUser(user));
+  res.json({ user: meUser(user) });
+});
+
 /* ---------------- API: chat ---------------- */
 
 app.get('/api/users', requireAuth, requireReady, (req, res) => {
-  const users = all('SELECT id, username, display_name, avatar, role, disabled, last_seen FROM users ORDER BY id');
+  const users = all('SELECT id, username, display_name, avatar, cover, bio, role, disabled, last_seen, created_at FROM users ORDER BY id');
   res.json({ users: users.map(publicUser) });
 });
 
@@ -789,7 +832,11 @@ async function notifyMembers(conv, message, members) {
   const targets = members.filter((uid) => uid !== message.senderId && !isActive(uid));
   if (!targets.length) return;
   const sender = get('SELECT display_name, avatar FROM users WHERE id = ?', message.senderId);
-  const text = message.text ? (message.image ? `📷 ${message.text}` : message.text) : '📷 Đã gửi một ảnh';
+  // Tin chia sẻ ván cờ ("♟ Tên vs Tên\n…\nđường dẫn"): thông báo chỉ cần dòng đầu
+  const chessShare = /^♟ ([^\n]+)\n(?:[^\n]*\n)?\S*#\/chess\/g\/\d+\s*$/.exec(message.text || '');
+  const text = chessShare
+    ? `♟ Chia sẻ ván cờ: ${chessShare[1]}`
+    : message.text ? (message.image ? `📷 ${message.text}` : message.text) : '📷 Đã gửi một ảnh';
   const base = {
     type: 'message',
     conversationId: conv.id,
@@ -1167,13 +1214,37 @@ app.get('/api/app/notification/:id', requireAuth, requireReady, (req, res) => {
 
 /* ---------------- API: cờ vua ---------------- */
 
-setupChess({
+const chess = setupChess({
   app,
   io,
   requireAuth,
   requireReady,
   isActive,
   notify: (uid, payload) => push.sendToUser(uid, { icon: '/icons/icon-192.png', ...payload }),
+  nameOf: (uid) => get('SELECT display_name FROM users WHERE id = ?', uid)?.display_name || 'Ai đó',
+});
+
+/* ---------------- API: trang cá nhân, bảng tin (src/social.js) ---------------- */
+
+setupSocial({
+  app,
+  io,
+  requireAuth,
+  requireReady,
+  isActive,
+  // Ảnh bài đăng tải lên qua /api/upload giống ảnh tin nhắn
+  takeUpload: (url, userId) => {
+    const upload = pendingUploads.get(url);
+    if (!upload || upload.userId !== userId) return false;
+    pendingUploads.delete(url);
+    return true;
+  },
+  removeUpload,
+  gameForShare: (id) => chess.gameForShare(id),
+  notify: (uid, { actorId, ...payload }) => {
+    const actor = actorId != null ? get('SELECT avatar FROM users WHERE id = ?', actorId) : null;
+    return push.sendToUser(uid, { icon: actor?.avatar || '/icons/icon-192.png', ...payload });
+  },
   nameOf: (uid) => get('SELECT display_name FROM users WHERE id = ?', uid)?.display_name || 'Ai đó',
 });
 

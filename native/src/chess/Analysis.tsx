@@ -11,10 +11,12 @@ import type { AnalysisResult, ChessGame, Color } from "./types";
 
 // Phân tích ván bằng Stockfish (máy chủ chấm từng nước): độ chính xác, biểu đồ đánh giá, nhận xét từng nước
 
-export function AnalysisPanel({ g, ply, onJump }: { g: ChessGame; ply: number; onJump: (ply: number) => void }) {
+export function AnalysisPanel({ g, ply, onJump, viewer = false }: { g: ChessGame; ply: number; onJump: (ply: number) => void; viewer?: boolean }) {
   const c = useColors();
   const s = useStyles(makeStyles);
   const a = useChess((st) => st.analyses[g.id]);
+  // Người xem ván được chia sẻ: không yêu cầu phân tích được, chỉ xem kết quả nếu người chơi đã phân tích
+  const viewerOnly = viewer && (!a || a.status === "none" || a.status === "error");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -23,7 +25,7 @@ export function AnalysisPanel({ g, ply, onJump }: { g: ChessGame; ply: number; o
 
   if (g.status !== "finished" || g.moves.length < 2) return null;
 
-  if (!a || a.status === "none" || a.status === "error") {
+  if (!viewerOnly && (!a || a.status === "none" || a.status === "error")) {
     return (
       <View style={s.card}>
         <View style={s.headRow}>
@@ -48,6 +50,19 @@ export function AnalysisPanel({ g, ply, onJump }: { g: ChessGame; ply: number; o
       </View>
     );
   }
+  if (viewerOnly) {
+    if (!a) return null;
+    return (
+      <View style={s.card}>
+        <View style={s.headRow}>
+          <Icon name="insights" size={22} color={c.accent} />
+          <Text style={s.title}>Phân tích ván đấu</Text>
+        </View>
+        <Text style={s.hint}>Ván này chưa được phân tích. Người chơi có thể bấm phân tích bằng Stockfish.</Text>
+      </View>
+    );
+  }
+  if (!a) return null;
 
   if (a.status === "queued" || a.status === "running") {
     const pct = a.total ? Math.round((a.progress / a.total) * 100) : 0;

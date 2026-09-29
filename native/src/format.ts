@@ -114,7 +114,43 @@ export function messageSummary(m: ChatItem, names: Names) {
   if (m.deleted) return "Tin nhắn đã được thu hồi";
   if (hasImage(m) && !m.text) return "Đã gửi một ảnh";
   if ("imagePurged" in m && m.imagePurged && !m.text) return "Ảnh đã được dọn khỏi máy chủ";
+  const shared = !hasImage(m) && m.text ? chessShareOf(m.text) : null;
+  if (shared) return `♟ ${shared.title}`;
   return `${hasImage(m) ? "📷 " : ""}${oneLine(m.text)}`;
+}
+
+/* ---------------- Ván cờ được chia sẻ vào cuộc trò chuyện ----------------
+   Tin dạng: "♟ An (Trắng) vs Bình (Đen)\nAn thắng do chiếu hết · 5+3 · 24 nước\nhttps://…/#/chess/g/12"
+   (giống bản web). Hai bên đều hiện thành thẻ bấm được để mở ván. */
+
+export type ChessShare = { title: string; sub: string; id: number };
+
+export function chessShareOf(text: string | null | undefined): ChessShare | null {
+  const m = /^♟ ([^\n]+)\n(?:([^\n]*)\n)?\S*#\/chess\/g\/(\d+)\s*$/.exec(String(text || ""));
+  return m ? { title: m[1], sub: m[2] || "", id: Number(m[3]) } : null;
+}
+
+export function chessShareText(share: { title: string; sub: string; id: number }, origin: string) {
+  return `♟ ${share.title}\n${share.sub}\n${origin.replace(/\/+$/, "")}/#/chess/g/${share.id}`;
+}
+
+/* ---------------- Bảng tin ---------------- */
+
+/** Thời gian của bài đăng, bình luận: Vừa xong, 5 phút trước, 3 giờ trước, 2 ngày trước, 12/05 */
+export function timeAgo(ts: number, now = Date.now()) {
+  const s = Math.max(0, (now - ts) / 1000);
+  if (s < 60) return "Vừa xong";
+  if (s < 3600) return `${Math.floor(s / 60)} phút trước`;
+  if (s < 86400) return `${Math.floor(s / 3600)} giờ trước`;
+  if (s < 7 * 86400) return `${Math.floor(s / 86400)} ngày trước`;
+  return shortTime(ts, now);
+}
+
+/** "Tham gia tháng 9/2026" */
+export function joinedText(ts: number | null | undefined) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return `Tham gia tháng ${d.getMonth() + 1}/${d.getFullYear()}`;
 }
 
 /** Dòng xem trước trong danh sách chat: "Bạn: …", "Minh: …" (nhóm) */

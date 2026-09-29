@@ -71,7 +71,7 @@ function summarize(moves, positions) {
 
 /* ---------------- Cài vào máy chủ ---------------- */
 
-function setupAnalysis({ app, auth, handle, mine, ChessError, emitTo, humanIds, movesOf }) {
+function setupAnalysis({ app, auth, handle, mine, viewable, ChessError, emitTo, humanIds, movesOf }) {
   const queue = []; // id ván chờ phân tích
   let busy = false;
 
@@ -213,7 +213,8 @@ function setupAnalysis({ app, auth, handle, mine, ChessError, emitTo, humanIds, 
   }
 
   app.get('/api/chess/games/:id/analysis', ...auth, handle((req, res) => {
-    const g = mine(req, req.params.id);
+    // Ván được chia sẻ: ai xem ván cũng xem được phân tích (chỉ người chơi mới yêu cầu phân tích)
+    const g = viewable(req, req.params.id);
     res.json({ analysis: publicOf(rowOf(g.id)) });
   }));
 

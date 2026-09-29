@@ -48,6 +48,8 @@ const get = useChess.getState;
 const set = useChess.setState;
 
 type Bridge = {
+  /** Đã đóng ván đang mở (để màn chính quên chỗ quay về) */
+  closed?: () => void;
   meId: () => number;
   nameOf: (id: number | null | undefined) => string;
   toast: (text: string, extra?: { title?: string; senderId?: number; chessGameId?: number }) => void;
@@ -150,7 +152,13 @@ export async function loadLeaderboard() {
 
 export async function openGame(id: number) {
   set({ openId: id });
-  if (!get().games[id]) {
+  const cached = get().games[id];
+  // Ván của người khác (được chia sẻ): luôn lấy bản mới (máy chủ chỉ gửi realtime cho hai người chơi)
+  if (cached && !myColor(cached, bridge.meId())) {
+    loadGameFresh(id);
+    return;
+  }
+  if (!cached) {
     try {
       const { game } = await api.chessGame(id);
       upsert([game]);
@@ -161,7 +169,8 @@ export async function openGame(id: number) {
   }
 }
 
-async function loadGameFresh(id: number) {
+/** Tải lại một ván (người xem ván của người khác tự gọi định kỳ khi ván còn đang chơi) */
+export async function loadGameFresh(id: number) {
   try {
     const { game } = await api.chessGame(id);
     upsert([game]);
@@ -172,6 +181,7 @@ async function loadGameFresh(id: number) {
 
 export function closeGame() {
   set({ openId: null });
+  bridge.closed?.();
 }
 
 /* ---------------- Thách đấu, chơi với máy ---------------- */

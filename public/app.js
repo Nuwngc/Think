@@ -283,7 +283,28 @@
 
   // Cờ vua (public/chess-ui.js): tab riêng, ván cờ mở ở cột phải
   const chess = window.ThinkChess
-    ? window.ThinkChess.create({ api, h, icon, avatarEl, userOf, nameOf, state, toast, pushToast, navigate, goBack, withBusy, shortTime, fold })
+    ? window.ThinkChess.create({
+        api, h, icon, avatarEl, userOf, nameOf, state, toast, pushToast, navigate, goBack, withBusy, shortTime, fold,
+        share: (game) => social && social.shareGame(game),
+      })
+    : null;
+
+  // Trang cá nhân và bảng tin (public/social-ui.js)
+  const social = window.ThinkSocial
+    ? window.ThinkSocial.create({
+        api, h, icon, avatarEl, userOf, nameOf, state, toast, navigate, goBack, withBusy, shortTime, fold,
+        prepareImage: (file, opts) => prepareImage(file, opts),
+        openLightbox: (src) => openLightbox(src),
+        conversations: () => [...state.convs.values()]
+          .filter((c) => c.type !== 'dm' || c.lastMessage)
+          .sort((a, b) => (b.lastMessage?.createdAt || b.createdAt || 0) - (a.lastMessage?.createdAt || a.createdAt || 0))
+          .map((c) => ({ id: c.id, title: convTitle(c), avatar: convAvatarEl(c, 'avatar-sm') })),
+        sendText: (convId, text) => sendTextTo(convId, text),
+        openDm: (userId) => openDmWith(userId),
+        challenge: (userId) => chess && chess.openChallenge(userId),
+        miniBoard: (fen, orientation) => (window.ThinkChess ? window.ThinkChess.miniBoard(fen, orientation) : null),
+        chessText: window.ThinkChess ? window.ThinkChess.text : null,
+      })
     : null;
 
   function showLogin(message) {
@@ -323,6 +344,7 @@
     state.currentId = null;
     state.everConnected = false;
     if (chess) chess.reset();
+    if (social) social.reset();
     $('#conv-list').replaceChildren();
     $('#messages').replaceChildren();
     $('#banner').replaceChildren();
@@ -356,10 +378,16 @@
     if (!(history.state && history.state.overlay === 'lightbox')) hideLightbox();
     closeMenu();
     if (!state.me || $('#view-main').hidden) return;
-    let hash = location.hash || '#/';
-    if (hash === '#/settings') hash = '#/me'; // đường dẫn cũ
+    const hash = location.hash || '#/';
     const chessGame = /^#\/chess\/g\/(\d+)$/.exec(hash);
-    const tab = hash === '#/me' ? 'me' : hash === '#/admin' ? 'admin' : hash === '#/chess' || chessGame ? 'chess' : 'chats';
+    // Trang cá nhân của một người (#/u/5) mở ở cột phải; bài đăng (#/p/9, từ thông báo) mở bình luận
+    const userPage = /^#\/u\/(\d+)$/.exec(hash);
+    const postPage = /^#\/p\/(\d+)$/.exec(hash);
+    const tab = hash === '#/me' || hash === '#/settings' || postPage ? 'me'
+      : hash === '#/admin' ? 'admin'
+        : hash === '#/chess' || chessGame ? 'chess'
+          : userPage ? (state.tab || 'chats')
+            : 'chats';
     if (tab === 'chess' && !chess) {
       navigate('#/', { replace: true });
       return;
@@ -383,8 +411,27 @@
     if (match) openConversation(Number(match[1]));
     else if (!sheet) closeConversation();
     showTab(tab);
+    showMeView(hash === '#/settings' ? 'settings' : 'profile');
     if (chess) chess.route(tab === 'chess', chessGame ? Number(chessGame[1]) : null);
+    if (social) {
+      social.route(userPage ? Number(userPage[1]) : null);
+      if (postPage) {
+        // Bài từ thông báo (#/p/9): đổi địa chỉ về #/me rồi mở bình luận, để lần route sau không tự mở lại
+        history.replaceState(history.state, '', '#/me');
+        social.openPost(Number(postPage[1]));
+      }
+    }
     showSheet(sheet);
+  }
+
+  // Tab Cá nhân có hai phần: trang cá nhân (mặc định) và Cài đặt (#/settings)
+  function showMeView(view) {
+    const settings = view === 'settings';
+    const was = !$('#me-settings').hidden;
+    $('#me-profile').hidden = settings;
+    $('#me-settings').hidden = !settings;
+    if (settings && !was && state.me) renderSettings();
+    if (!settings && state.tab === 'me' && social) social.renderMe();
   }
   window.addEventListener('popstate', route);
   window.addEventListener('hashchange', route);
@@ -400,7 +447,7 @@
     }
     $('#chat-empty').classList.toggle('is-quiet', tab !== 'chats');
     if (!changed || !state.me) return;
-    if (tab === 'me') renderSettings();
+    if (tab === 'me' && !$('#me-settings').hidden) renderSettings();
     if (tab === 'admin') renderAdmin();
     const body = $(`#page-${tab} .page-body:not([hidden])`);
     if (body) body.scrollTop = 0;
@@ -486,6 +533,8 @@
     if (m.deleted) return 'Tin nhắn đã được thu hồi';
     const hasImage = Boolean(m.image || m.localUrl);
     if (hasImage && !m.text) return 'Đã gửi một ảnh';
+    const shared = !hasImage && m.text ? chessShareOf(m.text) : null;
+    if (shared) return `♟ ${shared.title}`;
     return `${hasImage ? '📷 ' : ''}${String(m.text || '').replace(/\s+/g, ' ')}`;
   }
   function previewText(m, c) {
@@ -838,7 +887,9 @@
     if (hasQuote) b.append(quoteEl(m.replyTo));
     if (hasImage) b.append(imageEl(m));
     else if (purged) b.append(goneImageEl(true));
-    if (m.text) b.append(h('span', { class: 'bubble-text' }, linkify(m.text)));
+    const shared = m.text ? chessShareOf(m.text) : null;
+    if (shared) b.append(chessShareCard(shared));
+    else if (m.text) b.append(h('span', { class: 'bubble-text' }, linkify(m.text)));
     return b;
   }
 
@@ -898,6 +949,37 @@
     }
     return h('button', { class: 'img-gone', type: 'button', onclick: (e) => { e.stopPropagation(); retryLoad(); } },
       icon('image'), h('span', { text: 'Không tải được ảnh. Chạm để thử lại' }));
+  }
+
+  // Tin nhắn chia sẻ ván cờ: "♟ …" + dòng mô tả + đường dẫn …/#/chess/g/12 → hiện thành thẻ bấm để xem ván
+  function chessShareOf(text) {
+    const m = /^♟ ([^\n]+)\n(?:([^\n]*)\n)?\S*#\/chess\/g\/(\d+)\s*$/.exec(text);
+    return m ? { title: m[1], sub: m[2] || '', id: Number(m[3]) } : null;
+  }
+  function chessShareCard(c) {
+    return h('button', {
+      class: 'chess-share-card',
+      type: 'button',
+      onclick: (e) => {
+        e.stopPropagation();
+        navigate(`#/chess/g/${c.id}`);
+      },
+    },
+    h('span', { class: 'chess-share-ic' }, icon('knight')),
+    h('span', { class: 'chess-share-main' },
+      h('strong', { text: c.title }),
+      c.sub ? h('span', { text: c.sub }) : null,
+      h('em', { text: 'Bấm để xem lại ván' })));
+  }
+  // Gửi một tin chữ vào cuộc trò chuyện bất kỳ (dùng khi chia sẻ ván cờ)
+  function sendTextTo(convId, text) {
+    const m = {
+      id: null, clientId: newClientId(), conversationId: convId, senderId: state.me.id, text, image: null,
+      replyTo: null, reactions: [], createdAt: Date.now(), pending: true,
+    };
+    addLocal(m);
+    // true = đã gửi; false = lỗi (deliver đã báo lỗi, tin nằm trong khung chat để gửi lại)
+    return deliver(m).then(() => !m.failed);
   }
 
   function linkify(text) {
@@ -1896,6 +1978,11 @@ ${sections}
     socket.on('typing', onTyping);
     socket.on('presence', onPresence);
     socket.on('user:updated', onUserUpdated);
+    if (social) {
+      for (const ev of ['post:new', 'post:likes', 'post:comment', 'post:comment-deleted', 'post:deleted']) {
+        socket.on(ev, (data) => social.onEvent(ev, data));
+      }
+    }
     socket.on('session:ended', (data) => sessionEnded((data && data.reason) || 'Bạn đã bị đăng xuất.'));
     if (chess) {
       socket.on('chess:game', (data) => chess.onEvent('chess:game', data));
@@ -2068,6 +2155,7 @@ ${sections}
     if (state.tab === 'admin') loadAdminUsers();
     if (currentSheet === 'group') renderGroupInfo();
     if (currentSheet === 'new-group') renderNewGroup();
+    if (social) social.onUser(u);
   }
 
   async function loadUsers() {
@@ -2503,6 +2591,7 @@ ${sections}
     state.users.set(user.id, { ...(state.users.get(user.id) || {}), ...user });
     renderMe();
     renderSettingsProfile();
+    if (social) social.onUser(state.users.get(user.id));
     renderConvList();
     renderChatHeader();
     if (state.currentId != null) renderMessages();
@@ -2512,14 +2601,21 @@ ${sections}
     fillAvatar($('#settings-avatar'), state.me, { dot: false });
     $('#me-name').replaceChildren(
       h('span', { text: state.me.displayName }),
-      state.me.role === 'admin' ? h('span', { class: 'tag tag-admin', text: 'Admin' }) : null);
+      ...(state.me.role === 'admin' ? [h('span', { class: 'tag tag-admin', text: 'Admin' })] : []));
     $('#settings-username').textContent = `Tên đăng nhập: ${state.me.username}`;
     $('#remove-avatar').hidden = !state.me.avatar;
+    const cover = $('#cover-preview');
+    cover.style.backgroundImage = state.me.cover ? `url("${state.me.cover}")` : '';
+    cover.classList.toggle('is-empty', !state.me.cover);
+    $('#remove-cover').hidden = !state.me.cover;
   }
   function renderSettings() {
     renderSettingsProfile();
     renderLocal();
     $('#name-form').elements.displayName.value = state.me.displayName;
+    $('#name-form').elements.bio.value = state.me.bio || '';
+    const theme = window.ThinkTheme ? window.ThinkTheme.get() : 'system';
+    for (const r of $$('input[name="theme"]')) r.checked = r.value === theme;
     const pw = $('#password-form');
     pw.reset();
     pw.elements.username.value = state.me.username;
@@ -2534,19 +2630,20 @@ ${sections}
     e.preventDefault();
     const form = e.currentTarget;
     const name = form.elements.displayName.value.trim();
+    const bio = form.elements.bio.value.replace(/\s+/g, ' ').trim();
     if (!name) {
       toast('Tên hiển thị không được để trống.');
       return;
     }
-    if (name === state.me.displayName) {
-      toast('Bạn đang dùng tên này rồi.');
+    if (name === state.me.displayName && bio === (state.me.bio || '')) {
+      toast('Chưa có gì thay đổi.');
       return;
     }
     withBusy(form.querySelector('[type=submit]'), async () => {
       try {
-        const { user } = await api('/api/me', { method: 'PATCH', body: { displayName: name } });
+        const { user } = await api('/api/me', { method: 'PATCH', body: { displayName: name, bio } });
         applyMe(user);
-        toast('Đã lưu tên hiển thị.');
+        toast('Đã lưu tên và lời giới thiệu.');
       } catch (err) {
         toast(err.message);
       }
@@ -2594,6 +2691,56 @@ ${sections}
       wrap.classList.remove('busy');
     }
   });
+
+  // Ảnh bìa: thu nhỏ còn tối đa 1500px trước khi gửi
+  $('#cover-input').addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.type && !/^image\//.test(file.type)) {
+      toast('Hãy chọn một file ảnh.');
+      return;
+    }
+    for (const el of $$('.cover-preview, .profile-cover')) el.classList.add('busy');
+    try {
+      const { blob } = await prepareImage(file, { max: 1500, quality: 0.85 });
+      const { user } = await api('/api/me/cover', { method: 'POST', raw: blob });
+      applyMe(user);
+      toast('Đã đổi ảnh bìa.');
+    } catch (err) {
+      toast(err.message || 'Không đổi được ảnh bìa.');
+    } finally {
+      for (const el of $$('.cover-preview, .profile-cover')) el.classList.remove('busy');
+    }
+  });
+
+  async function removeCover() {
+    if (!window.confirm('Gỡ ảnh bìa hiện tại?')) return;
+    try {
+      const { user } = await api('/api/me/cover', { method: 'DELETE' });
+      applyMe(user);
+      toast('Đã gỡ ảnh bìa.');
+    } catch (err) {
+      toast(err.message);
+    }
+  }
+
+  // Giao diện sáng / tối (public/theme.js)
+  for (const r of $$('input[name="theme"]')) {
+    r.addEventListener('change', () => {
+      if (r.checked && window.ThinkTheme) window.ThinkTheme.set(r.value);
+    });
+  }
+
+  async function openDmWith(userId) {
+    try {
+      const { conversation } = await api('/api/conversations/dm', { method: 'POST', body: { userId } });
+      state.convs.set(conversation.id, conversation);
+      navigate(`#/c/${conversation.id}`);
+    } catch (err) {
+      toast(err.message);
+    }
+  }
 
   async function removeAvatar() {
     if (!window.confirm('Gỡ ảnh đại diện hiện tại?')) return;
@@ -3255,7 +3402,13 @@ ${sections}
     const el = e.target.closest('[data-action]');
     if (!el) return;
     switch (el.dataset.action) {
-      case 'settings': switchTab('me'); break;
+      case 'settings': navigate('#/settings'); break;
+      case 'close-settings':
+        if (history.state && history.state.depth > 0 && !history.state.tabPush) history.back();
+        else navigate('#/me', { replace: true });
+        break;
+      case 'pick-cover': $('#cover-input').click(); break;
+      case 'remove-cover': removeCover(); break;
       case 'new': navigate('#/new'); break;
       case 'admin': switchTab('admin'); break;
       case 'close-sheet':

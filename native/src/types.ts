@@ -1,10 +1,16 @@
-// Dữ liệu máy chủ Think trả về (xem server.js: publicUser, serializeMessage, serializeConv)
+// Dữ liệu máy chủ Think trả về (xem server.js: publicUser, serializeMessage, serializeConv; src/social.js: bài đăng)
+import type { ChessGame } from "./chess/types";
 
 export type User = {
   id: number;
   username: string;
   displayName: string;
   avatar: string | null;
+  /** Ảnh bìa trang cá nhân (máy chủ cũ chưa có) */
+  cover?: string | null;
+  /** Lời giới thiệu ngắn */
+  bio?: string;
+  joinedAt?: number | null;
   role: "admin" | "member";
   disabled: boolean;
   online: boolean;
@@ -108,4 +114,27 @@ export type StoragePayload = {
   usage: StorageUsage;
   settings: StorageSettings;
   lastClean: (CleanupResult & { at: number; auto: boolean; images: number; messages: number }) | null;
+};
+
+/* ---------------- Trang cá nhân, bảng tin ---------------- */
+
+export type Post = {
+  id: number;
+  userId: number;
+  text: string;
+  image: string | null;
+  /** Ván cờ được chia sẻ kèm bài */
+  game: ChessGame | null;
+  createdAt: number;
+  likes: number;
+  liked: boolean;
+  comments: number;
+};
+
+export type PostComment = { id: number; postId: number; userId: number; text: string; createdAt: number };
+
+export type ProfileStats = {
+  posts: number;
+  likes: number;
+  chess: { rating: number; games: number; wins: number } | null;
 };

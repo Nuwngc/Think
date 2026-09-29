@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNo
 import { AccessibilityInfo, ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { hideToast, useStore } from "../store";
+import { shareGame } from "../social/store";
+import { hideToast, leaveGame, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Button, confirm, Icon, IconButton, useStyles } from "../ui";
 import { AnalysisPanel } from "./Analysis";
@@ -12,7 +13,7 @@ import { SideAvatar, useNow, useSide } from "./parts";
 import { loadPrefs, usePrefs } from "./prefs";
 import { PrefsSheet } from "./Sheets";
 import { playSound, preloadSounds, soundForSan } from "./sound";
-import { abort, answerChallenge, closeGame, draw, playMove, rematch, resign, useChess } from "./store";
+import { abort, answerChallenge, closeGame, draw, loadGameFresh, playMove, rematch, resign, useChess } from "./store";
 import type { ChessGame, Color } from "./types";
 
 // Màn hình một ván cờ: bàn cờ, đồng hồ hai bên, danh sách nước đi, mời hòa / đầu hàng, kết quả.
@@ -47,7 +48,7 @@ function Header({ title, sub, right }: { title: string; sub?: string; right?: Re
   const s = useStyles(makeStyles);
   return (
     <View style={s.header}>
-      <IconButton name="arrow-back" label="Quay lại" onPress={closeGame} color={c.text} />
+      <IconButton name="arrow-back" label="Quay lại" onPress={leaveGame} color={c.text} />
       <View style={{ flex: 1 }}>
         <Text style={s.title} numberOfLines={1}>
           {title}
@@ -92,6 +93,13 @@ function Game({ g }: { g: ChessGame }) {
   }, []);
 
   const mine = myColor(g, meId);
+  const appActive = useStore((st) => st.appActive);
+  // Người xem ván của người khác không nhận realtime: hỏi lại máy chủ mỗi 3 giây khi ván còn đang chơi
+  useEffect(() => {
+    if (mine || g.status !== "active" || !appActive) return;
+    const t = setInterval(() => loadGameFresh(g.id), 3000);
+    return () => clearInterval(t);
+  }, [mine, g.status, g.id, appActive]);
   const bottom: Color = flip ? opponentColor(mine ?? "w") : (mine ?? "w");
   const top = opponentColor(bottom);
   const active = g.status === "active";
@@ -153,7 +161,9 @@ function Game({ g }: { g: ChessGame }) {
   };
 
   const opp = useSide(g, mine ? opponentColor(mine) : "b");
-  const title = mine ? `Với ${opp.name}` : "Ván cờ";
+  const white = useSide(g, "w");
+  // Người xem ván được chia sẻ: tiêu đề là tên hai bên
+  const title = mine ? `Với ${opp.name}` : `${white.name} vs ${opp.name}`;
 
   // Trình đọc màn hình: báo nước đối thủ vừa đi
   const lastTotal = useRef(total);
@@ -197,6 +207,7 @@ function Game({ g }: { g: ChessGame }) {
         sub={modeText(g)}
         right={
           <>
+            {!active || total > 0 ? <IconButton name="ios-share" label="Chia sẻ ván cờ" onPress={() => shareGame(g)} color={c.text2} /> : null}
             <IconButton name="tune" label="Tùy chọn bàn cờ" onPress={() => setPrefsOpen(true)} color={c.text2} />
             <IconButton name="swap-vert" label="Xoay bàn cờ" onPress={() => setFlip((v) => !v)} color={c.text2} />
           </>
@@ -304,7 +315,7 @@ function Game({ g }: { g: ChessGame }) {
             </View>
           ) : null}
 
-          {!active ? <AnalysisPanel g={g} ply={ply} onJump={(p) => jump(p)} /> : null}
+          {!active ? <AnalysisPanel g={g} ply={ply} onJump={(p) => jump(p)} viewer={!mine} /> : null}
 
           {active && mine ? (
             <View style={s.actions}>
@@ -439,7 +450,11 @@ function Result({ g, mine }: { g: ChessGame; mine: Color | null }) {
   const delta = mine ? g.deltas[mine] : null;
   return (
     <View style={[s.result, { backgroundColor: o === "win" ? c.jadeWash : o === "loss" ? c.dangerWash : c.field }]} accessibilityLiveRegion="polite">
-      <Icon name={o === "win" ? "emoji-events" : o === "loss" ? "sentiment-dissatisfied" : o === "draw" ? "handshake" : "block"} size={30} color={tint} />
+      <Icon
+        name={o === "loss" ? "sentiment-dissatisfied" : o === "draw" ? "handshake" : o === "aborted" ? "block" : "emoji-events"}
+        size={30}
+        color={tint}
+      />
       <View style={{ flex: 1 }}>
         <Text style={[s.resultTitle, { color: tint }]}>{resultTitle(g, mine)}</Text>
         <Text style={s.resultSub}>

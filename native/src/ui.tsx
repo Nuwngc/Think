@@ -151,6 +151,7 @@ export function Button({
     <Pressable
       onPress={off ? undefined : onPress}
       accessibilityRole="button"
+      accessibilityLabel={title}
       accessibilityState={{ disabled: Boolean(off), busy: Boolean(busy) }}
       style={({ pressed }) => [
         styles.button,
@@ -276,6 +277,7 @@ export function Sheet({
   children,
   scroll = true,
   footer,
+  scrollRef,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -283,6 +285,8 @@ export function Sheet({
   children: ReactNode;
   scroll?: boolean;
   footer?: ReactNode;
+  /** Để tự cuộn nội dung (vd tới bình luận mới nhất) */
+  scrollRef?: Ref<ScrollView>;
 }) {
   const c = useColors();
   const insets = useSafeAreaInsets();
@@ -303,7 +307,7 @@ export function Sheet({
           </View>
         ) : null}
         {scroll ? (
-          <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetBody} bounces={false}>
+          <ScrollView ref={scrollRef} style={styles.sheetScroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetBody} bounces={false}>
             {children}
           </ScrollView>
         ) : (

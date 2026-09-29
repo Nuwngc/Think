@@ -145,3 +145,15 @@ export function moveComment(m: AnalysedMove | undefined, before: AnalysedPositio
   if (m.cls === "good") return `${no}: nước tốt.${before?.bestSan ? ` Máy thích ${before.bestSan} hơn một chút.` : ""}`;
   return `${no}: ${info.label.toLowerCase()}.${before?.bestSan ? ` Nước tốt nhất là ${before.bestSan}.` : ""}`;
 }
+
+/** Tiêu đề và dòng mô tả một ván để chia sẻ (giống bản web: describe trong public/chess-ui.js) */
+export function describeGame(g: ChessGame, nameOf: (id: number | null | undefined) => string) {
+  const side = (c: Color) => (g.bot && g.botColor === c ? g.bot.name : nameOf(c === "w" ? g.whiteId : g.blackId));
+  const title = `${side("w")} (Trắng) vs ${side("b")} (Đen)`;
+  let state: string;
+  if (g.status === "active") state = "Đang chơi";
+  else if (g.status === "aborted") state = "Ván bị hủy";
+  else if (g.result === "1/2-1/2") state = `Hòa (${reasonText(g.reason)})`;
+  else state = `${g.result === "1-0" ? side("w") : side("b")} thắng do ${reasonText(g.reason)}`;
+  return { title, sub: `${state} · ${tcLabel(g)} · ${g.moves.length} nước` };
+}

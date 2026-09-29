@@ -14,12 +14,13 @@ import { IconButton } from "../ui";
 import { imageSource } from "./MessageItem";
 
 /** Xem ảnh toàn màn hình, chia sẻ / lưu ảnh qua bảng chia sẻ của máy */
-export function ImageViewer({ item, onClose }: { item: ChatItem | null; onClose: () => void }) {
+export function ImageViewer({ item, path: imagePath, onClose }: { item?: ChatItem | null; path?: string | null; onClose: () => void }) {
   const insets = useSafeAreaInsets();
   const [busy, setBusy] = useState(false);
   const localUri = item && isPending(item) ? item.localUri : undefined;
-  const path = item?.image || null;
-  const visible = Boolean(item && (localUri || path));
+  // Ảnh trong tin nhắn (item) hoặc ảnh bất kỳ trên máy chủ (path, vd ảnh bài đăng)
+  const path = item?.image || imagePath || null;
+  const visible = Boolean(localUri || path);
 
   const share = async () => {
     if (busy) return;

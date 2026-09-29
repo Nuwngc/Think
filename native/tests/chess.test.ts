@@ -28,9 +28,11 @@ import { clockText, evalText, material, moveComment, outcomeFor, replay, resultT
 import {
   bindChess,
   chessBadge,
+  closeGame,
   loadHistory,
   onAnalysisEvent,
   onChessEvent,
+  openGame,
   playMove,
   requestAnalysis,
   resetChess,
@@ -164,6 +166,24 @@ describe("đi quân", () => {
     onChessEvent("chess:game", { game: game() });
     expect(await playMove(1, "e2e5")).toBe(false);
     expect(api.chessMove).not.toHaveBeenCalled();
+  });
+
+  it("xem ván của người khác: luôn lấy bản mới; đóng ván thì báo cho màn chính", async () => {
+    const closed = vi.fn();
+    bindChess({ meId: () => 1, nameOf: () => "Minh", toast: () => undefined, onTab: () => false, showChess: () => undefined, closed });
+    onChessEvent("chess:game", { game: game({ id: 5, whiteId: 2, blackId: 3 }) });
+    api.chessGame.mockResolvedValueOnce({ game: game({ id: 5, whiteId: 2, blackId: 3, moves: ["e2e4"], turn: "b" }) });
+    await openGame(5);
+    await Promise.resolve();
+    expect(api.chessGame).toHaveBeenCalledWith(5);
+    expect(useChess.getState().games[5].moves).toEqual(["e2e4"]);
+    api.chessGame.mockClear();
+    onChessEvent("chess:game", { game: game({ id: 6 }) }); // ván của mình: dùng bản đang có
+    await openGame(6);
+    expect(api.chessGame).not.toHaveBeenCalled();
+    closeGame();
+    expect(useChess.getState().openId).toBeNull();
+    expect(closed).toHaveBeenCalled();
   });
 
   it("báo khi đối thủ đi mà mình đang ở chỗ khác", () => {
