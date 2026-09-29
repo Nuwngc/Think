@@ -16,9 +16,11 @@ import re
 import subprocess
 import sys
 import time
+import urllib.request
 import xml.etree.ElementTree as ET
 
 PKG = "com.nuwngc.think.beta"
+TEST_CRASH = "crash thử để kiểm tra báo lỗi"  # crash cố ý ở bước kiểm tra báo lỗi, không tính là lỗi
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--apk", required=True)
@@ -26,6 +28,8 @@ ap.add_argument("--out", required=True)
 ap.add_argument("--user", default="tester")
 ap.add_argument("--password", default="tester12345")
 ap.add_argument("--label", default="")
+ap.add_argument("--server", default="http://127.0.0.1:3000")
+ap.add_argument("--admin-password", default=os.environ.get("ADMIN_PASSWORD", "admin-ci-12345"))
 args = ap.parse_args()
 OUT = args.out
 os.makedirs(OUT, exist_ok=True)
@@ -210,6 +214,38 @@ def play_one_block():
     raise RuntimeError("Kéo khối vào bàn nhưng điểm không đổi")
 
 
+# ---------- máy chủ thử (kiểm tra báo lỗi đã tới nơi) ----------
+
+def server_reports():
+    def call(path, body=None, token=None):
+        req = urllib.request.Request(args.server + path, data=json.dumps(body).encode() if body is not None else None, method="POST" if body is not None else "GET")
+        req.add_header("content-type", "application/json")
+        if token:
+            req.add_header("authorization", f"Bearer {token}")
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.loads(r.read() or b"{}")
+    token = call("/api/login", {"username": "admin", "password": args.admin_password, "client": "app"}).get("token")
+    return call("/api/admin/errors", token=token).get("errors", [])
+
+
+def wait_report(text, timeout=30):
+    end = time.time() + timeout
+    while time.time() < end:
+        try:
+            for e in server_reports():
+                if text in (e.get("message") or ""):
+                    return e
+        except Exception as err:  # noqa: BLE001
+            log(f"  (chưa đọc được báo lỗi: {err})")
+        time.sleep(2)
+    return None
+
+
+def open_link(url):
+    sh(f"am start -a android.intent.action.VIEW -d {url} {PKG}")
+    time.sleep(2)
+
+
 # ---------- các bước kiểm tra ----------
 
 def step(name, fn):
@@ -365,6 +401,38 @@ def s_feed_and_scroll():
         time.sleep(1)
 
 
+def s_report_render_error():
+    open_link("thinkbeta://test-render-error")
+    if wait_for(r"^Có lỗi xảy ra$", 20) is None:
+        raise RuntimeError("Không thấy màn hình 'Có lỗi xảy ra'")
+    shot("man-hinh-loi")
+    tap(r"^Thử lại$")
+    if wait_for(r"^Cá nhân|^Tin nhắn", 20) is None:
+        raise RuntimeError("Bấm Thử lại không về app")
+    e = wait_report("lỗi màn hình thử")
+    if e is None:
+        raise RuntimeError("Máy chủ không nhận được báo lỗi màn hình")
+    return f"máy chủ đã nhận: {e['device']} / {e['osVersion']}"
+
+
+def s_report_crash():
+    open_link("thinkbeta://test-crash")
+    for _ in range(15):
+        if not alive():
+            break
+        time.sleep(1)
+    if alive():
+        raise RuntimeError("App không tắt khi crash thử")
+    dismiss_system_dialogs()
+    e = wait_report("crash thử", 25)
+    launch()
+    if wait_for(r"^Tin nhắn|^Cá nhân|^Đăng nhập$", 60) is None:
+        raise RuntimeError("Mở lại sau crash không được")
+    if e is None:
+        raise RuntimeError("Máy chủ không nhận được báo crash")
+    return f"máy chủ đã nhận crash: {e['message'][:80]} ({e['appVersion']})"
+
+
 def s_rotate_like_resume():
     # Tắt / bật màn hình (giống khóa máy rồi mở)
     sh("input keyevent 26")
@@ -406,6 +474,8 @@ def main():
         step("Trang cá nhân", s_profile)
         step("Cuộn bảng tin", s_feed_and_scroll)
         step("Tắt và bật màn hình", s_rotate_like_resume)
+        step("Báo lỗi: màn hình bị lỗi", s_report_render_error)
+        step("Báo lỗi: app crash", s_report_crash)
         time.sleep(3)
         if not alive():
             results.append(("Cuối cùng", False, "APP ĐÃ BỊ TẮT (crash)", shot("cuoi")))
@@ -468,7 +538,9 @@ def find_crashes(path):
                 block.append(nxt)
                 j += 1
             text = "\n".join(block)
-            if kind != "Java crash" or PKG in text:
+            if TEST_CRASH in text or "lỗi màn hình thử" in text:
+                pass  # lỗi cố ý của bước kiểm tra báo lỗi
+            elif kind != "Java crash" or PKG in text:
                 out.append((kind, text))
             i = j
         else:
@@ -507,6 +579,13 @@ def write_report(crashes, sdk):
             md.append("")
     else:
         md.append("Không thấy lỗi crash nào trong logcat.")
+    # Chú thích lỗi hiện ngay trên trang GitHub Actions
+    for name, ok, note, img in results:
+        if not ok:
+            print(f"::error title={label}: {name}::{note}", flush=True)
+    for kind, block in crashes[:5]:
+        first = next((l for l in block.splitlines() if "Exception" in l or "Error" in l), block.splitlines()[0])
+        print(f"::{'error' if kind in FATAL_KINDS else 'warning'} title={label}: {kind}::{first[-300:]}", flush=True)
     with open(os.path.join(OUT, "report.md"), "w", encoding="utf-8") as f:
         f.write("\n".join(md) + "\n")
     with open(os.path.join(OUT, "result.json"), "w", encoding="utf-8") as f:

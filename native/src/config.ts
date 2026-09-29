@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
 
-type Extra = { apiUrl?: string; updateUrl?: string; pushConfigured?: boolean };
+type Extra = { apiUrl?: string; updateUrl?: string; pushConfigured?: boolean; testBuild?: boolean };
 
 const extra = (Constants.expoConfig?.extra || {}) as Extra;
 
@@ -14,3 +14,6 @@ export const UPDATE_URL = String(extra.updateUrl || "");
 export const PUSH_CONFIGURED = Boolean(extra.pushConfigured);
 
 export const APP_NAME = "Think";
+
+/** Bản thử chạy trên máy ảo (workflow "Kiểm tra APK"): bật vài đường dẫn thinkbeta://test-… để thử phần báo lỗi */
+export const TEST_BUILD = Boolean(extra.testBuild);

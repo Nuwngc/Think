@@ -1,0 +1,7 @@
+{
+  "name": "think-native",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Phần viết riêng cho Android của app Think: bắt lỗi crash để báo cho admin, bong bóng chat",
+  "main": "index.ts"
+}

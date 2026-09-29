@@ -19,7 +19,7 @@ if ((process.env.FIREBASE_SERVICE_ACCOUNT || process.env.THINK_FAKE_FIRESTORE) &
   console.error('❌ Đã cấu hình Firebase nhưng server không được chạy qua start.js. Hãy dùng lệnh: npm start');
   process.exit(1);
 }
-const { db, get, all, run, transaction, getSetting, DATA_DIR, AVATAR_DIR, IMAGE_DIR, GENERAL_ID } = require('./src/db');
+const { db, get, all, run, transaction, getSetting, searchKey, DATA_DIR, AVATAR_DIR, IMAGE_DIR, GENERAL_ID } = require('./src/db');
 const storage = require('./src/storage');
 const auth = require('./src/auth');
 const push = require('./src/push');
@@ -27,6 +27,9 @@ const fcm = require('./src/fcm');
 const { setupChess } = require('./src/chess');
 const { setupSocial, cleanText } = require('./src/social');
 const { setupGames } = require('./src/games');
+const { setupCaro } = require('./src/caro');
+const { setupReports } = require('./src/reports');
+const chatPlus = require('./src/chat-plus');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -200,6 +203,12 @@ function serializeMessage(m, reactions) {
     reactions: reactions || [],
   };
   if (m.image_purged && !m.deleted && !m.image) out.imagePurged = true; // ảnh đã bị dọn khỏi máy chủ
+  if (!m.deleted) {
+    if (m.edited_at) out.editedAt = m.edited_at; // đã chỉnh sửa
+    if (m.forwarded) out.forwarded = true; // chuyển tiếp từ cuộc trò chuyện khác
+    if (m.mentions) out.mentions = String(m.mentions).split(',').filter(Boolean).map(Number); // @nhắc tên
+    if (m.kind === 'poll') out.poll = chatPlus.pollData(m.id); // bình chọn
+  }
   if (m.reply_to && !m.deleted) {
     const missing = m.r_sender_id == null; // tin gốc đã bị dọn khỏi máy chủ
     const gone = !missing && Boolean(m.r_deleted);
@@ -261,7 +270,7 @@ function loadMessage(id) {
 }
 
 const CONV_SELECT = `
-  SELECT c.id, c.type, c.name, c.created_at, c.created_by, mem.last_read_id,
+  SELECT c.id, c.type, c.name, c.created_at, c.created_by, c.theme, c.emoji, mem.last_read_id, mem.muted_until, mem.pinned_at,
          lm.id AS lm_id, lm.sender_id AS lm_sender_id, lm.text AS lm_text, lm.image AS lm_image,
          lm.deleted AS lm_deleted, lm.created_at AS lm_created_at, lm.kind AS lm_kind,
          (SELECT COUNT(*) FROM messages m
@@ -290,6 +299,11 @@ function serializeConv(r) {
     lastReadId: r.last_read_id,
     unread: r.unread,
     createdAt: r.created_at,
+    // 2.1.0: chủ đề + biểu tượng gửi nhanh (chung cả cuộc trò chuyện), tắt thông báo + ghim (riêng từng người)
+    theme: r.theme || 'default',
+    emoji: r.emoji || chatPlus.DEFAULT_EMOJI,
+    mutedUntil: r.muted_until || 0,
+    pinnedAt: r.pinned_at || null,
     lastMessage: r.lm_id
       ? serializeMessage({
           id: r.lm_id,
@@ -304,7 +318,8 @@ function serializeConv(r) {
       : null,
   };
 }
-const listConvs = (uid) => all(CONV_SELECT + ' ORDER BY COALESCE(lm.created_at, c.created_at) DESC', { uid }).map(serializeConv);
+const listConvs = (uid) =>
+  all(CONV_SELECT + ' ORDER BY (mem.pinned_at IS NULL), mem.pinned_at DESC, COALESCE(lm.created_at, c.created_at) DESC', { uid }).map(serializeConv);
 function getConv(convId, uid) {
   const row = get(CONV_SELECT + ' AND c.id = :cid', { uid, cid: convId });
   return row ? serializeConv(row) : null;
@@ -313,14 +328,15 @@ function getConv(convId, uid) {
 const membership = (convId, uid) => get('SELECT last_read_id FROM members WHERE conversation_id = ? AND user_id = ?', convId, uid);
 const memberIds = (convId) => all('SELECT user_id FROM members WHERE conversation_id = ?', convId).map((r) => r.user_id);
 
+// Số tin chưa đọc hiện trên biểu tượng app (không tính cuộc trò chuyện đang tắt thông báo)
 function unreadTotal(uid) {
   return get(
     `SELECT COALESCE(SUM((SELECT COUNT(*) FROM messages m
                            WHERE m.conversation_id = mem.conversation_id
                              AND m.id > mem.last_read_id AND m.sender_id <> :uid
                              AND m.kind <> 'system')), 0) AS n
-       FROM members mem WHERE mem.user_id = :uid`,
-    { uid }
+       FROM members mem WHERE mem.user_id = :uid AND (mem.muted_until = 0 OR (mem.muted_until > 0 AND mem.muted_until < :now))`,
+    { uid, now: Date.now() }
   ).n;
 }
 
@@ -806,15 +822,18 @@ app.post('/api/conversations/:id/messages', requireAuth, requireReady, (req, res
     replyTo = target.id;
   }
 
+  const mentions = text ? chatPlus.cleanMentions(req.body?.mentions, convId, req.user.id) : [];
   const newId = transaction(() => {
     const id = Number(
       run(
-        'INSERT INTO messages (conversation_id, sender_id, text, image, reply_to, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO messages (conversation_id, sender_id, text, image, reply_to, mentions, search_text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         convId,
         req.user.id,
         text || null,
         image,
         replyTo,
+        mentions.length ? mentions.join(',') : null,
+        text ? searchKey(text) : null,
         Date.now()
       ).lastInsertRowid
     );
@@ -835,14 +854,19 @@ app.post('/api/conversations/:id/messages', requireAuth, requireReady, (req, res
 });
 
 async function notifyMembers(conv, message, members) {
-  const targets = members.filter((uid) => uid !== message.senderId && !isActive(uid));
+  // Người đang tắt thông báo cuộc trò chuyện này vẫn nhận nếu được @nhắc tên
+  const muted = chatPlus.mutedMembers(conv.id);
+  const mentioned = new Set(message.mentions || []);
+  const targets = members.filter((uid) => uid !== message.senderId && !isActive(uid) && (!muted.has(uid) || mentioned.has(uid)));
   if (!targets.length) return;
   const sender = get('SELECT display_name, avatar FROM users WHERE id = ?', message.senderId);
   // Tin chia sẻ ván cờ ("♟ Tên vs Tên\n…\nđường dẫn"): thông báo chỉ cần dòng đầu
   const chessShare = /^♟ ([^\n]+)\n(?:[^\n]*\n)?\S*#\/chess\/g\/\d+\s*$/.exec(message.text || '');
-  const text = chessShare
-    ? `♟ Chia sẻ ván cờ: ${chessShare[1]}`
-    : message.text ? (message.image ? `📷 ${message.text}` : message.text) : '📷 Đã gửi một ảnh';
+  const text = message.kind === 'poll'
+    ? `📊 Bình chọn: ${message.text}`
+    : chessShare
+      ? `♟ Chia sẻ ván cờ: ${chessShare[1]}`
+      : message.text ? (message.image ? `📷 ${message.text}` : message.text) : '📷 Đã gửi một ảnh';
   const base = {
     type: 'message',
     conversationId: conv.id,
@@ -855,7 +879,16 @@ async function notifyMembers(conv, message, members) {
     url: `/#/c/${conv.id}`,
     createdAt: message.createdAt,
   };
-  await Promise.all(targets.map((uid) => push.sendToUser(uid, { ...base, badge: unreadTotal(uid), convUnread: unreadIn(conv.id, uid) })));
+  await Promise.all(
+    targets.map((uid) =>
+      push.sendToUser(uid, {
+        ...base,
+        ...(mentioned.has(uid) && conv.type !== 'dm' ? { convTitle: `${sender.display_name} nhắc đến bạn trong ${conv.name}`, mention: true } : {}),
+        badge: unreadTotal(uid),
+        convUnread: unreadIn(conv.id, uid),
+      })
+    )
+  );
 }
 
 const unreadIn = (convId, uid) =>
@@ -886,8 +919,12 @@ app.delete('/api/messages/:id', requireAuth, requireReady, (req, res) => {
   const msg = get('SELECT * FROM messages WHERE id = ?', Number(req.params.id));
   if (!msg || msg.sender_id !== req.user.id || msg.kind === 'system') return res.status(404).json({ error: 'Không tìm thấy tin nhắn.' });
   if (!msg.deleted) {
-    run('UPDATE messages SET deleted = 1, text = NULL, image = NULL, updated_at = ? WHERE id = ?', Date.now(), msg.id);
+    run('UPDATE messages SET deleted = 1, text = NULL, image = NULL, search_text = NULL, mentions = NULL, updated_at = ? WHERE id = ?', Date.now(), msg.id);
     run('DELETE FROM reactions WHERE message_id = ?', msg.id);
+    const wasPinned = run('DELETE FROM message_pins WHERE message_id = ?', msg.id).changes > 0;
+    if (wasPinned) {
+      for (const uid of memberIds(msg.conversation_id)) io.to(`user:${uid}`).emit('conversation:pins', { conversationId: msg.conversation_id, removed: msg.id });
+    }
     removeUpload(msg.image);
     for (const uid of memberIds(msg.conversation_id)) {
       io.to(`user:${uid}`).emit('message:deleted', { conversationId: msg.conversation_id, messageId: msg.id });
@@ -925,7 +962,7 @@ app.post('/api/messages/:id/reactions', requireAuth, requireReady, (req, res) =>
   for (const uid of memberIds(msg.conversation_id)) io.to(`user:${uid}`).emit('message:reactions', payload);
   res.json(payload);
 
-  if (!removing && msg.sender_id !== req.user.id && !isActive(msg.sender_id)) {
+  if (!removing && msg.sender_id !== req.user.id && !isActive(msg.sender_id) && !chatPlus.mutedMembers(msg.conversation_id).has(msg.sender_id)) {
     notifyReaction(msg, req.user.id, emoji).catch((err) => console.warn('[push]', err.message));
   }
 });
@@ -1264,6 +1301,42 @@ setupGames({
   nameOf: (uid) => get('SELECT display_name FROM users WHERE id = ?', uid)?.display_name || 'Ai đó',
 });
 
+/* ---------------- API: cờ caro với bạn bè (src/caro.js) ---------------- */
+
+setupCaro({
+  app,
+  io,
+  requireAuth,
+  requireReady,
+  isActive,
+  notify: (uid, payload) => push.sendToUser(uid, { icon: '/icons/icon-192.png', ...payload }),
+  nameOf: (uid) => get('SELECT display_name FROM users WHERE id = ?', uid)?.display_name || 'Ai đó',
+});
+
+/* ---------------- Chat 2.1.0: sửa, ghim, tìm, chuyển tiếp, tắt thông báo, chủ đề, bình chọn — src/chat-plus.js ---------------- */
+
+chatPlus.setupChatPlus({
+  app,
+  io,
+  requireAuth,
+  requireReady,
+  membership,
+  memberIds,
+  loadMessage,
+  getConv,
+  systemMessage,
+  emitMessage,
+  notifyMembers,
+  cleanText,
+  snippet,
+  storage,
+  cloud,
+});
+
+/* ---------------- Báo lỗi app (crash, lỗi JavaScript) — src/reports.js ---------------- */
+
+setupReports({ app, io, loadSession, requireAdminChain: [requireAuth, requireReady, requireAdmin] });
+
 /* ---------------- API: admin ---------------- */
 
 const admin = express.Router();
@@ -1380,6 +1453,7 @@ io.use((socket, next) => {
   if (!session) return next(new Error('unauthorized'));
   if (session.must_change_password) return next(new Error('must_change_password'));
   socket.data.userId = session.id;
+  socket.data.role = session.role;
   socket.data.sessionHash = session.token_hash;
   socket.data.visible = false;
   socket.data.lastActive = 0;
@@ -1390,6 +1464,7 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
   const uid = socket.data.userId;
   socket.join(`user:${uid}`);
+  if (socket.data.role === 'admin') socket.join('admins'); // nhận báo lỗi app mới
   let set = online.get(uid);
   if (!set) online.set(uid, (set = new Set()));
   set.add(socket);

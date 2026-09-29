@@ -42,6 +42,38 @@
     set(key, value) { try { localStorage.setItem(key, value); } catch { /* chế độ ẩn danh */ } },
   };
 
+  // Báo lỗi JavaScript của trang cho admin (Quản trị → Báo lỗi app). Mỗi lần mở trang gửi tối đa 5 lỗi khác nhau.
+  (() => {
+    const seen = new Set();
+    const IGNORE = /ResizeObserver loop|extension:\/\/|Script error\.?$|AbortError|NetworkError|Failed to fetch|Load failed/i;
+    function report(kind, message, stack) {
+      const msg = String(message || '').slice(0, 600);
+      if (!msg || IGNORE.test(msg) || IGNORE.test(String(stack || '')) || seen.size >= 5 || seen.has(msg)) return;
+      seen.add(msg);
+      const ua = navigator.userAgent;
+      const body = {
+        errors: [{
+          kind,
+          fatal: false,
+          message: msg,
+          stack: String(stack || '').slice(0, 8000),
+          platform: 'web',
+          appVersion: document.documentElement.dataset.version || 'web',
+          osVersion: (/Android [\d.]+|iPhone OS [\d_]+|Windows NT [\d.]+|Mac OS X [\d_]+/.exec(ua) || [''])[0].replace(/_/g, '.'),
+          device: ua.slice(0, 120),
+          where: location.hash.slice(0, 60) || '/',
+          at: Date.now(),
+        }],
+      };
+      fetch('/api/app/errors', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), credentials: 'same-origin', keepalive: true }).catch(() => {});
+    }
+    window.addEventListener('error', (e) => report('web', e.message || (e.error && e.error.message), e.error && e.error.stack));
+    window.addEventListener('unhandledrejection', (e) => {
+      const r = e.reason;
+      report('promise', (r && r.message) || String(r), r && r.stack);
+    });
+  })();
+
   const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const isTouch = () => window.matchMedia('(pointer: coarse)').matches;

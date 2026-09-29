@@ -55,7 +55,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Cài thư viện
-        run: npm ci
+        run: |
+          npm ci
+          npm run check:native
 
       - name: Cấu hình Firebase (giống bản phát hành)
         env:

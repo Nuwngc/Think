@@ -5,16 +5,20 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { useEffect, useState } from "react";
-import { AppState, Platform, View } from "react-native";
+import { AppState, Linking, Platform, View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { BlocksScreen } from "./src/blocks/BlocksScreen";
 import { openStandalone, useBlocks } from "./src/blocks/store";
 import { loadPrefs } from "./src/chess/prefs";
+import { TEST_BUILD } from "./src/config";
+import { flushReports, setWhereProvider } from "./src/errors";
 import { prepareImage, recoverPick } from "./src/images";
+import { ThinkNative } from "./src/native";
 import { parseResponse, runQuickAction, setupNotifications, watchPushToken, type NotificationAction } from "./src/notifications";
 import { BootScreen } from "./src/screens/BootScreen";
+import { ErrorBoundary } from "./src/screens/ErrorBoundary";
 import { ForcePasswordScreen } from "./src/screens/ForcePasswordScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { MainScreen } from "./src/screens/MainScreen";
@@ -67,13 +71,31 @@ async function resumePendingPick() {
   await sendImages(found.convId, prepared.filter((x): x is NonNullable<typeof x> => x != null));
 }
 
+/** Màn hình đang mở (ghi vào báo lỗi để biết lỗi xảy ra ở đâu) */
+function whereNow() {
+  const st = useStore.getState();
+  if (st.phase !== "ready") return st.phase;
+  if (st.currentId != null) return `chat #${st.currentId}`;
+  if (st.tab === "games") return `trò chơi: ${st.gamesView}`;
+  return st.tab;
+}
+
+/** Chỉ bản thử: một màn hình cố tình lỗi, để kiểm tra khung "Có lỗi xảy ra" và phần báo lỗi */
+function TestBomb(): null {
+  throw new Error("Think: lỗi màn hình thử để kiểm tra báo lỗi");
+}
+
 export default function App() {
   const c = useColors();
+  const [bomb, setBomb] = useState(false);
   const phase = useStore((s) => s.phase);
   const [fontsLoaded, fontError] = useFonts(MaterialIcons.font);
   const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
+    setWhereProvider(whereNow);
+    // Gửi các lỗi còn chờ (vd crash lần trước) sau khi app đã mở xong
+    const flushTimer = setTimeout(() => flushReports(), 4000);
     loadThemeMode();
     startLifecycle();
     boot();
@@ -81,6 +103,16 @@ export default function App() {
     setupNotifications();
     checkForUpdate();
     if (Platform.OS === "web") return;
+    let linkSub: { remove(): void } | null = null;
+    if (TEST_BUILD) {
+      const onUrl = (url: string | null) => {
+        if (url === "thinkbeta://test-crash") ThinkNative?.crashForTest();
+        if (url === "thinkbeta://test-render-error") setBomb(true);
+        if (url === "thinkbeta://test-flush") flushReports();
+      };
+      Linking.getInitialURL().then(onUrl).catch(() => undefined);
+      linkSub = Linking.addEventListener("url", (e) => onUrl(e.url));
+    }
     const stopToken = watchPushToken();
     const last = Notifications.getLastNotificationResponse();
     if (last) {
@@ -89,6 +121,8 @@ export default function App() {
     }
     const sub = Notifications.addNotificationResponseReceivedListener(handleResponse);
     return () => {
+      clearTimeout(flushTimer);
+      linkSub?.remove();
       sub.remove();
       stopToken();
     };
@@ -147,18 +181,21 @@ export default function App() {
       <KeyboardProvider>
         <StatusBar style={c.scheme === "dark" ? "light" : "dark"} />
         <View style={{ flex: 1, backgroundColor: c.bg }}>
-          {standalone && phase !== "ready" ? (
-            // Chơi Xếp Khối ngay từ màn đăng nhập / màn chờ máy chủ (không cần mạng)
-            <BlocksScreen onBack={() => openStandalone(false)} />
-          ) : phase === "login" ? (
-            <LoginScreen />
-          ) : phase === "force" ? (
-            <ForcePasswordScreen />
-          ) : phase === "ready" ? (
-            <MainScreen />
-          ) : (
-            <BootScreen />
-          )}
+          <ErrorBoundary name={phase} onReset={() => setBomb(false)}>
+            {bomb ? <TestBomb /> : null}
+            {standalone && phase !== "ready" ? (
+              // Chơi Xếp Khối ngay từ màn đăng nhập / màn chờ máy chủ (không cần mạng)
+              <BlocksScreen onBack={() => openStandalone(false)} />
+            ) : phase === "login" ? (
+              <LoginScreen />
+            ) : phase === "force" ? (
+              <ForcePasswordScreen />
+            ) : phase === "ready" ? (
+              <MainScreen />
+            ) : (
+              <BootScreen />
+            )}
+          </ErrorBoundary>
           <ToastHost />
         </View>
       </KeyboardProvider>

@@ -97,6 +97,7 @@ const config: ExpoConfig = {
     apiUrl: (env.THINK_API_URL || "https://thinkchat.id.vn").replace(/\/+$/, ""),
     updateUrl,
     pushConfigured: hasGoogleServices,
+    testBuild,
   },
 };
 
