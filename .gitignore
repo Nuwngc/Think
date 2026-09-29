@@ -10,3 +10,4 @@ android/build/
 android/.sdk/
 *.jks
 *.keystore
+__pycache__/
