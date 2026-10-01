@@ -485,7 +485,8 @@ def head_frame():
                 m = re.search(r"(?:mFrame=|\bframe=)\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]", nxt)
                 if m:
                     x1, y1, x2, y2 = map(int, m.groups())
-                    if x2 > x1 and y2 > y1:
+                    # bỏ qua khung cả màn hình (của cửa sổ cha), bong bóng chỉ cỡ 70dp
+                    if x2 > x1 and y2 > y1 and x2 - x1 < 500 and y2 - y1 < 500:
                         return x1, y1, x2, y2
     return None
 
@@ -588,6 +589,7 @@ def s_bubble_app_after():
     launch()
     if wait_for(r"^Tin nhắn", 30) is None:
         raise RuntimeError("Mở lại app sau khi dùng bong bóng không được")
+    tap(r"^Tin nhắn")  # app đang ở tab Cá nhân: sang danh sách tin nhắn
     tap(r"^Bạn Bè($|[,.])")
     if wait_for(BUBBLE_REPLY, 20) is None:
         raise RuntimeError("Tin trả lời từ bong bóng không có trong app")
@@ -595,6 +597,7 @@ def s_bubble_app_after():
         raise RuntimeError("App đang mở mà bong bóng vẫn hiện")
     hide_keyboard()
     back()
+    tap(r"^Cá nhân")  # trả lại tab cũ cho các bước sau
 
 
 # ---------- chạy ----------

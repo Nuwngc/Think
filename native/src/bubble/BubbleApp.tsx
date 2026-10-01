@@ -2,7 +2,6 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useFonts } from "expo-font";
 import { useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
-import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { initBubbles } from "../bubbles";
@@ -20,11 +19,10 @@ import { Button, Icon, Loading } from "../ui";
  */
 export default function BubbleApp({ convId }: { convId?: number }) {
   useFonts(MaterialIcons.font);
+  // Không dùng KeyboardProvider ở đây: bàn phím trong khung nổi do BubbleActivity (Kotlin) tự chừa chỗ
   return (
     <SafeAreaProvider>
-      <KeyboardProvider>
-        <Bubble initial={convId || 0} />
-      </KeyboardProvider>
+      <Bubble initial={convId || 0} />
     </SafeAreaProvider>
   );
 }
