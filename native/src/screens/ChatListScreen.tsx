@@ -3,11 +3,14 @@ import { FlatList, Linking, Pressable, StyleSheet, Text, TextInput, View } from 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShallow } from "zustand/react/shallow";
 
+import { byPinnedThenActivity } from "../chatPlus";
+import { isMuted } from "../chatThemes";
 import { convTitle, fold, previewText, shortTime } from "../format";
-import { namesOf, openConversation, turnPushOn, useStore } from "../store";
+import { markRead, namesOf, openConversation, setConvPrefs, turnPushOn, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import type { Conversation } from "../types";
-import { Badge, ConvAvatar, Icon, IconButton, useStyles } from "../ui";
+import { Badge, ConvAvatar, Icon, IconButton, Sheet, SheetItem, useStyles } from "../ui";
+import { MuteSheet, muteText } from "./ConvSettingsSheet";
 import { NewChatSheet } from "./NewChatSheet";
 
 type Filter = "all" | "unread" | "group" | "dm";
@@ -18,16 +21,22 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "dm", label: "Riêng tư" },
 ];
 
-const lastActivity = (c: Conversation) => c.lastMessage?.createdAt || c.createdAt || 0;
 
 export function ChatListScreen() {
   const c = useColors();
   const s = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
-  const { convs, users, me, typing } = useStore(useShallow((st) => ({ convs: st.convs, users: st.users, me: st.me, typing: st.typing })));
+  const { convs, users, me, typing, offline } = useStore(
+    useShallow((st) => ({ convs: st.convs, users: st.users, me: st.me, typing: st.typing, offline: st.offline })),
+  );
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [newOpen, setNewOpen] = useState(false);
+  // Chạm giữ một cuộc trò chuyện: ghim lên đầu / tắt thông báo
+  const [menuId, setMenuId] = useState<number | null>(null);
+  const [muteId, setMuteId] = useState<number | null>(null);
+  const menuConv = menuId != null ? convs[menuId] : undefined;
+  const muteConv = muteId != null ? convs[muteId] : undefined;
 
   const names = useMemo(() => namesOf({ me, users }), [me, users]);
   const list = useMemo(() => {
@@ -36,7 +45,7 @@ export function ChatListScreen() {
       .filter((x) => x.type !== "dm" || x.lastMessage)
       .filter((x) => filter === "all" || (filter === "unread" ? x.unread > 0 : filter === "dm" ? x.type === "dm" : x.type !== "dm"))
       .filter((x) => !q || fold(convTitle(x, names.nameOf)).includes(q) || fold(x.lastMessage?.text).includes(q))
-      .sort((a, b) => lastActivity(b) - lastActivity(a));
+      .sort(byPinnedThenActivity);
   }, [convs, query, filter, names]);
 
   return (
@@ -83,7 +92,14 @@ export function ChatListScreen() {
         data={list}
         keyExtractor={(x) => String(x.id)}
         renderItem={({ item }) => (
-          <ConvRow conv={item} typingIds={typing[item.id]} names={names} users={users} meId={me?.id ?? 0} />
+          <ConvRow
+            conv={item}
+            typingIds={typing[item.id]}
+            names={names}
+            users={users}
+            meId={me?.id ?? 0}
+            onLongPress={offline ? undefined : setMenuId}
+          />
         )}
         contentContainerStyle={{ paddingBottom: 96 }}
         keyboardShouldPersistTaps="handled"
@@ -104,6 +120,40 @@ export function ChatListScreen() {
       </Pressable>
 
       <NewChatSheet visible={newOpen} onClose={() => setNewOpen(false)} />
+      {menuConv ? (
+        <Sheet visible={menuId != null} onClose={() => setMenuId(null)} title={convTitle(menuConv, names.nameOf)}>
+          <SheetItem
+            icon="push-pin"
+            label={menuConv.pinnedAt ? "Bỏ ghim khỏi đầu danh sách" : "Ghim lên đầu danh sách"}
+            onPress={() => {
+              setMenuId(null);
+              setConvPrefs(menuConv.id, { pinned: !menuConv.pinnedAt });
+            }}
+          />
+          <SheetItem
+            icon={isMuted(menuConv) ? "notifications-active" : "notifications-off"}
+            label={isMuted(menuConv) ? "Bật lại thông báo" : "Tắt thông báo"}
+            hint={muteText(menuConv)}
+            onPress={() => {
+              const id = menuConv.id;
+              setMenuId(null);
+              if (isMuted(menuConv)) setConvPrefs(id, { mutedUntil: 0 });
+              else setTimeout(() => setMuteId(id), 250);
+            }}
+          />
+          {menuConv.unread > 0 ? (
+            <SheetItem
+              icon="mark-chat-read"
+              label="Đánh dấu đã đọc"
+              onPress={() => {
+                setMenuId(null);
+                markRead(menuConv.id);
+              }}
+            />
+          ) : null}
+        </Sheet>
+      ) : null}
+      {muteConv ? <MuteSheet conv={muteConv} visible={muteId != null} onClose={() => setMuteId(null)} /> : null}
     </View>
   );
 }
@@ -158,16 +208,19 @@ const ConvRow = memo(function ConvRow({
   names,
   users,
   meId,
+  onLongPress,
 }: {
   conv: Conversation;
   typingIds: number[] | undefined;
   names: ReturnType<typeof namesOf>;
   users: ReturnType<typeof useStore.getState>["users"];
   meId: number;
+  onLongPress?: (id: number) => void;
 }) {
   const c = useColors();
   const s = useStyles(makeStyles);
   const unread = conv.unread || 0;
+  const muted = isMuted(conv);
   const typers = typingIds || [];
   const title = convTitle(conv, names.nameOf);
   const lm = conv.lastMessage;
@@ -183,9 +236,12 @@ const ConvRow = memo(function ConvRow({
   return (
     <Pressable
       onPress={() => openConversation(conv.id)}
+      onLongPress={onLongPress ? () => onLongPress(conv.id) : undefined}
+      delayLongPress={380}
       style={({ pressed }) => [s.row, pressed && { backgroundColor: c.field }]}
       accessibilityRole="button"
-      accessibilityLabel={`${title}${unread ? `, ${unread} tin chưa đọc` : ""}. ${preview}`}
+      accessibilityLabel={`${title}${conv.pinnedAt ? ", đã ghim" : ""}${muted ? ", đã tắt thông báo" : ""}${unread ? `, ${unread} tin chưa đọc` : ""}. ${preview}`}
+      accessibilityHint={onLongPress ? "Chạm giữ để ghim hoặc tắt thông báo" : undefined}
     >
       <ConvAvatar conv={conv} users={users} meId={meId} size={52} />
       <View style={s.rowBody}>
@@ -193,6 +249,8 @@ const ConvRow = memo(function ConvRow({
           <Text style={[s.rowTitle, unread > 0 && s.bold]} numberOfLines={1}>
             {title}
           </Text>
+          {muted ? <Icon name="notifications-off" size={15} color={c.muted} /> : null}
+          {conv.pinnedAt ? <Icon name="push-pin" size={15} color={c.muted} /> : null}
           <Text style={[s.rowTime, unread > 0 && { color: c.accent, fontWeight: "700" }]}>{lm ? shortTime(lm.createdAt) : ""}</Text>
         </View>
         <View style={s.rowLine}>
@@ -202,7 +260,7 @@ const ConvRow = memo(function ConvRow({
           >
             {preview}
           </Text>
-          <Badge count={unread} />
+          <Badge count={unread} style={muted ? { backgroundColor: c.muted } : undefined} />
         </View>
       </View>
     </Pressable>

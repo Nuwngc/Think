@@ -9,8 +9,10 @@ import { getToken } from "./session";
 import type {
   AdminUser,
   Conversation,
+  ErrorReport,
   Me,
   Message,
+  Pin,
   Post,
   PostComment,
   ProfileStats,
@@ -180,7 +182,7 @@ export const api = {
   uploadImage: (fileUri: string, mime: string, width: number, height: number) =>
     uploadRaw<{ url: string }>(`/api/upload?w=${Math.round(width)}&h=${Math.round(height)}`, fileUri, mime),
 
-  send: (conversationId: number, body: { text?: string; image?: string; replyTo?: number; clientId?: string }) =>
+  send: (conversationId: number, body: { text?: string; image?: string; replyTo?: number; clientId?: string; mentions?: number[] }) =>
     request<{ message: Message }>(`/api/conversations/${conversationId}/messages`, { method: "POST", body }),
 
   read: (conversationId: number, messageId?: number) =>
@@ -190,6 +192,31 @@ export const api = {
     }),
 
   recall: (messageId: number) => request<{ ok: true }>(`/api/messages/${messageId}`, { method: "DELETE" }),
+
+  /* 2.1.0: sửa, ghim, tìm, chuyển tiếp, tắt thông báo, chủ đề, bình chọn, ảnh đã gửi */
+  editMessage: (messageId: number, text: string, mentions: number[]) =>
+    request<{ message: Message }>(`/api/messages/${messageId}`, { method: "PATCH", body: { text, mentions } }),
+  pins: (convId: number) => request<{ pins: Pin[] }>(`/api/conversations/${convId}/pins`),
+  pin: (messageId: number, pinned: boolean) => request<{ pins: Pin[] }>(`/api/messages/${messageId}/pin`, { method: "POST", body: { pinned } }),
+  search: (convId: number, q: string) =>
+    request<{ results: Message[]; hasMore: boolean }>(`/api/conversations/${convId}/search?q=${encodeURIComponent(q)}`),
+  forward: (messageId: number, conversationIds: number[]) =>
+    request<{ messages: Message[] }>(`/api/messages/${messageId}/forward`, { method: "POST", body: { conversationIds } }),
+  convPrefs: (convId: number, body: { mutedUntil?: number; pinned?: boolean }) =>
+    request<{ conversation: Conversation }>(`/api/conversations/${convId}/prefs`, { method: "PATCH", body }),
+  appearance: (convId: number, body: { theme?: string; emoji?: string }) =>
+    request<{ conversation: Conversation }>(`/api/conversations/${convId}/appearance`, { method: "PATCH", body }),
+  createPoll: (convId: number, body: { question: string; options: string[]; multi: boolean }) =>
+    request<{ message: Message }>(`/api/conversations/${convId}/polls`, { method: "POST", body }),
+  vote: (messageId: number, options: number[]) => request<{ message: Message }>(`/api/messages/${messageId}/vote`, { method: "POST", body: { options } }),
+  closePoll: (messageId: number) => request<{ message: Message }>(`/api/messages/${messageId}/poll/close`, { method: "POST", body: {} }),
+  media: (convId: number, before?: number) =>
+    request<{ images: { id: number; senderId: number; image: string; createdAt: number }[]; hasMore: boolean }>(
+      `/api/conversations/${convId}/media${before ? `?before=${before}` : ""}`,
+    ),
+  adminErrors: () => request<{ errors: ErrorReport[]; total: number; times: number }>("/api/admin/errors"),
+  deleteError: (id: number) => request<{ ok: true }>(`/api/admin/errors/${id}`, { method: "DELETE" }),
+  clearErrors: () => request<{ ok: true }>("/api/admin/errors", { method: "DELETE" }),
 
   react: (messageId: number, emoji: string) =>
     request<{ conversationId: number; messageId: number; reactions: Reaction[] }>(`/api/messages/${messageId}/reactions`, {

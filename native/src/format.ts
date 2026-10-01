@@ -84,7 +84,7 @@ export function listNames(ids: number[] | undefined, { meId, nameOf }: Names) {
 
 /** Tin hệ thống trong nhóm, lưu dạng JSON, hiển thị theo tên hiện tại của mọi người */
 export function systemText(m: Pick<Message, "text" | "senderId">, names: Names) {
-  let d: { event?: string; name?: string; targets?: number[] } = {};
+  let d: { event?: string; name?: string; targets?: number[]; text?: string | null; image?: boolean; emoji?: string } = {};
   try {
     d = JSON.parse(m.text || "{}");
   } catch {
@@ -102,8 +102,14 @@ export function systemText(m: Pick<Message, "text" | "senderId">, names: Names) 
       return `${actor} đã xóa ${listNames(d.targets, names)} khỏi nhóm`;
     case "leave":
       return `${actor} đã rời nhóm`;
+    case "pin":
+      return `${actor} đã ghim một tin nhắn${d.text ? `: “${d.text}”` : d.image ? " (ảnh)" : ""}`;
+    case "theme":
+      return `${actor} đã đổi chủ đề thành ${d.name || "mới"}`;
+    case "emoji":
+      return `${actor} đã đổi biểu tượng cảm xúc nhanh thành ${d.emoji}`;
     default:
-      return "Nhóm vừa được cập nhật";
+      return "Cuộc trò chuyện vừa được cập nhật";
   }
 }
 
@@ -112,6 +118,7 @@ const hasImage = (m: ChatItem) => Boolean(m.image || ("localUri" in m && m.local
 export function messageSummary(m: ChatItem, names: Names) {
   if (m.kind === "system") return systemText(m, names);
   if (m.deleted) return "Tin nhắn đã được thu hồi";
+  if (m.kind === "poll") return `📊 ${oneLine(m.text)}`;
   if (hasImage(m) && !m.text) return "Đã gửi một ảnh";
   if ("imagePurged" in m && m.imagePurged && !m.text) return "Ảnh đã được dọn khỏi máy chủ";
   const shared = !hasImage(m) && m.text ? chessShareOf(m.text) : null;
