@@ -17,6 +17,10 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - **Trò chơi** (mục 16): tab riêng chứa **Cờ vua** và **Xếp Khối**, có bảng xếp hạng tuần của cả nhóm.
 - **Cờ vua** (mục 14): thách đấu bạn bè, chọn thời gian (1+0 … 30+0 hoặc không giới hạn), đồng hồ do máy chủ giữ, **điểm ELO và bảng xếp hạng**, chơi với 8 máy cờ mã nguồn mở (có Stockfish), **xem lại ván**, **đánh giá ván kiểu Game Review**: mỗi nước được xếp loại **Thiên tài !!, Tuyệt vời !, Tốt nhất, Rất tốt, Tốt, Theo sách, Thiếu chính xác ?!, Sai lầm ?, Bỏ lỡ, Sai lầm nghiêm trọng ??**, có thanh đánh giá, nhận xét từng nước, tên khai cuộc. Âm thanh quân gỗ giòn kiểu các trang cờ lớn. Có trên cả web lẫn App Think Beta.
 - **Xếp Khối** (mục 16): game xếp khối 8×8 (kiểu Block Blast) có combo, hiệu ứng nổ, âm thanh, **chơi được khi mất mạng** (kể cả lúc máy chủ đang ngủ), điểm tự gửi lên **bảng xếp hạng** tuần này / mọi lúc khi có mạng.
+- **Cờ caro** (mục 17, mới ở 2.1.0): bàn 15×15, luật tự do hoặc chặn hai đầu, **chơi với máy** 3 mức (chạy trên máy, không cần mạng), **thách đấu bạn bè** có giờ mỗi nước, **điểm ELO** và bảng xếp hạng. Có trên web và App Think Beta.
+- **Chat 2.1.0** (mục 18): **chủ đề** cho từng cuộc trò chuyện, **biểu tượng gửi nhanh** (👍 kiểu Messenger), **sửa tin nhắn**, **ghim tin nhắn**, **tìm tin nhắn** không cần dấu, **chuyển tiếp**, **tắt thông báo** từng cuộc trò chuyện (1 giờ / 8 giờ / 24 giờ / đến khi bật lại), **ghim cuộc trò chuyện** lên đầu, **@nhắc tên** trong nhóm, **bình chọn**, xem **ảnh đã gửi**.
+- **Bong bóng chat trong App Think Beta** (mục 18): ảnh người nhắn nổi trên màn hình, chạm để mở khung chat nhỏ trả lời ngay; app chạy nền nhận tin ngay cả trên máy **không có dịch vụ Google (Huawei)**.
+- **Báo lỗi app tự động** (mục 19): app bị crash, màn hình lỗi… tự gửi về **Quản trị → Báo lỗi app** (tên máy, Android / HarmonyOS, bản app, chi tiết kỹ thuật). GitHub tự **chạy thử mỗi bản APK trên máy ảo Android 10 và 14** trước khi phát hành.
 - **Trả lời tin nhắn** (chạm giữ → Trả lời, hoặc vuốt ngang tin nhắn) và **thả cảm xúc** ❤️ 😆 😮 😢 😡 👍, xem được ai đã thả.
 - Realtime: đang nhập…, đang hoạt động / hoạt động X phút trước, "Đã xem" (nhóm hiện ảnh người đã xem), thu hồi tin nhắn.
 - Thông báo đầy đủ:
@@ -419,6 +423,33 @@ Tab **Trò chơi** (thay cho tab Cờ vua cũ) có trên bản web và App Think
 - **Bảng xếp hạng** (nút biểu đồ trong game): **Tuần này** (từ 0 giờ thứ Hai, giờ Việt Nam) và **Mọi lúc**, kèm kỷ lục, hạng, số ván của bạn. Điểm các ván chơi lúc mất mạng tự gửi lên khi có mạng (mỗi ván có mã riêng nên gửi lại không bị tính trùng; ván cũ hơn 30 ngày không nhận). Ai vừa **vượt lên số 1** thì cả nhóm thấy thông báo nhỏ. Kỷ lục Xếp Khối hiện trên trang cá nhân.
 - Máy chủ chỉ giữ điểm (bảng `game_scores`, `game_bests` trong `src/games.js`), kiểm tra điểm hợp lệ (mỗi nước tối đa 1.700 điểm), giới hạn 30 lần gửi / 10 phút mỗi người. Luật game giống hệt nhau ở web (`public/blocks-core.js`) và app (`native/src/blocks/engine.ts`) — có kiểm thử so khớp.
 
+## 17. Cờ caro
+
+Thẻ **Cờ caro** trong tab Trò chơi (web: `#/caro`), có trên bản web và App Think Beta, chơi chéo được.
+
+- **Luật**: bàn 15×15, ai có **5 quân liền** (ngang, dọc, chéo) trước là thắng. Luật **Tự do** (5 quân trở lên là thắng) hoặc **Chặn hai đầu** (5 quân mà bị đối thủ chặn cả hai đầu thì không tính). X luôn đi trước. Kín bàn mà không ai thắng là hòa.
+- **Chơi với máy** (không cần mạng, ván dở tự lưu trên máy): **Dễ**, **Vừa**, **Khó** (máy tính trước nhiều nước). Chọn đi trước / đi sau, luật; có **Đi lại** và **Đổi bên**. Thành tích thắng / thua theo từng mức.
+- **Thách đấu bạn bè**: chọn người, thời gian **mỗi nước** (15 / 30 / 60 / 120 giây hoặc không giới hạn), bên (X / O / ngẫu nhiên), luật, có **tính điểm ELO** hay không. Đồng hồ do máy chủ giữ; hết giờ một nước là thua. Có **đầu hàng**, **đấu lại**, thông báo khi có người thách hoặc tới lượt. **Bảng xếp hạng** ELO riêng của cờ caro (bắt đầu 1200).
+- Chạm một ô để xem trước quân mờ, chạm lần nữa để đánh (tránh bấm nhầm trên điện thoại). Âm thanh (tắt được, tạo bằng `scripts/caro-sounds.py`) và pháo giấy khi thắng.
+- Luật và máy giống hệt nhau ở máy chủ (`src/caro.js`), web (`public/caro-core.js`) và app (`native/src/caro/engine.ts`), có kiểm thử so khớp.
+
+## 18. Chat 2.1.0 và bong bóng chat
+
+Có trên bản web và App Think Beta (cùng dữ liệu):
+
+- **Tùy chỉnh đoạn chat** (nút ⓘ trên đầu khung chat): **12 chủ đề màu** (màu bong bóng tin của mình, mọi người trong cuộc trò chuyện đều thấy), **biểu tượng gửi nhanh** (ô nhập trống thì nút gửi thành biểu tượng này, bấm là gửi), tắt thông báo, ghim, tin đã ghim, **ảnh đã gửi**.
+- **Sửa tin nhắn** của mình (chạm giữ → Sửa; tin hiện "Đã chỉnh sửa"), **ghim tin nhắn** (thanh ghim trên đầu khung chat, chạm để nhảy tới tin đó), **tìm tin nhắn** trong cuộc trò chuyện (không cần dấu), **chuyển tiếp** tin sang một hoặc nhiều cuộc trò chuyện.
+- **Tắt thông báo** từng cuộc trò chuyện (1 giờ, 8 giờ, 24 giờ, đến khi bật lại) — vẫn báo khi có người **@nhắc tên** bạn; **ghim cuộc trò chuyện** lên đầu danh sách. Trong app: chạm giữ một cuộc trò chuyện ở danh sách.
+- **@nhắc tên** trong nhóm (gõ @ để chọn người), người được nhắc thấy tin được tô vàng và vẫn nhận thông báo kể cả khi đã tắt.
+- **Bình chọn**: nút ＋ → Tạo bình chọn (2–10 lựa chọn, chọn một hoặc nhiều), kết quả cập nhật ngay, người tạo kết thúc được.
+
+**Bong bóng chat** (App Think Beta, Android 8 trở lên): **Cá nhân → ⚙ Cài đặt → Bong bóng chat**, lần đầu máy hỏi quyền **"Hiển thị trên ứng dụng khác"** — bật cho Think Beta rồi quay lại app. Khi có tin mới mà không mở app, ảnh người nhắn hiện nổi ở cạnh màn hình (số tin chưa đọc, xem trước nội dung); **chạm** để mở khung chat nhỏ ngay trên app đang dùng, trả lời xong bấm Quay lại để thu nhỏ; **kéo xuống dấu ✕** để ẩn. Khi bật, app chạy nền để nhận tin ngay (có thông báo "Bong bóng chat đang bật", có nút tắt), nên **máy Huawei / máy không có dịch vụ Google vẫn có thông báo tin mới**. Cuộc trò chuyện đã tắt thông báo thì không hiện bong bóng. Máy Huawei / Xiaomi / Oppo: vào Cài đặt → Pin → cho Think Beta chạy nền để bong bóng không bị máy tắt.
+
+## 19. Báo lỗi app và Kiểm tra APK
+
+- **Báo lỗi tự động**: App Think Beta tự gửi về máy chủ khi bị tắt đột ngột (crash Java / Kotlin, lỗi JavaScript làm tắt app — ghi lại ngay, lần mở sau gửi), khi một màn hình bị lỗi (hiện "Có lỗi xảy ra" với nút Thử lại thay vì tắt app) và lỗi chạy ngầm. Bản web cũng gửi lỗi trang. Admin xem ở **Quản trị → Báo lỗi app**: loại lỗi, số lần, tên máy, Android / **HarmonyOS**, bản app, ai gặp, ở màn hình nào, chi tiết kỹ thuật; lỗi giống nhau được gộp. Có lỗi làm tắt app mới thì admin đang mở trang này thấy ngay.
+- **Kiểm tra APK** (`.github/workflows/apk-check.yml`): mỗi lần sửa `native/`, GitHub build một bản thử rồi **chạy trên máy ảo Android 10 và Android 14**, bấm qua các màn hình như người dùng thật (đăng nhập, nhắn tin, cờ vua, Xếp Khối, trang cá nhân, chạy nền, tắt màn hình, **bong bóng chat**, báo lỗi), chụp màn hình và đọc logcat để bắt crash **trước khi phát hành**. Kết quả: trang của lần chạy (Summary) và nhánh `apk-check-results`. Chạy tay: tab Actions → **Kiểm tra APK** → Run workflow. Bước "Kiểm tra code" còn so phiên bản các thư viện native với bản Expo (`npm run check:native`) — lỗi crash ở bản 0.1.4 / 0.1.5 là do một thư viện bị cài lệch phiên bản.
+
 ## Cấu trúc thư mục
 
 ```
@@ -436,20 +467,26 @@ src/chess-analysis.js Đánh giá ván đã xong bằng Stockfish (xếp loại 
 src/chess-openings.js Sách khai cuộc (dữ liệu src/chess-openings.tsv, lichess-org/chess-openings, CC0)
 src/games.js         Trò chơi trên máy (Xếp Khối): điểm, bảng xếp hạng tuần / mọi lúc (API /api/games)
 src/social.js        Trang cá nhân và bảng tin: bài đăng, thả tim, bình luận (API /api/posts)
+src/caro.js          Cờ caro: thách đấu, giờ mỗi nước, ELO, bảng xếp hạng (API /api/caro)
+src/chat-plus.js     Chat 2.1.0: sửa tin, ghim, tìm, chuyển tiếp, tắt thông báo, chủ đề, bình chọn, ảnh đã gửi
+src/reports.js       Báo lỗi app (API /api/app/errors, Quản trị → Báo lỗi app)
 src/engines/         GarboChess-JS (giữ nguyên giấy phép BSD ở đầu file)
 scripts/admin.js     Công cụ dòng lệnh cho chủ server
 scripts/tunnel.js    Mở link HTTPS tạm thời (npm run share / npm run tunnel)
 scripts/chess-sounds.py Tạo lại âm thanh cờ vua (cần Python + numpy + scipy)
 scripts/blocks-sounds.py Tạo lại âm thanh Xếp Khối (cần Python + numpy + scipy)
 scripts/build-openings.js Tạo lại sách khai cuộc từ bộ dữ liệu lichess
+scripts/caro-sounds.py Tạo lại âm thanh cờ caro
+scripts/apk-check/   Chạy thử APK trên máy ảo Android (run.py) và tạo dữ liệu thử (seed.py)
 public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu trên máy), sw.js (service worker),
                      games-ui.js (tab Trò chơi), chess-ui.js (Cờ vua), blocks-core.js + blocks.js + blocks.css (Xếp Khối),
                      blocks.html + blocks-page.js (trang Xếp Khối chơi offline), social-ui.js (trang cá nhân, bảng tin),
+                     caro-core.js + caro-ui.js + caro.css (Cờ caro),
                      theme.js (nền sáng/tối), chess/pieces/ (hình quân cờ), chess/sounds/, blocks/sounds/ (âm thanh)
 public/download/     File cài app Android (think.apk) và version.json
 android/             Mã app Android: mở web bằng Chrome, bong bóng chat, trả lời trong thông báo (build.sh để build)
 native/              App Think Beta (React Native / Expo), xem native/README.md
-.github/workflows/   GitHub Actions: build và đăng file APK của App Think Beta
+.github/workflows/   GitHub Actions: build và đăng file APK của App Think Beta, Kiểm tra APK trên máy ảo
 deploy/              Mẫu cấu hình Caddy và Nginx
 ```
 
