@@ -53,8 +53,8 @@ export function setupNotifications() {
           showBadge: true,
         });
         await Notifications.setNotificationChannelAsync(CHANNEL_CHESS, {
-          name: "Cờ vua",
-          description: "Lời thách đấu, đến lượt đi, kết quả ván cờ",
+          name: "Cờ vua, cờ caro",
+          description: "Lời thách đấu, đến lượt đi, kết quả ván cờ vua và cờ caro",
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 120, 80, 120],
           lightColor: "#F2B01E",
@@ -182,10 +182,10 @@ type RawResponse = {
 
 export type NotificationAction = {
   action: "open" | "reply" | "read" | "other";
-  /** Loại thông báo: message, reaction, chess… */
+  /** Loại thông báo: message, reaction, chess, caro… */
   type: string;
   conversationId: number | null;
-  /** Ván cờ (thông báo cờ vua) */
+  /** Ván cờ (thông báo cờ vua, cờ caro) */
   gameId: number | null;
   /** Bài đăng (thông báo thả tim, bình luận) */
   postId: number | null;

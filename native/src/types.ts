@@ -138,4 +138,5 @@ export type ProfileStats = {
   likes: number;
   chess: { rating: number; games: number; wins: number } | null;
   blocks?: { best: number; games: number } | null;
+  caro?: { rating: number; games: number; wins: number } | null;
 };

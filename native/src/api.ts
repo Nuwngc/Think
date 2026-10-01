@@ -2,6 +2,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 
 import type { BlocksBoard, PendingScore } from "./blocks/types";
+import type { CaroGame, CaroOptions, CaroRating } from "./caro/types";
 import type { ChessAnalysis, ChessBot, ChessGame, ChessRating } from "./chess/types";
 import { API_URL } from "./config";
 import { getToken } from "./session";
@@ -269,6 +270,28 @@ export const api = {
   chessAnalysis: (id: number) => request<{ analysis: ChessAnalysis }>(`/api/chess/games/${id}/analysis`),
 
   chessAnalyze: (id: number) => request<{ analysis: ChessAnalysis }>(`/api/chess/games/${id}/analysis`, { method: "POST", body: {} }),
+
+  /* ---------------- Cờ caro (chơi với bạn bè; chơi với máy thì chạy hẳn trên điện thoại) ---------------- */
+
+  caro: () => request<{ games: CaroGame[]; me: CaroRating; leaderboard: CaroRating[]; options: CaroOptions }>("/api/caro"),
+
+  caroGame: (id: number) => request<{ game: CaroGame }>(`/api/caro/games/${id}`),
+
+  caroChallenge: (body: { opponentId: number; turnSeconds: number; rule: string; side: string; rated: boolean }) =>
+    request<{ game: CaroGame }>("/api/caro/challenges", { method: "POST", body }),
+
+  caroAnswer: (id: number, action: "accept" | "decline" | "cancel") =>
+    request<{ game: CaroGame }>(`/api/caro/challenges/${id}/${action}`, { method: "POST", body: {} }),
+
+  /** Gửi lại cùng nước (cùng ply) cũng được: máy chủ trả ván hiện tại */
+  caroMove: (id: number, index: number, ply: number) =>
+    request<{ game: CaroGame }>(`/api/caro/games/${id}/move`, { method: "POST", body: { index, ply }, timeout: 15000 }),
+
+  /** Đầu hàng (trước khi đủ 2 nước thì là hủy ván, không tính điểm) */
+  caroResign: (id: number) => request<{ game: CaroGame }>(`/api/caro/games/${id}/resign`, { method: "POST", body: {} }),
+
+  /** Đấu lại: gửi lời thách đấu mới, đổi bên */
+  caroRematch: (id: number) => request<{ game: CaroGame }>(`/api/caro/games/${id}/rematch`, { method: "POST", body: {} }),
 
   /* ---------------- Trang cá nhân, bảng tin ---------------- */
 

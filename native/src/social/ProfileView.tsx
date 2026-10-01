@@ -188,7 +188,7 @@ function Hero({ user, own, width }: { user: User; own: boolean; width: number })
           <View
             style={s.stats}
             accessible
-            accessibilityLabel={`${stats.posts} bài viết, ${stats.likes} lượt thích${stats.chess ? `, ELO cờ vua ${stats.chess.rating}` : ""}${stats.blocks ? `, kỷ lục Xếp Khối ${stats.blocks.best}` : ""}`}
+            accessibilityLabel={`${stats.posts} bài viết, ${stats.likes} lượt thích${stats.chess ? `, ELO cờ vua ${stats.chess.rating}` : ""}${stats.caro ? `, ELO cờ caro ${stats.caro.rating}` : ""}${stats.blocks ? `, kỷ lục Xếp Khối ${stats.blocks.best}` : ""}`}
           >
             <Text style={s.stat}>
               <Text style={s.statNum}>{stats.posts}</Text> bài viết
@@ -199,6 +199,11 @@ function Hero({ user, own, width }: { user: User; own: boolean; width: number })
             {stats.chess ? (
               <Text style={s.stat}>
                 ♞ ELO <Text style={s.statNum}>{stats.chess.rating}</Text>
+              </Text>
+            ) : null}
+            {stats.caro ? (
+              <Text style={s.stat}>
+                ⭕ Caro <Text style={s.statNum}>{stats.caro.rating}</Text>
               </Text>
             ) : null}
             {stats.blocks ? (
