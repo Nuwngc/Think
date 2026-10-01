@@ -1,21 +1,33 @@
 import { useEffect, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
 
 import { Block } from "../blocks/BlocksScreen";
 import { blocksSummary, loadBlocks, sync, useBlocks } from "../blocks/store";
+import { MiniBoard as CaroMiniBoard } from "../caro/Board";
+import { caroSummary, loadCaro, loadLocal as loadCaroLocal, useCaro } from "../caro/store";
 import { MiniBoard } from "../chess/Board";
 import { chessBadge, loadChess, loadLeaderboard, useChess } from "../chess/store";
-import { openBlocks, openChess, useStore } from "../store";
+import { openBlocks, openCaro, openChess, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Icon, useStyles, type IconName } from "../ui";
 
-// Tab Trò chơi: chọn game (Xếp Khối, Cờ vua) + bảng xếp hạng tuần của cả nhóm
+// Tab Trò chơi: chọn game (Xếp Khối, Cờ vua, Cờ caro) + bảng xếp hạng của cả nhóm
 
 const fmt = (n: number) => Number(n || 0).toLocaleString("vi-VN");
 const ART = [1, 1, 0, 5, 0, 1, 0, 5, 3, 3, 3, 5, 0, 7, 7, 0];
 const ART_FEN = "r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4";
+// Hình bàn caro nhỏ 6×6 trên thẻ: năm X chéo thắng, vài quân O
+const CARO_N = 6;
+const CARO_LINE = [0, 7, 14, 21, 28];
+const CARO_ART = (() => {
+  const b = new Array(CARO_N * CARO_N).fill(0);
+  for (const i of CARO_LINE) b[i] = 1;
+  for (const i of [2, 3, 9, 16, 20]) b[i] = 2;
+  return b;
+})();
 
 function CardBg({ id, from, to, mid }: { id: string; from: string; mid: string; to: string }) {
   return (
@@ -107,11 +119,16 @@ export function GamesHome() {
   const activeGames = useChess((st) => Object.values(st.games).filter((g) => g.status === "active" && (g.whiteId === meId || g.blackId === meId)).length);
   const loading = useChess((st) => st.loading);
   const rank = leaderboard ? leaderboard.findIndex((r) => r.userId === meId) + 1 : 0;
+  const caro = useCaro(useShallow((st) => caroSummary(st, meId)));
+  const caroTurn = useCaro((st) => Object.values(st.games).filter((g) => g.status === "active" && ((g.xId === meId && g.turn === "x") || (g.oId === meId && g.turn === "o"))).length);
+  const caroBoard = useCaro((st) => st.leaderboard);
 
   useEffect(() => {
     loadBlocks().then(() => sync());
+    loadCaroLocal();
     if (!useChess.getState().loaded) loadChess();
     if (!useChess.getState().leaderboard) loadLeaderboard();
+    if (!useCaro.getState().loaded && !useCaro.getState().loading) loadCaro();
   }, []);
 
   const board = (title: string, rows: { userId: number; value: string }[]) => (
@@ -136,7 +153,7 @@ export function GamesHome() {
     <View style={[s.root, { paddingTop: insets.top }]}>
       <View style={s.header}>
         <Text style={s.brand}>Trò chơi</Text>
-        <Text style={s.kicker}>Chơi cùng cả nhóm: thách đấu cờ, đua điểm Xếp Khối mỗi tuần</Text>
+        <Text style={s.kicker}>Chơi cùng cả nhóm: thách đấu cờ vua, cờ caro, đua điểm Xếp Khối mỗi tuần</Text>
       </View>
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32, gap: 14 }}
@@ -146,6 +163,7 @@ export function GamesHome() {
             onRefresh={() => {
               loadChess();
               loadLeaderboard();
+              loadCaro();
               sync();
             }}
             tintColor={c.accent}
@@ -201,8 +219,32 @@ export function GamesHome() {
           onPress={() => openChess()}
           label={`Cờ vua. ${todo ? `${todo} việc cần làm.` : ""} Chạm để vào`}
         />
+        <GameCard
+          id="caro"
+          colors={["#E0603A", "#C8432C", "#8E2A1F"]}
+          title="Cờ caro"
+          sub={caro.rating && caro.rating.games ? `ELO ${caro.rating.rating}${caro.rank ? ` · hạng #${caro.rank}` : ""}` : "Năm quân liền nhau là thắng"}
+          chips={
+            <>
+              {caroTurn ? <Chip text={`Tới lượt bạn: ${caroTurn}`} alert /> : null}
+              {caro.todo - caroTurn > 0 ? <Chip text={`${caro.todo - caroTurn} lời thách đấu`} alert /> : null}
+              {caro.botPlaying ? <Chip icon="smart-toy" text="Ván dở với máy" /> : null}
+              {!caro.todo && !caro.botPlaying ? <Chip icon="smart-toy" text="Chơi với máy · Thách bạn bè" /> : null}
+            </>
+          }
+          cta={caro.todo ? "Vào xem" : "Vào chơi"}
+          ctaColor="#9A2B1E"
+          art={
+            <View style={s.caroArt}>
+              <CaroMiniBoard board={CARO_ART} n={CARO_N} size={100} line={CARO_LINE} scheme="light" />
+            </View>
+          }
+          onPress={() => openCaro()}
+          label={`Cờ caro. ${caroTurn ? `Tới lượt bạn ở ${caroTurn} ván.` : ""}${caro.todo - caroTurn > 0 ? ` ${caro.todo - caroTurn} lời thách đấu.` : ""} Chạm để vào`}
+        />
         {bs.top.length ? board("XẾP KHỐI · TUẦN NÀY", bs.top.map((r) => ({ userId: r.userId, value: fmt(r.score) }))) : null}
         {leaderboard && leaderboard.length ? board("CỜ VUA · ĐIỂM ELO", leaderboard.slice(0, 3).map((r) => ({ userId: r.userId, value: String(r.rating) }))) : null}
+        {caroBoard && caroBoard.length ? board("CỜ CARO · ĐIỂM ELO", caroBoard.slice(0, 3).map((r) => ({ userId: r.userId, value: String(r.rating) }))) : null}
         <Text style={s.credit}>Âm thanh tự tổng hợp cho Think. Xếp Khối lấy cảm hứng từ các game xếp khối 8×8; hình và tiếng là của riêng Think.</Text>
       </ScrollView>
     </View>
@@ -236,6 +278,7 @@ const makeStyles = (c: Colors) =>
     },
     artEmpty: { flex: 1, borderRadius: 5, backgroundColor: "rgba(255,255,255,0.08)" },
     chessArt: { transform: [{ rotate: "-5deg" }], borderRadius: 8, overflow: "hidden", elevation: 4 },
+    caroArt: { transform: [{ rotate: "6deg" }], borderRadius: 10, elevation: 4, shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
     board: { backgroundColor: c.surface, borderRadius: 18, padding: 14, gap: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: c.line },
     boardTitle: { color: c.muted, fontSize: 12, fontWeight: "800", letterSpacing: 0.6 },
     boardRow: { flexDirection: "row", alignItems: "center", gap: 8 },

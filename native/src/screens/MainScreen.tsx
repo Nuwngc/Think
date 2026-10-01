@@ -3,13 +3,28 @@ import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BlocksScreen } from "../blocks/BlocksScreen";
+import { BotGame } from "../caro/BotGame";
+import { CaroGame } from "../caro/CaroGame";
+import { CaroHome } from "../caro/CaroHome";
+import { caroBadge, useCaro } from "../caro/store";
 import { ChessHome } from "../chess/ChessHome";
 import { GameScreen } from "../chess/GameScreen";
 import { chessBadge, useChess } from "../chess/store";
 import { SocialHost } from "../social/SocialHost";
 import { closeUser, useSocial } from "../social/store";
 import { GamesHome } from "../games/GamesHome";
-import { closeConversation, closeSettings, leaveGame, setTab, showGamesHub, unreadTotal, useStore, type Tab } from "../store";
+import {
+  closeConversation,
+  closeSettings,
+  leaveCaroBot,
+  leaveCaroGame,
+  leaveGame,
+  setTab,
+  showGamesHub,
+  unreadTotal,
+  useStore,
+  type Tab,
+} from "../store";
 import { useColors } from "../theme";
 import { Badge, Icon, type IconName } from "../ui";
 import { AdminScreen } from "./AdminScreen";
@@ -28,12 +43,15 @@ export function MainScreen() {
   const unread = useStore((s) => unreadTotal(s.convs));
   const meId = useStore((s) => s.me?.id ?? 0);
   const chessTodo = useChess((s) => chessBadge(s, meId));
+  const caroTodo = useCaro((s) => caroBadge(s, meId));
   const gameId = useChess((s) => s.openId);
+  const caroId = useCaro((s) => s.openId);
+  const caroBot = useCaro((s) => s.botOpen);
   const viewUser = useSocial((s) => s.viewUser);
   const settingsOpen = useStore((s) => s.settingsOpen);
 
-  // Nút Quay lại của Android: đóng khung chat / ván cờ / trang cá nhân người khác / Cài đặt, rồi về tab Tin nhắn, rồi mới thoát app
-  // (game Xếp Khối tự xử lý nút Quay lại khi đang mở)
+  // Nút Quay lại của Android: đóng khung chat / ván cờ / ván caro / trang cá nhân người khác / Cài đặt, rồi về tab Tin nhắn,
+  // rồi mới thoát app (game Xếp Khối tự xử lý nút Quay lại khi đang mở)
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       const s = useStore.getState();
@@ -43,6 +61,14 @@ export function MainScreen() {
       }
       if (s.tab === "games" && s.gamesView === "chess" && useChess.getState().openId != null) {
         leaveGame();
+        return true;
+      }
+      if (s.tab === "games" && s.gamesView === "caro" && useCaro.getState().openId != null) {
+        leaveCaroGame();
+        return true;
+      }
+      if (s.tab === "games" && s.gamesView === "caro" && useCaro.getState().botOpen) {
+        leaveCaroBot();
         return true;
       }
       if (s.tab === "games" && s.gamesView !== "hub") {
@@ -71,6 +97,10 @@ export function MainScreen() {
       <ChatScreen key={currentId} convId={currentId} />
     ) : tab === "games" && gamesView === "chess" && gameId != null ? (
       <GameScreen key={gameId} id={gameId} />
+    ) : tab === "games" && gamesView === "caro" && caroId != null ? (
+      <CaroGame key={caroId} id={caroId} />
+    ) : tab === "games" && gamesView === "caro" && caroBot ? (
+      <BotGame />
     ) : tab === "games" && gamesView === "blocks" ? (
       <BlocksScreen onBack={showGamesHub} />
     ) : viewUser != null ? (
@@ -88,6 +118,8 @@ export function MainScreen() {
             ) : shown === "games" ? (
               gamesView === "chess" ? (
                 <ChessHome />
+              ) : gamesView === "caro" ? (
+                <CaroHome />
               ) : (
                 <GamesHome />
               )
@@ -107,8 +139,8 @@ export function MainScreen() {
               icon="sports-esports"
               label="Trò chơi"
               active={shown === "games"}
-              badge={chessTodo}
-              badgeLabel="việc cần làm ở Cờ vua"
+              badge={chessTodo + caroTodo}
+              badgeLabel="việc cần làm ở Cờ vua và Cờ caro"
               onPress={() => setTab("games")}
             />
             <NavItem icon="person" label="Cá nhân" active={shown === "me"} onPress={() => setTab("me")} />

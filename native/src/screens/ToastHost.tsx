@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { hideToast, openChess, openConversation, useStore } from "../store";
+import { hideToast, openCaro, openChess, openConversation, useStore } from "../store";
 import { useColors } from "../theme";
 import { Avatar } from "../ui";
 
@@ -12,7 +12,7 @@ export function ToastHost() {
   const toast = useStore((s) => s.toast);
   const sender = useStore((s) => (toast?.senderId != null ? s.users[toast.senderId] : undefined));
   if (!toast) return null;
-  const tappable = toast.convId != null || toast.chessGameId != null;
+  const tappable = toast.convId != null || toast.chessGameId != null || toast.caroGameId != null;
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + 8 }]}>
       <Pressable
@@ -20,6 +20,7 @@ export function ToastHost() {
           hideToast();
           if (toast.convId != null) openConversation(toast.convId);
           else if (toast.chessGameId != null) openChess(toast.chessGameId || null);
+          else if (toast.caroGameId != null) openCaro(toast.caroGameId || null);
         }}
         accessibilityRole={tappable ? "button" : "alert"}
         accessibilityLiveRegion="polite"

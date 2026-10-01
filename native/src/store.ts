@@ -6,6 +6,17 @@ import { create } from "zustand";
 import { api, ApiError, setAuthHandlers } from "./api";
 import { clearSnapshot, loadSnapshot, saveSnapshot } from "./cache";
 import { bindBlocks, onScoreEvent, resetBlocksBoard, sync as syncBlocks } from "./blocks/store";
+import {
+  bindCaro,
+  closeBot as closeCaroBot,
+  closeGame as closeCaroGame,
+  loadCaro,
+  onCaroEvent,
+  openBot as openCaroBot,
+  openGame as openCaroGame,
+  resetCaro,
+  useCaro,
+} from "./caro/store";
 import { bindChess, closeGame, loadChess, onAnalysisEvent, onChessEvent, openGame, resetChess, useChess } from "./chess/store";
 import { API_URL } from "./config";
 import { convTitle, previewText, type Names } from "./format";
@@ -40,8 +51,8 @@ import type { ChatItem, Conversation, Me, Message, PendingMessage, Reaction, Use
 
 export type Phase = "boot" | "login" | "force" | "ready";
 export type Tab = "chats" | "games" | "me" | "admin";
-/** Trong tab Trò chơi: trang chọn game, Cờ vua, hay đang chơi Xếp Khối */
-export type GamesView = "hub" | "chess" | "blocks";
+/** Trong tab Trò chơi: trang chọn game, Cờ vua, Cờ caro, hay đang chơi Xếp Khối */
+export type GamesView = "hub" | "chess" | "blocks" | "caro";
 export type Connection = "connecting" | "online" | "offline";
 
 export type MsgBox = {
@@ -54,8 +65,8 @@ export type MsgBox = {
   stale: boolean;
 };
 
-/** chessGameId: chạm để mở ván cờ đó (0 = mở mục Cờ vua) */
-export type Toast = { id: number; text: string; title?: string; convId?: number; senderId?: number; chessGameId?: number };
+/** chessGameId / caroGameId: chạm để mở ván đó (0 = mở mục Cờ vua / Cờ caro) */
+export type Toast = { id: number; text: string; title?: string; convId?: number; senderId?: number; chessGameId?: number; caroGameId?: number };
 
 export type UpdateInfo = { versionCode: number; versionName: string; apk: string; notes?: string };
 
@@ -291,6 +302,7 @@ async function enterApp() {
     else closeConversation();
   }
   loadChess();
+  loadCaro();
   syncBlocks(); // gửi điểm Xếp Khối chơi lúc mất mạng
   setupPush().catch(() => undefined);
 }
@@ -331,6 +343,7 @@ function resetAll(notice: string | null) {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = null;
   resetChess();
+  resetCaro();
   resetSocial();
   resetBlocksBoard();
   set({ ...initial, phase: "login", notice, appActive: get().appActive, update: get().update });
@@ -395,6 +408,7 @@ async function resync() {
       return { msgs, offline: false };
     });
     if (useChess.getState().loaded) loadChess();
+    if (useCaro.getState().loaded) loadCaro();
     refreshSocial();
     syncBlocks();
     const current = get().currentId;
@@ -466,9 +480,9 @@ export async function openConversation(id: number) {
       return;
     }
   }
-  // Đang trong một ván cờ thì giữ tab Trò chơi: đóng chat là quay lại ván
-  const keepChess = inChess() && useChess.getState().openId != null;
-  set({ currentId: id, atBottom: true, tab: keepChess ? "games" : "chats" });
+  // Đang trong một ván cờ / caro thì giữ tab Trò chơi: đóng chat là quay lại ván
+  const keepGame = (inChess() && useChess.getState().openId != null) || (inCaro() && (useCaro.getState().openId != null || useCaro.getState().botOpen));
+  set({ currentId: id, atBottom: true, tab: keepGame ? "games" : "chats" });
   hideToastFor(id);
   dismissConversation(id);
   const box = get().msgs[id];
@@ -482,31 +496,43 @@ export function closeConversation() {
 }
 
 const inChess = () => get().tab === "games" && get().gamesView === "chess";
+const inCaro = () => get().tab === "games" && get().gamesView === "caro";
 
 /** Rời mục Cờ vua: đóng ván đang mở (để thông báo về ván đó không bị nuốt mất) */
 function leaveChessView() {
   if (useChess.getState().openId != null) closeGame();
 }
 
+/** Rời mục Cờ caro: đóng ván đang mở, dừng máy (ván với máy vẫn lưu, mở lại chơi tiếp) */
+function leaveCaroView() {
+  if (useCaro.getState().openId != null) closeCaroGame();
+  if (useCaro.getState().botOpen) closeCaroBot();
+}
+
 export function setTab(tab: Tab) {
   // Bấm lại tab Trò chơi khi đang ở trong một game: về trang chọn game
   const gamesView = tab === "games" && get().tab === "games" ? "hub" : get().gamesView === "blocks" ? "hub" : get().gamesView;
   if (!(tab === "games" && gamesView === "chess")) leaveChessView();
+  // Đổi tab khi đang trong ván caro: đóng ván (quay lại tab Trò chơi thì ở trang Cờ caro)
+  leaveCaroView();
   set({ tab, currentId: null, settingsOpen: false, gamesView });
   closeUser();
   if (tab === "games" && !useChess.getState().loading) loadChess();
+  if (tab === "games" && !useCaro.getState().loading) loadCaro();
   if (tab === "games") syncBlocks();
 }
 
 /** Trang chọn game (trong tab Trò chơi) */
 export function showGamesHub() {
   leaveChessView();
+  leaveCaroView();
   set({ tab: "games", gamesView: "hub", currentId: null });
 }
 
 /** Mở game Xếp Khối */
 export function openBlocks() {
   leaveChessView();
+  leaveCaroView();
   set({ tab: "games", gamesView: "blocks", currentId: null });
   closeUser();
 }
@@ -528,6 +554,7 @@ let chessReturn: { gameId: number; tab: Tab; currentId: number | null } | null =
 export function openChess(gameId?: number | null) {
   const s = get();
   chessReturn = gameId && !inChess() ? { gameId, tab: s.tab, currentId: s.currentId } : null;
+  leaveCaroView();
   set({ tab: "games", gamesView: "chess", currentId: null });
   if (get().toast?.chessGameId != null) hideToast();
   if (gameId) openGame(gameId);
@@ -544,6 +571,40 @@ export function leaveGame() {
   closeGame(); // xóa luôn chessReturn (qua bindChess.closed)
   if (!back || back.gameId !== leaving || !inChess()) return;
   set({ tab: back.tab, currentId: back.currentId != null && get().convs[back.currentId] ? back.currentId : null });
+}
+
+/** Mở ván caro từ chỗ khác (thông báo, tin nhắn…): bấm Quay lại thì về đúng chỗ đó */
+let caroReturn: { gameId: number; tab: Tab; currentId: number | null } | null = null;
+
+/** Mở mục Cờ caro; có gameId thì mở luôn ván đó, bot = mở ván chơi với máy */
+export function openCaro(gameId?: number | null, bot?: boolean) {
+  const s = get();
+  caroReturn = gameId && !inCaro() ? { gameId, tab: s.tab, currentId: s.currentId } : null;
+  leaveChessView();
+  set({ tab: "games", gamesView: "caro", currentId: null });
+  closeUser();
+  if (get().toast?.caroGameId != null) hideToast();
+  if (gameId) openCaroGame(gameId);
+  else if (bot) openCaroBot();
+  else {
+    if (useCaro.getState().openId != null) closeCaroGame();
+    closeCaroBot();
+    loadCaro();
+  }
+}
+
+/** Nút Quay lại trong ván caro với bạn bè */
+export function leaveCaroGame() {
+  const back = caroReturn;
+  const leaving = useCaro.getState().openId;
+  closeCaroGame(); // xóa luôn caroReturn (qua bindCaro.closed)
+  if (!back || back.gameId !== leaving || !inCaro()) return;
+  set({ tab: back.tab, currentId: back.currentId != null && get().convs[back.currentId] ? back.currentId : null });
+}
+
+/** Nút Quay lại trong ván với máy: về trang Cờ caro (ván vẫn lưu) */
+export function leaveCaroBot() {
+  closeCaroBot();
 }
 
 export function setAtBottom(atBottom: boolean) {
@@ -926,6 +987,8 @@ function connectSocket() {
   s.on("chess:challenge", (data) => onChessEvent("chess:challenge", data));
   s.on("chess:analysis", onAnalysisEvent);
   s.on("games:score", onScoreEvent);
+  s.on("caro:game", (data) => onCaroEvent("caro:game", data));
+  s.on("caro:challenge", (data) => onCaroEvent("caro:challenge", data));
   for (const name of ["post:new", "post:likes", "post:comment", "post:comment-deleted", "post:deleted"]) {
     s.on(name, (data) => onSocialEvent(name, data));
   }
@@ -1090,6 +1153,20 @@ bindChess({
   },
   onTab: () => inChess() && get().currentId == null && get().appActive,
   showChess: () => openChess(),
+});
+
+bindCaro({
+  closed: () => {
+    caroReturn = null;
+  },
+  meId: () => (get().phase === "ready" ? (get().me?.id ?? 0) : 0),
+  nameOf: (id) => namesOf(get()).nameOf(id),
+  toast: (text, extra) => {
+    // Đang xem đúng ván đó thì thôi
+    if (extra?.caroGameId && useCaro.getState().openId === extra.caroGameId && inCaro() && get().currentId == null) return;
+    showToast(text, extra || {}, 4500);
+  },
+  onCaro: () => inCaro() && get().currentId == null && get().appActive,
 });
 
 bindBlocks({
