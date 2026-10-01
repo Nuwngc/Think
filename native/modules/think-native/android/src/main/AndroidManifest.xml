@@ -23,7 +23,7 @@
       android:excludeFromRecents="true"
       android:documentLaunchMode="never"
       android:windowSoftInputMode="adjustResize"
-      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
-      android:screenOrientation="portrait" />
+      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode" />
+    <!-- Không khóa chiều màn hình: Android 8.0 không cho cửa sổ trong suốt khóa chiều (app sẽ bị tắt) -->
   </application>
 </manifest>
