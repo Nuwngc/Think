@@ -78,6 +78,11 @@
       createdAt: m.createdAt,
       replyTo: m.replyTo || null,
       reactions: m.reactions || [],
+      // 2.1.0: đã sửa, chuyển tiếp, @nhắc tên, bình chọn
+      editedAt: m.editedAt || null,
+      forwarded: Boolean(m.forwarded),
+      mentions: Array.isArray(m.mentions) && m.mentions.length ? m.mentions : undefined,
+      poll: m.poll || undefined,
     };
   }
 

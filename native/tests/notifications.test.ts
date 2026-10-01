@@ -36,6 +36,14 @@ describe("phản hồi thông báo", () => {
     expect(a).toMatchObject({ action: "open", type: "chess", gameId: 7, conversationId: null });
   });
 
+  it("đọc thông báo cờ caro (mở đúng ván caro)", () => {
+    const a = parseResponse({
+      actionIdentifier: "expo.modules.notifications.actions.DEFAULT",
+      notification: { date: 8, request: { identifier: "caro-g-11", content: { dataString: '{"type":"caro","gameId":"11"}' } } },
+    });
+    expect(a).toMatchObject({ action: "open", type: "caro", gameId: 11, conversationId: null });
+  });
+
   it("đọc thông báo thả tim / bình luận bài đăng", () => {
     const a = parseResponse({
       actionIdentifier: "expo.modules.notifications.actions.DEFAULT",

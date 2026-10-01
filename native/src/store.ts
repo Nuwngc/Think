@@ -6,6 +6,17 @@ import { create } from "zustand";
 import { api, ApiError, setAuthHandlers } from "./api";
 import { clearSnapshot, loadSnapshot, saveSnapshot } from "./cache";
 import { bindBlocks, onScoreEvent, resetBlocksBoard, sync as syncBlocks } from "./blocks/store";
+import {
+  bindCaro,
+  closeBot as closeCaroBot,
+  closeGame as closeCaroGame,
+  loadCaro,
+  onCaroEvent,
+  openBot as openCaroBot,
+  openGame as openCaroGame,
+  resetCaro,
+  useCaro,
+} from "./caro/store";
 import { bindChess, closeGame, loadChess, onAnalysisEvent, onChessEvent, openGame, resetChess, useChess } from "./chess/store";
 import { API_URL } from "./config";
 import { convTitle, previewText, type Names } from "./format";
@@ -32,7 +43,9 @@ import {
   type PushState,
 } from "./notifications";
 import { clearToken, currentToken, getToken, setToken } from "./session";
-import type { ChatItem, Conversation, Me, Message, PendingMessage, Reaction, User } from "./types";
+import { mentionIds } from "./chatPlus";
+import { emojiOf, isMuted } from "./chatThemes";
+import type { ChatItem, Conversation, Me, Message, PendingMessage, Pin, Reaction, User } from "./types";
 
 /* =========================================================
    Trạng thái của app
@@ -40,8 +53,8 @@ import type { ChatItem, Conversation, Me, Message, PendingMessage, Reaction, Use
 
 export type Phase = "boot" | "login" | "force" | "ready";
 export type Tab = "chats" | "games" | "me" | "admin";
-/** Trong tab Trò chơi: trang chọn game, Cờ vua, hay đang chơi Xếp Khối */
-export type GamesView = "hub" | "chess" | "blocks";
+/** Trong tab Trò chơi: trang chọn game, Cờ vua, Cờ caro, hay đang chơi Xếp Khối */
+export type GamesView = "hub" | "chess" | "blocks" | "caro";
 export type Connection = "connecting" | "online" | "offline";
 
 export type MsgBox = {
@@ -54,8 +67,8 @@ export type MsgBox = {
   stale: boolean;
 };
 
-/** chessGameId: chạm để mở ván cờ đó (0 = mở mục Cờ vua) */
-export type Toast = { id: number; text: string; title?: string; convId?: number; senderId?: number; chessGameId?: number };
+/** chessGameId / caroGameId: chạm để mở ván đó (0 = mở mục Cờ vua / Cờ caro) */
+export type Toast = { id: number; text: string; title?: string; convId?: number; senderId?: number; chessGameId?: number; caroGameId?: number };
 
 export type UpdateInfo = { versionCode: number; versionName: string; apk: string; notes?: string };
 
@@ -69,6 +82,12 @@ type State = {
   typing: Record<number, number[]>;
   drafts: Record<number, string>;
   replying: Record<number, ChatItem | undefined>;
+  /** Tin của mình đang sửa (theo cuộc trò chuyện) */
+  editing: Record<number, Message | undefined>;
+  /** Tin đã ghim (theo cuộc trò chuyện), mới ghim nhất trước */
+  pins: Record<number, Pin[]>;
+  /** Người được chọn từ gợi ý @nhắc tên trong bản nháp: tên hiển thị -> id */
+  mentionPicks: Record<number, Record<string, number>>;
   tab: Tab;
   gamesView: GamesView;
   /** Đang mở màn Cài đặt (trong tab Cá nhân) */
@@ -85,6 +104,8 @@ type State = {
   update: UpdateInfo | null;
   /** Tăng lên mỗi khi dung lượng máy chủ đổi (màn Quản trị tự tải lại) */
   storageVersion: number;
+  /** Tăng khi có báo lỗi app mới (chỉ admin nhận) */
+  errorsVersion: number;
 };
 
 const initial: State = {
@@ -97,6 +118,9 @@ const initial: State = {
   typing: {},
   drafts: {},
   replying: {},
+  editing: {},
+  pins: {},
+  mentionPicks: {},
   tab: "chats",
   gamesView: "hub",
   settingsOpen: false,
@@ -110,6 +134,7 @@ const initial: State = {
   toast: null,
   update: null,
   storageVersion: 0,
+  errorsVersion: 0,
 };
 
 export const useStore = create<State>(() => ({ ...initial }));
@@ -141,8 +166,9 @@ export function namesOf(s: Pick<State, "me" | "users">): Names {
   };
 }
 
+/** Số tin chưa đọc trên tab Tin nhắn / biểu tượng app (không tính cuộc trò chuyện đang tắt thông báo) */
 export const unreadTotal = (convs: Record<number, Conversation>) =>
-  Object.values(convs).reduce((sum, c) => sum + (c.unread || 0), 0);
+  Object.values(convs).reduce((sum, c) => sum + (isMuted(c) ? 0 : c.unread || 0), 0);
 
 /* =========================================================
    Thông báo nhỏ trong app
@@ -291,6 +317,7 @@ async function enterApp() {
     else closeConversation();
   }
   loadChess();
+  loadCaro();
   syncBlocks(); // gửi điểm Xếp Khối chơi lúc mất mạng
   setupPush().catch(() => undefined);
 }
@@ -331,6 +358,7 @@ function resetAll(notice: string | null) {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = null;
   resetChess();
+  resetCaro();
   resetSocial();
   resetBlocksBoard();
   set({ ...initial, phase: "login", notice, appActive: get().appActive, update: get().update });
@@ -395,6 +423,7 @@ async function resync() {
       return { msgs, offline: false };
     });
     if (useChess.getState().loaded) loadChess();
+    if (useCaro.getState().loaded) loadCaro();
     refreshSocial();
     syncBlocks();
     const current = get().currentId;
@@ -466,11 +495,12 @@ export async function openConversation(id: number) {
       return;
     }
   }
-  // Đang trong một ván cờ thì giữ tab Trò chơi: đóng chat là quay lại ván
-  const keepChess = inChess() && useChess.getState().openId != null;
-  set({ currentId: id, atBottom: true, tab: keepChess ? "games" : "chats" });
+  // Đang trong một ván cờ / caro thì giữ tab Trò chơi: đóng chat là quay lại ván
+  const keepGame = (inChess() && useChess.getState().openId != null) || (inCaro() && (useCaro.getState().openId != null || useCaro.getState().botOpen));
+  set({ currentId: id, atBottom: true, tab: keepGame ? "games" : "chats" });
   hideToastFor(id);
   dismissConversation(id);
+  loadPins(id);
   const box = get().msgs[id];
   if (!box || !box.loaded || box.stale) await loadMessages(id);
   else markRead(id);
@@ -482,31 +512,43 @@ export function closeConversation() {
 }
 
 const inChess = () => get().tab === "games" && get().gamesView === "chess";
+const inCaro = () => get().tab === "games" && get().gamesView === "caro";
 
 /** Rời mục Cờ vua: đóng ván đang mở (để thông báo về ván đó không bị nuốt mất) */
 function leaveChessView() {
   if (useChess.getState().openId != null) closeGame();
 }
 
+/** Rời mục Cờ caro: đóng ván đang mở, dừng máy (ván với máy vẫn lưu, mở lại chơi tiếp) */
+function leaveCaroView() {
+  if (useCaro.getState().openId != null) closeCaroGame();
+  if (useCaro.getState().botOpen) closeCaroBot();
+}
+
 export function setTab(tab: Tab) {
   // Bấm lại tab Trò chơi khi đang ở trong một game: về trang chọn game
   const gamesView = tab === "games" && get().tab === "games" ? "hub" : get().gamesView === "blocks" ? "hub" : get().gamesView;
   if (!(tab === "games" && gamesView === "chess")) leaveChessView();
+  // Đổi tab khi đang trong ván caro: đóng ván (quay lại tab Trò chơi thì ở trang Cờ caro)
+  leaveCaroView();
   set({ tab, currentId: null, settingsOpen: false, gamesView });
   closeUser();
   if (tab === "games" && !useChess.getState().loading) loadChess();
+  if (tab === "games" && !useCaro.getState().loading) loadCaro();
   if (tab === "games") syncBlocks();
 }
 
 /** Trang chọn game (trong tab Trò chơi) */
 export function showGamesHub() {
   leaveChessView();
+  leaveCaroView();
   set({ tab: "games", gamesView: "hub", currentId: null });
 }
 
 /** Mở game Xếp Khối */
 export function openBlocks() {
   leaveChessView();
+  leaveCaroView();
   set({ tab: "games", gamesView: "blocks", currentId: null });
   closeUser();
 }
@@ -528,6 +570,7 @@ let chessReturn: { gameId: number; tab: Tab; currentId: number | null } | null =
 export function openChess(gameId?: number | null) {
   const s = get();
   chessReturn = gameId && !inChess() ? { gameId, tab: s.tab, currentId: s.currentId } : null;
+  leaveCaroView();
   set({ tab: "games", gamesView: "chess", currentId: null });
   if (get().toast?.chessGameId != null) hideToast();
   if (gameId) openGame(gameId);
@@ -544,6 +587,40 @@ export function leaveGame() {
   closeGame(); // xóa luôn chessReturn (qua bindChess.closed)
   if (!back || back.gameId !== leaving || !inChess()) return;
   set({ tab: back.tab, currentId: back.currentId != null && get().convs[back.currentId] ? back.currentId : null });
+}
+
+/** Mở ván caro từ chỗ khác (thông báo, tin nhắn…): bấm Quay lại thì về đúng chỗ đó */
+let caroReturn: { gameId: number; tab: Tab; currentId: number | null } | null = null;
+
+/** Mở mục Cờ caro; có gameId thì mở luôn ván đó, bot = mở ván chơi với máy */
+export function openCaro(gameId?: number | null, bot?: boolean) {
+  const s = get();
+  caroReturn = gameId && !inCaro() ? { gameId, tab: s.tab, currentId: s.currentId } : null;
+  leaveChessView();
+  set({ tab: "games", gamesView: "caro", currentId: null });
+  closeUser();
+  if (get().toast?.caroGameId != null) hideToast();
+  if (gameId) openCaroGame(gameId);
+  else if (bot) openCaroBot();
+  else {
+    if (useCaro.getState().openId != null) closeCaroGame();
+    closeCaroBot();
+    loadCaro();
+  }
+}
+
+/** Nút Quay lại trong ván caro với bạn bè */
+export function leaveCaroGame() {
+  const back = caroReturn;
+  const leaving = useCaro.getState().openId;
+  closeCaroGame(); // xóa luôn caroReturn (qua bindCaro.closed)
+  if (!back || back.gameId !== leaving || !inCaro()) return;
+  set({ tab: back.tab, currentId: back.currentId != null && get().convs[back.currentId] ? back.currentId : null });
+}
+
+/** Nút Quay lại trong ván với máy: về trang Cờ caro (ván vẫn lưu) */
+export function leaveCaroBot() {
+  closeCaroBot();
 }
 
 export function setAtBottom(atBottom: boolean) {
@@ -634,9 +711,15 @@ function addLocal(m: PendingMessage) {
   set({ atBottom: true });
 }
 
-export function sendText(convId: number, raw: string) {
+export function sendText(convId: number, raw: string, { quick = false }: { quick?: boolean } = {}) {
   const me = get().me;
-  const text = raw.trim();
+  if (get().editing[convId]) {
+    saveEdit(convId, raw);
+    return false;
+  }
+  const typed = raw.trim();
+  // Ô nhập trống mà bấm nút gửi: gửi biểu tượng cảm xúc nhanh của cuộc trò chuyện
+  const text = typed || (quick ? emojiOf(get().convs[convId]) : "");
   if (!me || !text) return false;
   if (text.length > 4000) {
     showToast("Tin nhắn dài quá 4000 ký tự. Hãy chia nhỏ ra.");
@@ -656,7 +739,10 @@ export function sendText(convId: number, raw: string) {
     reactions: [],
     status: "sending",
   };
-  setDraft(convId, "");
+  const mentions = typed ? mentionsIn(convId, text) : [];
+  if (mentions.length) m.mentions = mentions;
+  if (typed) setDraft(convId, "");
+  set((st) => ({ mentionPicks: { ...st.mentionPicks, [convId]: {} } }));
   addLocal(m);
   deliver(m);
   return true;
@@ -730,6 +816,7 @@ async function deliver(m: PendingMessage) {
       image,
       replyTo: m.replyTo?.id || undefined,
       clientId: m.clientId,
+      mentions: m.mentions,
     });
     receive(message);
   } catch (err) {
@@ -787,6 +874,178 @@ function markDeleted(convId: number, messageId: number) {
 export async function recall(m: Message) {
   await api.recall(m.id);
   markDeleted(m.conversationId, m.id);
+  onPins({ conversationId: m.conversationId, removed: m.id });
+}
+
+/* =========================================================
+   Chat 2.1.0: sửa tin, ghim tin, chuyển tiếp, bình chọn, @nhắc tên,
+   chủ đề + biểu tượng gửi nhanh, tắt thông báo / ghim cuộc trò chuyện
+   ========================================================= */
+
+/** Thay một tin đã có (sửa, bình chọn…) ở mọi chỗ đang giữ nó */
+export function onMessageUpdated({ message }: { message: Message }) {
+  if (!message) return;
+  patchBox(message.conversationId, (b) => ({
+    list: b.list.map((m) => (!isPending(m) && m.id === message.id ? { ...m, ...message } : m)),
+  }));
+  patchConv(message.conversationId, (c) => (c.lastMessage && c.lastMessage.id === message.id ? { lastMessage: { ...c.lastMessage, ...message } } : {}));
+  const pins = get().pins[message.conversationId];
+  if (pins?.some((p) => p.message.id === message.id)) {
+    set((st) => ({
+      pins: { ...st.pins, [message.conversationId]: pins.map((p) => (p.message.id === message.id ? { ...p, message: { ...p.message, ...message } } : p)) },
+    }));
+  }
+}
+
+/** Bản nháp trước khi bấm Sửa (sửa xong / hủy thì trả lại) */
+const draftsBeforeEdit = new Map<number, string>();
+
+export function startEdit(convId: number, m: Message) {
+  if (!get().editing[convId]) draftsBeforeEdit.set(convId, get().drafts[convId] || "");
+  setDraft(convId, m.text || "");
+  const picks: Record<string, number> = {};
+  for (const uid of m.mentions || []) picks[namesOf(get()).nameOf(uid)] = uid;
+  set((st) => ({
+    editing: { ...st.editing, [convId]: m },
+    replying: { ...st.replying, [convId]: undefined },
+    mentionPicks: { ...st.mentionPicks, [convId]: picks },
+  }));
+}
+
+export function cancelEdit(convId: number) {
+  if (!get().editing[convId]) return;
+  setDraft(convId, draftsBeforeEdit.get(convId) ?? "");
+  draftsBeforeEdit.delete(convId);
+  set((st) => ({ editing: { ...st.editing, [convId]: undefined }, mentionPicks: { ...st.mentionPicks, [convId]: {} } }));
+}
+
+async function saveEdit(convId: number, raw: string) {
+  const m = get().editing[convId];
+  if (!m) return;
+  const text = raw.trim();
+  if (!text && !m.image) {
+    showToast("Tin nhắn không được để trống. Muốn xóa thì chọn Thu hồi.");
+    return;
+  }
+  const mentions = mentionsIn(convId, text);
+  cancelEdit(convId);
+  if (text === (m.text || "").trim()) return;
+  const before = { text: m.text, editedAt: m.editedAt, mentions: m.mentions };
+  onMessageUpdated({ message: { ...m, text, editedAt: Date.now(), mentions } });
+  try {
+    onMessageUpdated(await api.editMessage(m.id, text, mentions));
+  } catch (err) {
+    onMessageUpdated({ message: { ...m, ...before } });
+    showToast(err instanceof Error ? err.message : "Chưa sửa được tin nhắn.");
+  }
+}
+
+/** Ghi nhớ người được chọn từ gợi ý @nhắc tên */
+export function pickMention(convId: number, name: string, userId: number) {
+  set((st) => ({ mentionPicks: { ...st.mentionPicks, [convId]: { ...(st.mentionPicks[convId] || {}), [name]: userId } } }));
+}
+
+/** Ai được nhắc tên trong tin sắp gửi: người đã chọn từ gợi ý mà "@Tên" vẫn còn trong chữ */
+export function mentionsIn(convId: number, text: string) {
+  return mentionIds(get().mentionPicks[convId] || {}, text);
+}
+
+export async function loadPins(convId: number) {
+  if (get().offline) return;
+  try {
+    const { pins } = await api.pins(convId);
+    set((st) => ({ pins: { ...st.pins, [convId]: pins } }));
+  } catch {
+    /* không có thanh ghim */
+  }
+}
+
+export function onPins({ conversationId, pins, removed }: { conversationId: number; pins?: Pin[]; removed?: number }) {
+  if (Array.isArray(pins)) set((st) => ({ pins: { ...st.pins, [conversationId]: pins } }));
+  else if (removed) {
+    const list = get().pins[conversationId];
+    if (list) set((st) => ({ pins: { ...st.pins, [conversationId]: list.filter((p) => p.message.id !== removed) } }));
+  }
+}
+
+export const isPinnedMsg = (st: Pick<State, "pins">, m: ChatItem) =>
+  !isPending(m) && (st.pins[m.conversationId] || []).some((p) => p.message.id === m.id);
+
+export async function pinMessage(m: Message, pinned: boolean) {
+  try {
+    const { pins } = await api.pin(m.id, pinned);
+    onPins({ conversationId: m.conversationId, pins });
+    showToast(pinned ? "Đã ghim tin nhắn." : "Đã bỏ ghim.");
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : "Chưa ghim được.");
+  }
+}
+
+export async function forwardMessage(m: Message, convIds: number[]) {
+  const { messages } = await api.forward(m.id, convIds);
+  for (const msg of messages) receive(msg);
+  return messages.length;
+}
+
+export async function createPoll(convId: number, question: string, options: string[], multi: boolean) {
+  const { message } = await api.createPoll(convId, { question, options, multi });
+  receive(message);
+  set({ atBottom: true });
+}
+
+export async function votePoll(m: Message, option: number) {
+  const meId = get().me?.id;
+  const p = m.poll;
+  if (!p || p.closed || meId == null) return;
+  const mine = p.options.map((o, k) => (o.votes.includes(meId) ? k : -1)).filter((k) => k >= 0);
+  const next = p.multi ? (mine.includes(option) ? mine.filter((k) => k !== option) : [...mine, option]) : mine.length === 1 && mine[0] === option ? [] : [option];
+  const optimistic = {
+    ...p,
+    options: p.options.map((o, k) => ({ ...o, votes: [...o.votes.filter((u) => u !== meId), ...(next.includes(k) ? [meId] : [])] })),
+  };
+  onMessageUpdated({ message: { ...m, poll: optimistic } });
+  try {
+    onMessageUpdated(await api.vote(m.id, next));
+  } catch (err) {
+    onMessageUpdated({ message: { ...m, poll: p } });
+    showToast(err instanceof Error ? err.message : "Chưa bình chọn được.");
+  }
+}
+
+export async function closePoll(m: Message) {
+  try {
+    onMessageUpdated(await api.closePoll(m.id));
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : "Chưa kết thúc được bình chọn.");
+  }
+}
+
+function onAppearance({ conversationId, theme, emoji }: { conversationId: number; theme: string; emoji: string }) {
+  patchConv(conversationId, () => ({ theme, emoji }));
+}
+
+function onConvPrefs({ conversationId, mutedUntil, pinnedAt }: { conversationId: number; mutedUntil: number; pinnedAt: number | null }) {
+  patchConv(conversationId, () => ({ mutedUntil, pinnedAt }));
+}
+
+export async function setAppearance(convId: number, body: { theme?: string; emoji?: string }) {
+  try {
+    const { conversation } = await api.appearance(convId, body);
+    onAppearance({ conversationId: convId, theme: conversation.theme || "default", emoji: emojiOf(conversation) });
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : "Chưa đổi được.");
+  }
+}
+
+export async function setConvPrefs(convId: number, body: { mutedUntil?: number; pinned?: boolean }) {
+  try {
+    const { conversation } = await api.convPrefs(convId, body);
+    onConvPrefs({ conversationId: convId, mutedUntil: conversation.mutedUntil ?? 0, pinnedAt: conversation.pinnedAt ?? null });
+    if (body.mutedUntil !== undefined) showToast(body.mutedUntil ? "Đã tắt thông báo của cuộc trò chuyện này." : "Đã bật lại thông báo.");
+    if (body.pinned !== undefined) showToast(body.pinned ? "Đã ghim lên đầu danh sách." : "Đã bỏ ghim.");
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : "Chưa đổi được.");
+  }
 }
 
 /* =========================================================
@@ -903,6 +1162,10 @@ function connectSocket() {
     setReactions(conversationId, messageId, reactions),
   );
   s.on("conversation:changed", onConvChanged);
+  s.on("message:updated", onMessageUpdated);
+  s.on("conversation:pins", onPins);
+  s.on("conversation:appearance", onAppearance);
+  s.on("conversation:prefs", onConvPrefs);
   s.on("read", onRead);
   s.on("typing", onTyping);
   s.on("presence", ({ userId, online, lastSeen }: { userId: number; online: boolean; lastSeen?: number }) => {
@@ -922,10 +1185,13 @@ function connectSocket() {
   });
   s.on("session:ended", (data: { reason?: string }) => sessionEnded(data?.reason || "Bạn đã bị đăng xuất."));
   s.on("storage:changed", () => set((st) => ({ storageVersion: st.storageVersion + 1 })));
+  s.on("admin:errors", () => set((st) => ({ errorsVersion: st.errorsVersion + 1 })));
   s.on("chess:game", (data) => onChessEvent("chess:game", data));
   s.on("chess:challenge", (data) => onChessEvent("chess:challenge", data));
   s.on("chess:analysis", onAnalysisEvent);
   s.on("games:score", onScoreEvent);
+  s.on("caro:game", (data) => onCaroEvent("caro:game", data));
+  s.on("caro:challenge", (data) => onCaroEvent("caro:challenge", data));
   for (const name of ["post:new", "post:likes", "post:comment", "post:comment-deleted", "post:deleted"]) {
     s.on(name, (data) => onSocialEvent(name, data));
   }
@@ -960,7 +1226,13 @@ async function onMessageNew(msg: Message) {
     return;
   }
   if (!fresh) patchConv(msg.conversationId, (c) => ({ unread: (c.unread || 0) + 1 }));
-  if (!here && s.appActive) {
+  try {
+    hooks.onIncoming(msg); // bong bóng chat
+  } catch {
+    /* bong bóng lỗi không làm hỏng tin nhắn */
+  }
+  const quiet = isMuted(get().convs[msg.conversationId]) && !(msg.mentions || []).includes(s.me?.id ?? -1);
+  if (!here && s.appActive && !quiet) {
     const st = get();
     const c = st.convs[msg.conversationId];
     if (c) {
@@ -1048,10 +1320,11 @@ function onAppState(st: string) {
   if (backgroundTimer) clearTimeout(backgroundTimer);
   backgroundTimer = null;
   if (!active) {
-    // Ở nền lâu: ngắt realtime cho đỡ tốn pin (tin mới sẽ đến bằng thông báo đẩy)
+    // Ở nền lâu: ngắt realtime cho đỡ tốn pin (tin mới sẽ đến bằng thông báo đẩy).
+    // Đang bật bong bóng chat thì giữ kết nối để tin mới hiện bong bóng ngay.
     backgroundTimer = setTimeout(() => {
       backgroundTimer = null;
-      if (!get().appActive && socket?.connected) socket.disconnect();
+      if (!get().appActive && socket?.connected && !hooks.keepAlive()) socket.disconnect();
     }, BACKGROUND_DISCONNECT);
     return;
   }
@@ -1062,6 +1335,32 @@ function onAppState(st: string) {
     dismissConversation(s.currentId);
     if (s.atBottom) markRead(s.currentId);
   }
+}
+
+/* ---------- Bong bóng chat (src/bubbles.ts gắn vào đây, tránh import vòng) ---------- */
+
+type BackgroundHooks = { keepAlive: () => boolean; onIncoming: (msg: Message) => void };
+let hooks: BackgroundHooks = { keepAlive: () => false, onIncoming: () => undefined };
+
+export function setBackgroundHooks(h: BackgroundHooks) {
+  hooks = h;
+}
+
+/** Nối lại realtime nếu đang ngắt (vd vừa bật bong bóng chat khi app ở nền lâu) */
+export function ensureConnected() {
+  if (socket && !socket.connected && get().phase === "ready") socket.connect();
+}
+
+export const lifecycleStarted = () => started;
+
+/** Màn hình đang xem (để khung chat nổi trả lại như cũ khi thu nhỏ) */
+export function viewState() {
+  const s = get();
+  return { currentId: s.currentId, tab: s.tab };
+}
+
+export function restoreView(v: { currentId: number | null; tab: Tab }) {
+  set({ currentId: v.currentId, tab: v.tab });
 }
 
 /** Gọi một lần khi app khởi động */
@@ -1090,6 +1389,20 @@ bindChess({
   },
   onTab: () => inChess() && get().currentId == null && get().appActive,
   showChess: () => openChess(),
+});
+
+bindCaro({
+  closed: () => {
+    caroReturn = null;
+  },
+  meId: () => (get().phase === "ready" ? (get().me?.id ?? 0) : 0),
+  nameOf: (id) => namesOf(get()).nameOf(id),
+  toast: (text, extra) => {
+    // Đang xem đúng ván đó thì thôi
+    if (extra?.caroGameId && useCaro.getState().openId === extra.caroGameId && inCaro() && get().currentId == null) return;
+    showToast(text, extra || {}, 4500);
+  },
+  onCaro: () => inCaro() && get().currentId == null && get().appActive,
 });
 
 bindBlocks({

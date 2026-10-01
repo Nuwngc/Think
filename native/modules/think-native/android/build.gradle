@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.nuwngc.think'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.thinknative"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  implementation "androidx.core:core-ktx:1.13.1"
+  implementation "androidx.appcompat:appcompat:1.7.0"
+  // Khung chat nổi (BubbleActivity) là một màn hình React Native dùng chung JavaScript với app
+  implementation "com.facebook.react:react-android"
+}

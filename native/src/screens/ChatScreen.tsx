@@ -14,12 +14,18 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShallow } from "zustand/react/shallow";
 
+import { emojiOf, themeOf } from "../chatThemes";
 import { convTitle, dayKey, dayLabel, lastSeenText, REACTIONS, systemText } from "../format";
 import { forgetPick, pickImages, prepareImage, rememberPick } from "../images";
 import { isPending } from "../messages";
 import {
+  cancelEdit,
   cancelReply,
   closeConversation,
+  closePoll,
+  isPinnedMsg,
+  pinMessage,
+  startEdit,
   discard,
   emitTyping,
   loadMessages,
@@ -40,6 +46,8 @@ import type { ChatItem, Conversation, Message } from "../types";
 import { Avatar, Button, confirm, ConvAvatar, Icon, IconButton, KeyboardAware, Sheet, SheetItem, useKeyboardOpen, useStyles } from "../ui";
 import { KnightIcon } from "../chess/Board";
 import { ChallengeSheet } from "../chess/Sheets";
+import { ChatSearch, ForwardSheet, MentionList, PinBar, PinsSheet, PollSheet } from "./ChatExtras";
+import { ConvSettingsSheet } from "./ConvSettingsSheet";
 import { GroupInfoSheet } from "./GroupInfoSheet";
 import { ImageViewer } from "./ImageViewer";
 import { MessageRow } from "./MessageItem";
@@ -90,11 +98,14 @@ function buildRows(list: ChatItem[], conv: Conversation, meId: number): Row[] {
   return rows.reverse();
 }
 
-export function ChatScreen({ convId }: { convId: number }) {
+/** Khung chat nổi (bong bóng chat): nút thu nhỏ thay cho Quay lại, có nút mở app */
+export type BubbleMode = { onClose: () => void; onOpenApp: () => void };
+
+export function ChatScreen({ convId, bubble }: { convId: number; bubble?: BubbleMode }) {
   const c = useColors();
   const s = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
-  const { conv, box, users, me, typingIds, draft, replying, offline, atBottom } = useStore(
+  const { conv, box, users, me, typingIds, draft, replying, editing, pins, offline, atBottom } = useStore(
     useShallow((st) => ({
       conv: st.convs[convId],
       box: st.msgs[convId],
@@ -103,14 +114,27 @@ export function ChatScreen({ convId }: { convId: number }) {
       typingIds: st.typing[convId],
       draft: st.drafts[convId] || "",
       replying: st.replying[convId],
+      editing: st.editing[convId],
+      pins: st.pins[convId],
       offline: st.offline,
       atBottom: st.atBottom,
     })),
   );
+  const theme = themeOf(conv);
+  const quickEmoji = emojiOf(conv);
   const names = useMemo(() => namesOf({ me, users }), [me, users]);
   const meId = me?.id ?? 0;
   const listRef = useRef<FlatList<Row>>(null);
   const inputRef = useRef<TextInput>(null);
+  // Đặt con trỏ về cuối ô nhập sau khi app tự điền chữ (chọn @tên, bấm Sửa)
+  const [caret, setCaret] = useState<number | null>(null);
+  const caretToEnd = (text: string, delay = 0) => {
+    setTimeout(() => {
+      setCaret(text.length);
+      inputRef.current?.focus();
+      setTimeout(() => setCaret(null), 600);
+    }, delay);
+  };
   const lastTyping = useRef(0);
   const [menuFor, setMenuFor] = useState<Message | null>(null);
   const [reactorsFor, setReactorsFor] = useState<ChatItem | null>(null);
@@ -119,6 +143,14 @@ export function ChatScreen({ convId }: { convId: number }) {
   const [chessOpen, setChessOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [pinsOpen, setPinsOpen] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [forwardFor, setForwardFor] = useState<Message | null>(null);
+  // Nhảy tới một tin chưa tải (từ tìm kiếm / tin ghim): tải dần tin cũ hơn cho tới khi thấy
+  const [jumpTarget, setJumpTarget] = useState<{ id: number; tries: number } | null>(null);
+  const pinnedIds = useMemo(() => new Set((pins || []).map((p) => p.message.id)), [pins]);
 
   const list = useMemo(() => box?.list ?? [], [box?.list]);
   const rows = useMemo(() => (conv ? buildRows(list, conv, meId) : []), [list, conv, meId]);
@@ -135,15 +167,37 @@ export function ChatScreen({ convId }: { convId: number }) {
     (messageId: number) => {
       const index = rows.findIndex((r) => r.type === "msg" && !isPending(r.item) && r.item.id === messageId);
       if (index < 0) {
-        showToast("Tin nhắn gốc ở xa quá, hãy kéo lên để xem.");
+        if (box?.hasMore) {
+          showToast("Đang tìm tin nhắn cũ…");
+          setJumpTarget({ id: messageId, tries: 0 });
+        } else showToast("Không tìm thấy tin nhắn này nữa.");
         return;
       }
       listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
     },
-    [rows],
+    [rows, box?.hasMore],
   );
 
+  useEffect(() => {
+    if (!jumpTarget || box?.loading) return;
+    const index = rows.findIndex((r) => r.type === "msg" && !isPending(r.item) && r.item.id === jumpTarget.id);
+    if (index >= 0) {
+      setJumpTarget(null);
+      setTimeout(() => listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true }), 120);
+      return;
+    }
+    if (!box?.hasMore || jumpTarget.tries >= 40) {
+      setJumpTarget(null);
+      showToast("Tin nhắn này ở xa quá, hãy kéo lên để xem.");
+      return;
+    }
+    setJumpTarget({ ...jumpTarget, tries: jumpTarget.tries + 1 });
+    loadMessages(convId, { older: true });
+  }, [jumpTarget, rows, box?.loading, box?.hasMore, convId]);
+
   const onChangeText = (text: string) => {
+    // Người dùng gõ tiếp: thả con trỏ ra (không giữ ở vị trí app đặt nữa)
+    if (caret != null) setCaret(null);
     setDraft(convId, text);
     const now = Date.now();
     if (text.trim() && now - lastTyping.current > 2000) {
@@ -153,7 +207,8 @@ export function ChatScreen({ convId }: { convId: number }) {
   };
 
   const send = () => {
-    if (sendText(convId, draft)) listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    // Ô nhập trống: gửi biểu tượng cảm xúc nhanh (như 👍 của Messenger)
+    if (sendText(convId, draft, { quick: true })) listRef.current?.scrollToOffset({ offset: 0, animated: true });
   };
 
   const attach = async (camera: boolean) => {
@@ -198,6 +253,8 @@ export function ChatScreen({ convId }: { convId: number }) {
               onPressQuote={jumpTo}
               onPressReactions={setReactorsFor}
               onPressFailed={setFailedFor}
+              theme={theme}
+              pinned={!isPending(row.item) && pinnedIds.has(row.item.id)}
             />
           );
         case "day":
@@ -238,7 +295,7 @@ export function ChatScreen({ convId }: { convId: number }) {
           return <ListTop conv={conv!} box={box} names={names} users={users} meId={meId} />;
       }
     },
-    [conv, meId, users, names, jumpTo, s, box],
+    [conv, meId, users, names, jumpTo, s, box, theme, pinnedIds],
   );
 
   if (!conv) return null;
@@ -268,11 +325,15 @@ export function ChatScreen({ convId }: { convId: number }) {
 
   return (
     <KeyboardAware bottomInset={false} style={{ backgroundColor: c.bg }}>
-      <View style={[s.header, { paddingTop: insets.top + 4 }]}>
-        <IconButton name="arrow-back" label="Quay lại" onPress={closeConversation} color={c.text} />
+      <View style={[s.header, { paddingTop: bubble ? 6 : insets.top + 4 }]}>
+        {bubble ? (
+          <IconButton name="keyboard-arrow-down" label="Thu nhỏ" onPress={bubble.onClose} color={c.text} />
+        ) : (
+          <IconButton name="arrow-back" label="Quay lại" onPress={closeConversation} color={c.text} />
+        )}
         <Pressable
           style={s.headerMain}
-          onPress={() => setInfoOpen(true)}
+          onPress={() => setSettingsOpen(true)}
           accessibilityRole="button"
           accessibilityLabel={`${title}. Xem thông tin`}
         >
@@ -286,7 +347,7 @@ export function ChatScreen({ convId }: { convId: number }) {
             </Text>
           </View>
         </Pressable>
-        {conv.type === "dm" && peer && !peer.disabled ? (
+        {conv.type === "dm" && peer && !peer.disabled && !bubble ? (
           <Pressable
             onPress={() => setChessOpen(true)}
             hitSlop={8}
@@ -297,8 +358,14 @@ export function ChatScreen({ convId }: { convId: number }) {
             <KnightIcon size={22} color={c.text2} hole={c.surface} />
           </Pressable>
         ) : null}
-        <IconButton name={conv.type === "group" ? "group" : "info-outline"} label="Thông tin cuộc trò chuyện" onPress={() => setInfoOpen(true)} />
+        <IconButton name="search" label="Tìm tin nhắn" onPress={() => setSearchOpen(true)} />
+        {bubble ? (
+          <IconButton name="open-in-new" label="Mở trong app" onPress={bubble.onOpenApp} />
+        ) : (
+          <IconButton name="info-outline" label="Tùy chỉnh đoạn chat" onPress={() => setSettingsOpen(true)} />
+        )}
       </View>
+      <PinBar conv={conv} onJump={jumpTo} onShowAll={() => setPinsOpen(true)} />
 
       <View style={{ flex: 1 }}>
         {loading ? (
@@ -344,6 +411,16 @@ export function ChatScreen({ convId }: { convId: number }) {
             {conv.unread ? <View style={[s.jumpDot, { backgroundColor: c.turmeric }]} /> : null}
           </Pressable>
         ) : null}
+        {searchOpen ? (
+          <ChatSearch
+            conv={conv}
+            onClose={() => setSearchOpen(false)}
+            onPick={(id) => {
+              setSearchOpen(false);
+              setTimeout(() => jumpTo(id), 150);
+            }}
+          />
+        ) : null}
       </View>
 
       {typingText ? (
@@ -354,7 +431,20 @@ export function ChatScreen({ convId }: { convId: number }) {
         </View>
       ) : null}
 
-      {replying ? (
+      {editing ? (
+        <View style={[s.replyBar, { borderTopColor: c.line }]}>
+          <View style={[s.replyAccent, { backgroundColor: c.accent }]} />
+          <View style={{ flex: 1 }}>
+            <Text style={[s.replyLabel, { color: c.accent }]} numberOfLines={1}>
+              Đang sửa tin nhắn
+            </Text>
+            <Text style={s.muted} numberOfLines={1}>
+              {editing.text || "📷 Ảnh"}
+            </Text>
+          </View>
+          <IconButton name="close" label="Hủy sửa" size={20} onPress={() => cancelEdit(convId)} />
+        </View>
+      ) : replying ? (
         <View style={[s.replyBar, { borderTopColor: c.line }]}>
           <View style={[s.replyAccent, { backgroundColor: c.accent }]} />
           <View style={{ flex: 1 }}>
@@ -369,8 +459,16 @@ export function ChatScreen({ convId }: { convId: number }) {
         </View>
       ) : null}
 
+      <MentionList
+        conv={conv}
+        draft={draft}
+        onPicked={(next) => {
+          setDraft(convId, next);
+          caretToEnd(next);
+        }}
+      />
       <Composer>
-        <IconButton name="add-photo-alternate" label="Gửi ảnh" color={c.accent} onPress={() => setAttachOpen(true)} disabled={offline} />
+        <IconButton name="add-circle-outline" label="Thêm: ảnh, bình chọn" color={theme.a} onPress={() => setAttachOpen(true)} disabled={offline} />
         <TextInput
           ref={inputRef}
           value={draft}
@@ -381,17 +479,30 @@ export function ChatScreen({ convId }: { convId: number }) {
           multiline
           maxLength={4000}
           editable={!offline}
+          selection={caret != null ? { start: caret, end: caret } : undefined}
           accessibilityLabel="Nhập tin nhắn"
         />
-        <Pressable
-          onPress={send}
-          disabled={!draft.trim() || offline}
-          style={({ pressed }) => [s.send, { backgroundColor: draft.trim() && !offline ? c.jade : c.field, opacity: pressed ? 0.8 : 1 }]}
-          accessibilityRole="button"
-          accessibilityLabel="Gửi"
-        >
-          <Icon name="send" size={20} color={draft.trim() && !offline ? c.onJade : c.muted} />
-        </Pressable>
+        {draft.trim() || editing ? (
+          <Pressable
+            onPress={send}
+            disabled={offline}
+            style={({ pressed }) => [s.send, { backgroundColor: !offline ? theme.a : c.field, opacity: pressed ? 0.8 : 1 }]}
+            accessibilityRole="button"
+            accessibilityLabel={editing ? "Lưu tin nhắn đã sửa" : "Gửi"}
+          >
+            <Icon name={editing ? "check" : "send"} size={20} color={!offline ? "#fff" : c.muted} />
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={send}
+            disabled={offline}
+            style={({ pressed }) => [s.send, { transform: [{ scale: pressed ? 1.25 : 1 }], opacity: offline ? 0.4 : 1 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Gửi ${quickEmoji}`}
+          >
+            <Text style={s.quickEmoji}>{quickEmoji}</Text>
+          </Pressable>
+        )}
       </Composer>
 
       {/* Chạm giữ tin nhắn */}
@@ -426,7 +537,49 @@ export function ChatScreen({ convId }: { convId: number }) {
                 setTimeout(() => inputRef.current?.focus(), 250);
               }}
             />
-            {menuFor.text ? (
+            {menuFor.senderId === meId && menuFor.kind === "text" && menuFor.text != null ? (
+              <SheetItem
+                icon="edit"
+                label="Sửa"
+                onPress={() => {
+                  startEdit(convId, menuFor);
+                  setMenuFor(null);
+                  caretToEnd(menuFor.text || "", 250);
+                }}
+              />
+            ) : null}
+            {menuFor.kind !== "poll" ? (
+              <SheetItem
+                icon="forward"
+                label="Chuyển tiếp"
+                onPress={() => {
+                  setForwardFor(menuFor);
+                  setMenuFor(null);
+                }}
+              />
+            ) : null}
+            <SheetItem
+              icon="push-pin"
+              label={isPinnedMsg({ pins: { [convId]: pins || [] } }, menuFor) ? "Bỏ ghim" : "Ghim"}
+              hint={isPinnedMsg({ pins: { [convId]: pins || [] } }, menuFor) ? undefined : "Hiện ở đầu cuộc trò chuyện cho mọi người"}
+              onPress={() => {
+                const m = menuFor;
+                setMenuFor(null);
+                pinMessage(m, !isPinnedMsg({ pins: { [convId]: pins || [] } }, m));
+              }}
+            />
+            {menuFor.kind === "poll" && menuFor.senderId === meId && menuFor.poll && !menuFor.poll.closed ? (
+              <SheetItem
+                icon="how-to-vote"
+                label="Kết thúc bình chọn"
+                onPress={() => {
+                  const m = menuFor;
+                  setMenuFor(null);
+                  closePoll(m);
+                }}
+              />
+            ) : null}
+            {menuFor.text && menuFor.kind !== "poll" ? (
               <SheetItem
                 icon="content-copy"
                 label="Sao chép"
@@ -500,13 +653,48 @@ export function ChatScreen({ convId }: { convId: number }) {
         />
       </Sheet>
 
-      <Sheet visible={attachOpen} onClose={() => setAttachOpen(false)} title="Gửi ảnh">
-        <SheetItem icon="photo-library" label="Chọn ảnh trong máy" hint="Tối đa 10 ảnh mỗi lần" onPress={() => attach(false)} />
-        <SheetItem icon="photo-camera" label="Chụp ảnh" onPress={() => attach(true)} />
+      <Sheet visible={attachOpen} onClose={() => setAttachOpen(false)} title="Gửi">
+        {bubble ? (
+          <SheetItem
+            icon="photo-library"
+            label="Gửi ảnh"
+            hint="Mở trong app để chọn hoặc chụp ảnh"
+            onPress={() => {
+              setAttachOpen(false);
+              bubble.onOpenApp();
+            }}
+          />
+        ) : (
+          <>
+            <SheetItem icon="photo-library" label="Chọn ảnh trong máy" hint="Tối đa 10 ảnh mỗi lần" onPress={() => attach(false)} />
+            <SheetItem icon="photo-camera" label="Chụp ảnh" onPress={() => attach(true)} />
+          </>
+        )}
+        <SheetItem
+          icon="poll"
+          label="Tạo bình chọn"
+          hint="Hỏi ý kiến mọi người, ai cũng chọn được"
+          onPress={() => {
+            setAttachOpen(false);
+            setTimeout(() => setPollOpen(true), 250);
+          }}
+        />
       </Sheet>
 
       <ImageViewer item={viewer} onClose={() => setViewer(null)} />
       <GroupInfoSheet visible={infoOpen} onClose={() => setInfoOpen(false)} conv={conv} />
+      <ConvSettingsSheet
+        conv={conv}
+        visible={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSearch={() => setSearchOpen(true)}
+        onMembers={() => setInfoOpen(true)}
+        onPins={() => setPinsOpen(true)}
+        onOpenImage={(image) => setViewer({ ...(list.find((m) => m.image === image) || { id: 0, conversationId: convId, senderId: 0, kind: "text", text: null, deleted: false, createdAt: 0, replyTo: null, reactions: [] }), image } as Message)}
+      />
+      <PinsSheet conv={conv} visible={pinsOpen} onClose={() => setPinsOpen(false)} onJump={jumpTo} />
+      <PollSheet convId={convId} visible={pollOpen} onClose={() => setPollOpen(false)} />
+      <ForwardSheet message={forwardFor} onClose={() => setForwardFor(null)} />
       {conv.type === "dm" ? <ChallengeSheet visible={chessOpen} onClose={() => setChessOpen(false)} opponentId={conv.peerId} /> : null}
     </KeyboardAware>
   );
@@ -642,6 +830,7 @@ const makeStyles = (c: Colors) =>
       paddingBottom: 10,
     },
     send: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+    quickEmoji: { fontSize: 27, lineHeight: 34 },
     emojiRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 },
     emojiBtn: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
     emojiText: { fontSize: 28 },

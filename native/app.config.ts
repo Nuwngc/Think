@@ -45,8 +45,9 @@ const config: ExpoConfig = {
     predictiveBackGestureEnabled: false,
     softwareKeyboardLayoutMode: "resize",
     allowBackup: false,
-    permissions: ["POST_NOTIFICATIONS"],
-    blockedPermissions: ["android.permission.RECORD_AUDIO", "android.permission.SYSTEM_ALERT_WINDOW"],
+    // SYSTEM_ALERT_WINDOW: bong bóng chat nổi trên màn hình (chỉ dùng khi người dùng bật trong Cài đặt)
+    permissions: ["POST_NOTIFICATIONS", "SYSTEM_ALERT_WINDOW"],
+    blockedPermissions: ["android.permission.RECORD_AUDIO"],
     ...(hasGoogleServices ? { googleServicesFile: "./google-services.json" } : {}),
   },
   ios: {

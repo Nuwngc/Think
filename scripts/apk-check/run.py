@@ -30,6 +30,7 @@ ap.add_argument("--password", default="tester12345")
 ap.add_argument("--label", default="")
 ap.add_argument("--server", default="http://127.0.0.1:3000")
 ap.add_argument("--report-checks", action="store_true", help="kiểm tra cả phần báo lỗi app (bản app có phần báo lỗi)")
+ap.add_argument("--bubble-checks", action="store_true", help="kiểm tra bong bóng chat (bản app có bong bóng chat)")
 ap.add_argument("--admin-password", default=os.environ.get("ADMIN_PASSWORD", "admin-ci-12345"))
 args = ap.parse_args()
 OUT = args.out
@@ -180,8 +181,33 @@ def dismiss_system_dialogs(root=None):
     return False
 
 
+def wait_boot(timeout=240):
+    """Chờ Android chạy xong (máy ảo đôi khi tự khởi động lại phần hệ thống giữa chừng)"""
+    end = time.time() + timeout
+    while time.time() < end:
+        if sh("getprop sys.boot_completed").strip() == "1" and "package:" in sh("pm path android"):
+            return True
+        time.sleep(2)
+    return False
+
+
+def ensure_installed():
+    """App còn cài trên máy ảo không; mất (máy ảo vừa khởi động lại giữa lúc cài) thì cài lại"""
+    for _ in range(3):
+        wait_boot()
+        if "package:" in sh(f"pm path {PKG}"):
+            return True
+        log("  (app chưa có trên máy ảo, cài lại)")
+        log(adb("install", "-r", "-g", args.apk, timeout=240))
+        time.sleep(3)
+    return "package:" in sh(f"pm path {PKG}")
+
+
 def launch():
-    sh(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1")
+    out = sh(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1")
+    if "No activities found" in out or "Unable to connect" in out:
+        ensure_installed()
+        sh(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1")
     time.sleep(3)
 
 
@@ -217,16 +243,23 @@ def play_one_block():
 
 # ---------- máy chủ thử (kiểm tra báo lỗi đã tới nơi) ----------
 
+def api_call(path, body=None, token=None):
+    req = urllib.request.Request(args.server + path, data=json.dumps(body).encode() if body is not None else None, method="POST" if body is not None else "GET")
+    req.add_header("content-type", "application/json")
+    if token:
+        req.add_header("authorization", f"Bearer {token}")
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read() or b"{}")
+
+
+def login_token(user, password):
+    r = api_call("/api/login", {"username": user, "password": password, "client": "app"})
+    return r.get("token"), (r.get("user") or {}).get("id")
+
+
 def server_reports():
-    def call(path, body=None, token=None):
-        req = urllib.request.Request(args.server + path, data=json.dumps(body).encode() if body is not None else None, method="POST" if body is not None else "GET")
-        req.add_header("content-type", "application/json")
-        if token:
-            req.add_header("authorization", f"Bearer {token}")
-        with urllib.request.urlopen(req, timeout=15) as r:
-            return json.loads(r.read() or b"{}")
-    token = call("/api/login", {"username": "admin", "password": args.admin_password, "client": "app"}).get("token")
-    return call("/api/admin/errors", token=token).get("errors", [])
+    token, _ = login_token("admin", args.admin_password)
+    return api_call("/api/admin/errors", token=token).get("errors", [])
 
 
 def wait_report(text, timeout=30):
@@ -322,9 +355,9 @@ def s_chat():
     if box is None:
         raise RuntimeError("Không thấy ô nhập tin nhắn")
     tap_xy(*center(box))
-    type_text("Tin nhan tu may ao")
+    type_text("apkcheck1")  # chữ không có trong từ điển (bàn phím không tự sửa)
     tap(r"^Gửi$")
-    if wait_for(r"Tin nhan tu may ao", 15) is None:
+    if wait_for(r"apkcheck1", 15) is None:
         raise RuntimeError("Gửi tin nhắn không hiện lên")
 
 
@@ -449,11 +482,158 @@ def s_rotate_like_resume():
     time.sleep(2)
 
 
+# ---------- bong bóng chat ----------
+
+BUBBLE_TEXT = "apkbubble1"
+BUBBLE_REPLY = "apkreply1"
+bubble = {}
+
+
+def dm_with_tester():
+    """Cuộc trò chuyện riêng giữa Bạn Bè và Người Thử (token của Bạn Bè, mã cuộc trò chuyện)"""
+    if "conv" not in bubble:
+        _, tester_id = login_token(args.user, args.password)
+        token, _ = login_token("ban", "ban12345")
+        dm = api_call("/api/conversations/dm", {"userId": tester_id}, token=token)
+        bubble.update(token=token, conv=(dm.get("conversation") or dm)["id"])
+    return bubble["token"], bubble["conv"]
+
+
+def head_frame():
+    """Vị trí bong bóng trên màn hình (đọc từ danh sách cửa sổ của Android), None nếu không có"""
+    lines = sh("dumpsys window windows", timeout=40).splitlines()
+    for i, ln in enumerate(lines):
+        if "ThinkChatHead}" in ln or ("ThinkChatHead" in ln and "Window{" in ln and "Close" not in ln and "Preview" not in ln):
+            if "ThinkChatHeadClose" in ln:
+                continue
+            for nxt in lines[i + 1:i + 60]:
+                m = re.search(r"(?:mFrame=|\bframe=)\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]", nxt)
+                if m:
+                    x1, y1, x2, y2 = map(int, m.groups())
+                    # bỏ qua khung cả màn hình (của cửa sổ cha), bong bóng chỉ cỡ 70dp
+                    if x2 > x1 and y2 > y1 and x2 - x1 < 500 and y2 - y1 < 500:
+                        return x1, y1, x2, y2
+    return None
+
+
+def wait_head(present=True, timeout=20):
+    end = time.time() + timeout
+    while time.time() < end:
+        f = head_frame()
+        if (f is not None) == present:
+            return f if present else True
+        time.sleep(1)
+    return None
+
+
+def resumed_activity():
+    out = sh("dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity'")
+    return out
+
+
+def s_bubble_enable():
+    sh(f"appops set {PKG} SYSTEM_ALERT_WINDOW allow")
+    open_link("thinkbeta://test-bubbles")
+    time.sleep(3)
+    for _ in range(10):
+        if "ChatHeadService" in sh(f"dumpsys activity services {PKG}"):
+            return "dịch vụ bong bóng chat đang chạy"
+        time.sleep(1)
+    raise RuntimeError("Bật bong bóng chat nhưng dịch vụ không chạy")
+
+
+def s_bubble_head():
+    sh("input keyevent 3")  # về màn hình chính của máy
+    time.sleep(3)
+    token, conv = dm_with_tester()
+    api_call(f"/api/conversations/{conv}/messages", {"text": BUBBLE_TEXT}, token=token)
+    f = wait_head(True, 25)
+    if not f:
+        raise RuntimeError("Có tin mới khi app chạy nền nhưng không thấy bong bóng")
+    bubble["frame"] = f
+    return f"bong bóng ở {f}"
+
+
+def s_bubble_open():
+    f = head_frame() or bubble.get("frame")
+    if not f:
+        raise RuntimeError("Không có bong bóng để chạm")
+    tap_xy((f[0] + f[2]) // 2, (f[1] + f[3]) // 2)
+    time.sleep(2)
+    if wait_for(BUBBLE_TEXT, 25) is None:
+        raise RuntimeError("Chạm bong bóng nhưng khung chat không hiện tin mới")
+    if wait_for(r"Nhập tin nhắn", 10) is None:
+        raise RuntimeError("Khung chat nổi không có ô nhập tin")
+    top = resumed_activity()
+    if "BubbleActivity" not in top:
+        raise RuntimeError(f"Không phải khung chat nổi: {top.strip()[:200]}")
+
+
+def s_bubble_reply():
+    box = wait_for(r"Nhập tin nhắn", 10)
+    tap_xy(*center(box))
+    type_text(BUBBLE_REPLY)
+    tap(r"^Gửi$")
+    token, conv = dm_with_tester()
+    end = time.time() + 20
+    while time.time() < end:
+        msgs = api_call(f"/api/conversations/{conv}/messages", token=token).get("messages", [])
+        if any(m.get("text") == BUBBLE_REPLY for m in msgs):
+            return "máy chủ đã nhận tin trả lời từ khung chat nổi"
+        time.sleep(1.5)
+    raise RuntimeError("Gửi trong khung chat nổi nhưng máy chủ không nhận được")
+
+
+def s_bubble_minimize():
+    hide_keyboard()
+    back()
+    time.sleep(1.5)
+    if "BubbleActivity" in resumed_activity():
+        raise RuntimeError("Bấm Quay lại không thu nhỏ khung chat")
+    if not wait_head(True, 8):
+        raise RuntimeError("Thu nhỏ xong bong bóng biến mất")
+    return "đã thu nhỏ, bong bóng vẫn còn"
+
+
+def s_bubble_dismiss():
+    f = head_frame()
+    if not f:
+        raise RuntimeError("Không thấy bong bóng để kéo")
+    size = re.findall(r"(\d+)x(\d+)", sh("wm size"))
+    w, h = map(int, size[-1]) if size else (1080, 2400)
+    dens = re.findall(r"(\d+)", sh("wm density"))
+    dpi = int(dens[-1]) if dens else 420
+    target_y = h - int(96 * dpi / 160)
+    sh(f"input swipe {(f[0] + f[2]) // 2} {(f[1] + f[3]) // 2} {w // 2} {target_y} 1500")
+    if not wait_head(False, 8):
+        raise RuntimeError("Kéo bong bóng vào dấu ✕ nhưng bong bóng không ẩn")
+    return "đã ẩn bong bóng"
+
+
+def s_bubble_app_after():
+    launch()
+    if wait_for(r"^Tin nhắn", 30) is None:
+        raise RuntimeError("Mở lại app sau khi dùng bong bóng không được")
+    tap(r"^Tin nhắn")  # app đang ở tab Cá nhân: sang danh sách tin nhắn
+    tap(r"^Bạn Bè($|[,.])")
+    if wait_for(BUBBLE_REPLY, 20) is None:
+        raise RuntimeError("Tin trả lời từ bong bóng không có trong app")
+    if wait_head(False, 3) is not True:
+        raise RuntimeError("App đang mở mà bong bóng vẫn hiện")
+    hide_keyboard()
+    back()
+    tap(r"^Cá nhân")  # trả lại tab cũ cho các bước sau
+
+
 # ---------- chạy ----------
 
 def main():
     log(f"Máy ảo: {sh('getprop ro.build.version.release').strip()} (API {sh('getprop ro.build.version.sdk').strip()}), {sh('getprop ro.product.model').strip()}")
+    wait_boot()
     log(adb("install", "-r", "-g", args.apk, timeout=240))
+    time.sleep(5)
+    if not ensure_installed():
+        log("::error::Không cài được APK lên máy ảo")
     sdk = int(re.sub(r"\D", "", sh("getprop ro.build.version.sdk")) or 0)
     if sdk >= 33:
         sh(f"pm grant {PKG} android.permission.POST_NOTIFICATIONS")
@@ -480,6 +660,14 @@ def main():
         step("Trang cá nhân", s_profile)
         step("Cuộn bảng tin", s_feed_and_scroll)
         step("Tắt và bật màn hình", s_rotate_like_resume)
+        if args.bubble_checks:
+            step("Bong bóng chat: bật", s_bubble_enable)
+            step("Bong bóng chat: có tin mới khi app chạy nền", s_bubble_head)
+            step("Bong bóng chat: chạm để mở khung chat", s_bubble_open)
+            step("Bong bóng chat: trả lời trong khung chat", s_bubble_reply)
+            step("Bong bóng chat: thu nhỏ", s_bubble_minimize)
+            step("Bong bóng chat: kéo vào ✕ để ẩn", s_bubble_dismiss)
+            step("Bong bóng chat: mở lại app", s_bubble_app_after)
         if args.report_checks:
             step("Báo lỗi: màn hình bị lỗi", s_report_render_error)
             step("Báo lỗi: app crash", s_report_crash)

@@ -7,20 +7,25 @@ App có tên **Think Beta** (mã gói `com.nuwngc.think.beta`), cài **song song
 ## Có gì trong app
 
 - Đăng nhập bằng tài khoản Think, lần đầu bắt buộc đặt mật khẩu mới.
-- Danh sách chat: tìm không cần dấu, lọc Chưa đọc / Nhóm / Riêng tư, số tin chưa đọc.
+- Danh sách chat: tìm không cần dấu, lọc Chưa đọc / Nhóm / Riêng tư, số tin chưa đọc. **Chạm giữ** một cuộc trò chuyện để **ghim lên đầu**, **tắt thông báo** (1 / 8 / 24 giờ hoặc đến khi bật lại), đánh dấu đã đọc.
 - Chat: gửi chữ, **gửi ảnh** (chọn trong máy hoặc chụp, tự thu nhỏ), **trả lời tin**, **thả cảm xúc**, **thu hồi**, sao chép, xem ảnh lớn và **lưu/chia sẻ ảnh**, "đang nhập…", "Đã gửi / Đã xem", tin cũ tải thêm khi kéo lên.
+- **Chat 2.1.0**: **sửa tin nhắn**, **ghim tin nhắn** (thanh ghim trên đầu), **tìm tin nhắn** (nút kính lúp), **chuyển tiếp**, **@nhắc tên** trong nhóm, **bình chọn** (nút ＋), nút ⓘ **Tùy chỉnh đoạn chat**: 12 **chủ đề màu**, **biểu tượng gửi nhanh** (ô nhập trống thì bấm là gửi 👍), tắt thông báo, ghim, **ảnh đã gửi**.
+- **Bong bóng chat** (Cài đặt → Bong bóng chat, Android 8 trở lên): tin mới khi không mở app hiện thành ảnh người nhắn nổi trên màn hình như Messenger, chạm để mở **khung chat nhỏ** trả lời ngay, kéo xuống ✕ để ẩn. Khi bật, app chạy nền nên **máy không có dịch vụ Google (Huawei) vẫn nhận được thông báo** tin mới. Chi tiết ở mục 18 của README chính.
 - Nhắn riêng, **tạo nhóm**, đổi tên nhóm, thêm / xóa người, rời nhóm.
 - **Trang cá nhân + bảng tin** (tab Cá nhân): ảnh bìa, lời giới thiệu, số bài / lượt thích / ELO; đăng bài có chữ và ảnh, **thả tim**, **bình luận**, xem trang của người khác (có nút Nhắn tin, Thách cờ). Mục **Bảng tin** (cả nhóm) và **Bài của tôi**, cập nhật ngay không cần tải lại. Chi tiết ở mục 15 của README chính.
 - **Cài đặt** (nút ⚙ ở trang cá nhân): đổi tên, lời giới thiệu, ảnh đại diện, **ảnh bìa**, **giao diện sáng / tối** (Theo máy, Nền sáng, Nền tối), bật/tắt thông báo, đổi mật khẩu (mục Bảo mật), kiểm tra bản mới.
-- Quản trị (admin): tạo tài khoản (hiện mật khẩu tạm để gửi), đặt lại mật khẩu, khóa / mở khóa, cấp quyền admin, xem bộ nhớ máy chủ, tự dọn / dọn thủ công.
+- Quản trị (admin): tạo tài khoản (hiện mật khẩu tạm để gửi), đặt lại mật khẩu, khóa / mở khóa, cấp quyền admin, xem bộ nhớ máy chủ, tự dọn / dọn thủ công, **Báo lỗi app** (app tự gửi khi bị crash hay màn hình lỗi: tên máy, Android / HarmonyOS, bản app, chi tiết kỹ thuật).
 - **Thông báo đẩy** khi đóng app, bấm **Trả lời** hoặc **Đã đọc** ngay trong thông báo (cần bước 3 bên dưới).
 - **Lưu trên máy**: mở app là thấy ngay tin nhắn cũ kể cả khi máy chủ đang ngủ hoặc mất mạng, tự kết nối lại.
-- **Tab Trò chơi**: trang chọn game (Xếp Khối, Cờ vua) và bảng xếp hạng tuần của cả nhóm.
+- **Tab Trò chơi**: trang chọn game (Xếp Khối, Cờ vua, Cờ caro) và bảng xếp hạng của cả nhóm.
 - **Xếp Khối** (kiểu Block Blast): kéo khối vào bàn 8×8, xóa hàng / cột, combo, hiệu ứng nổ, âm thanh, **chơi được khi mất mạng** (có nút chơi ngay ở màn đăng nhập / màn chờ máy chủ), điểm tự gửi lên **bảng xếp hạng** tuần này / mọi lúc khi có mạng. Chi tiết ở mục 16 của README chính.
 - **Cờ vua** (tab Trò chơi → Cờ vua): thách đấu bạn bè có chọn thời gian, đồng hồ, **điểm ELO**, **bảng xếp hạng**, chơi với 8 máy cờ (có Stockfish), thông báo khi có người thách hoặc tới lượt đi, **lịch sử và xem lại ván** (tự chạy), **đánh giá ván kiểu Game Review** (Thiên tài !!, Tuyệt vời !, Tốt nhất, Theo sách, Sai lầm ??…, thanh đánh giá, huy hiệu trên bàn cờ, nhận xét từng nước, xem nước tốt nhất, bảng tổng kết, tên khai cuộc), **bật/tắt chỉ dẫn** và **âm thanh** quân gỗ (nước mình / đối thủ khác tiếng, sắp hết giờ, đi sai), **chia sẻ ván** lên trang cá nhân hoặc vào cuộc trò chuyện (hiện thành thẻ bấm được để mở ván). Trong chat riêng có nút quân mã để thách nhanh. Chơi chéo được với người dùng bản web. Chi tiết ở mục 14 của README chính.
+- **Cờ caro** (tab Trò chơi → Cờ caro): bàn 15×15 kiểu giấy kẻ ô, 5 quân liền là thắng, luật **tự do** hoặc **chặn hai đầu**. **Chơi với máy** (Dễ / Vừa / Khó, chạy hẳn trên điện thoại, không cần mạng, ván dở được lưu để chơi tiếp, có Đi lại / Đổi bên, thành tích theo từng mức). **Thách đấu bạn bè** (15 / 30 / 60 / 120 giây mỗi nước hoặc không giới hạn, chọn bên, tính / không tính **điểm ELO**), nước đi hiện ngay, đồng hồ mỗi nước theo giờ máy chủ, đầu hàng, đấu lại, **bảng xếp hạng**, thông báo khi có người thách hoặc tới lượt. Chạm một ô để xem trước quân mờ, chạm lại để đánh. Có âm thanh (tắt được) và pháo giấy khi thắng. Chơi chéo được với người dùng bản web.
 - Giao diện sáng / tối theo máy hoặc tự chọn trong Cài đặt. Chạy từ Android 7 trở lên.
 
-Chưa có (so với app bong bóng chat hiện tại): **bong bóng chat nổi** kiểu Messenger. Muốn bong bóng thì vẫn dùng app Think cũ.
+Từ bản này app đã có **bong bóng chat nổi** như app Think cũ, nên có thể dùng Think Beta thay hẳn app cũ.
+
+Mỗi lần sửa code trong `native/`, GitHub tự **chạy thử bản APK trên máy ảo Android 10 và Android 14** (workflow **Kiểm tra APK**, xem mục 19 của README chính) để bắt lỗi crash trước khi phát hành.
 
 ---
 
@@ -93,6 +98,9 @@ Mẹo: trên Render, mục **Settings → Build & Deploy → Build Filters → I
 | Đăng nhập chờ lâu | Máy chủ Render miễn phí đang ngủ, cần tới 1 phút để thức dậy. Đừng tắt app. |
 | Không có thông báo khi đóng app | Cá nhân → Thông báo tin nhắn mới phải đang bật. Cài đặt điện thoại → Pin → cho Think Beta chạy nền không giới hạn (máy Xiaomi/Oppo/Vivo: bật thêm **Tự khởi chạy**). |
 | Thông báo đến nhưng không có nút Trả lời | Mở app một lần sau khi cài (app tạo kênh thông báo và nút lúc mở). |
+| Máy Huawei (không có dịch vụ Google) không có thông báo | Bật **Cài đặt → Bong bóng chat**: app chạy nền và tự hiện thông báo + bong bóng khi có tin mới. Cài đặt điện thoại → Pin → Khởi chạy ứng dụng → Think Beta: **Quản lý thủ công**, bật cả 3 mục. |
+| Bật bong bóng chat không được / bong bóng không hiện | Cho Think Beta quyền **Hiển thị trên ứng dụng khác** (Cài đặt điện thoại → Ứng dụng → Think Beta). Bong bóng chỉ hiện khi **không mở app** và cuộc trò chuyện không bị tắt thông báo. Bấm **Thử bong bóng** trong Cài đặt để xem thử. |
+| App bị tắt đột ngột | App tự gửi báo lỗi, admin xem ở **Quản trị → Báo lỗi app**. Lần mở sau báo lỗi mới được gửi đi (nếu lúc tắt không có mạng). |
 
 ---
 
@@ -105,6 +113,12 @@ native/
   src/store.ts             Dữ liệu của app, kết nối realtime (Socket.IO), đăng nhập, gửi tin…
   src/api.ts               Gọi API máy chủ Think (mã phiên gửi trong header Authorization)
   src/notifications.ts     Thông báo đẩy, nút Trả lời / Đã đọc
+  src/chatPlus.ts, src/chatThemes.ts  Chat 2.1.0: chủ đề, biểu tượng nhanh, tắt thông báo, @nhắc tên, bình chọn (hàm thuần, có kiểm thử)
+  src/bubbles.ts           Bong bóng chat: bật / xin quyền, hiện bong bóng khi có tin mới lúc app chạy nền, giữ kết nối
+  src/bubble/BubbleApp.tsx Khung chat nổi khi chạm bong bóng (màn hình "ThinkBubble")
+  src/errors.ts            Báo lỗi app tự động (lỗi JavaScript, màn hình lỗi, gửi lỗi crash đã lưu)
+  modules/think-native/    Phần Android viết bằng Kotlin: bắt crash (CrashCatcher), bong bóng chat (ChatHeadService,
+                           BubbleActivity, ChatHeads); tự được Expo nối vào app khi build
   src/background.ts        Tác vụ nền khi bấm nút trong thông báo lúc app đã tắt
   src/cache.ts             Lưu bản sao trên máy để mở app nhanh / khi mất mạng
   src/format.ts            Chữ, giờ, tin hệ thống — giống bản web
@@ -112,13 +126,14 @@ native/
   src/games/               Tab Trò chơi (trang chọn game)
   src/blocks/              Xếp Khối: engine.ts (luật, giống public/blocks-core.js), store.ts (lưu trên máy, gửi điểm), BlocksScreen.tsx
   src/chess/               Cờ vua: bàn cờ, ván cờ, thách đấu, bảng xếp hạng, đánh giá ván (luật: chess.js)
+  src/caro/                Cờ caro: engine.ts (luật + máy, giống public/caro-core.js), store.ts (thách đấu, ván với máy lưu trên máy), bàn cờ, các màn
   src/social/              Trang cá nhân, bảng tin, bình luận, chia sẻ ván cờ (store.ts: dữ liệu; SocialHost.tsx: các bảng)
   src/theme.ts             Màu sáng / tối và lựa chọn giao diện (lưu trên máy)
   credentials/             Khóa ký app đã khóa (không có mã thì không mở được)
   tests/                   Kiểm thử (npm test)
 ```
 
-Kiểm tra trước khi push: `npm install` rồi `npm run check && npm run lint && npm test`.
+Kiểm tra trước khi push: `npm install` rồi `npm run check && npm run lint && npm test && npm run check:native` (lệnh cuối so phiên bản các thư viện native với bản Expo — lệch phiên bản là nguyên nhân crash ở bản 0.1.4 / 0.1.5).
 
 Chạy thử giao diện trên máy tính (trình duyệt), trỏ vào máy chủ Think chạy ở máy mình:
 

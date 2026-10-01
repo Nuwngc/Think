@@ -32,11 +32,18 @@ export type ReplyRef = {
   image: boolean;
 };
 
+/** Bình chọn trong cuộc trò chuyện (tin loại "poll", câu hỏi nằm ở text) */
+export type Poll = {
+  multi: boolean;
+  closed: boolean;
+  options: { text: string; votes: number[] }[];
+};
+
 export type Message = {
   id: number;
   conversationId: number;
   senderId: number;
-  kind: "text" | "system";
+  kind: "text" | "system" | "poll";
   text: string | null;
   image: string | null;
   deleted: boolean;
@@ -45,7 +52,17 @@ export type Message = {
   reactions: Reaction[];
   imagePurged?: boolean;
   clientId?: string;
+  /** Lần sửa gần nhất (đã chỉnh sửa) */
+  editedAt?: number;
+  /** Chuyển tiếp từ cuộc trò chuyện khác */
+  forwarded?: boolean;
+  /** Những người được @nhắc tên */
+  mentions?: number[];
+  poll?: Poll | null;
 };
+
+/** Tin nhắn được ghim trong cuộc trò chuyện */
+export type Pin = { message: Message; pinnedBy: number | null; pinnedAt: number };
 
 /** Tin đang gửi (chưa có mã từ máy chủ) hoặc gửi lỗi. */
 export type PendingMessage = {
@@ -60,6 +77,7 @@ export type PendingMessage = {
   createdAt: number;
   replyTo: ReplyRef | null;
   reactions: Reaction[];
+  mentions?: number[];
   localUri?: string;
   mime?: string;
   width?: number;
@@ -87,6 +105,12 @@ export type Conversation = {
   lastMessage: Message | null;
   /** Ai đã đọc tới tin nào (chỉ có sau khi mở cuộc trò chuyện) */
   reads?: Record<number, number>;
+  /** Chủ đề (màu bong bóng chat) và biểu tượng gửi nhanh, chung cả cuộc trò chuyện (máy chủ cũ chưa có) */
+  theme?: string;
+  emoji?: string;
+  /** Riêng mình: tắt thông báo tới lúc nào (-1 = mãi mãi, 0 = đang bật), ghim lên đầu danh sách */
+  mutedUntil?: number;
+  pinnedAt?: number | null;
 };
 
 export type StorageUsage = {
@@ -138,4 +162,23 @@ export type ProfileStats = {
   likes: number;
   chess: { rating: number; games: number; wins: number } | null;
   blocks?: { best: number; games: number } | null;
+  caro?: { rating: number; games: number; wins: number } | null;
+};
+
+/** Báo lỗi app (Quản trị → Báo lỗi app) */
+export type ErrorReport = {
+  id: number;
+  kind: string;
+  fatal: boolean;
+  message: string;
+  stack: string | null;
+  platform: string;
+  appVersion: string | null;
+  osVersion: string | null;
+  device: string | null;
+  where: string | null;
+  userIds: number[];
+  count: number;
+  firstAt: number;
+  lastAt: number;
 };

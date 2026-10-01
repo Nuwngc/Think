@@ -208,6 +208,17 @@ ensureColumn('conversations', 'created_by', 'created_by INTEGER');       // trư
 ensureColumn('messages', 'image_purged', 'image_purged INTEGER NOT NULL DEFAULT 0'); // ảnh đã bị dọn khỏi máy chủ
 ensureColumn('users', 'cover', 'cover TEXT');                               // ảnh bìa trang cá nhân
 ensureColumn('users', 'bio', 'bio TEXT');                                   // giới thiệu ngắn
+// 2.1.0: sửa tin nhắn, chuyển tiếp, nhắc tên, tìm kiếm không dấu
+ensureColumn('messages', 'edited_at', 'edited_at INTEGER');                 // lần sửa gần nhất
+ensureColumn('messages', 'forwarded', 'forwarded INTEGER NOT NULL DEFAULT 0'); // tin chuyển tiếp từ cuộc trò chuyện khác
+ensureColumn('messages', 'mentions', 'mentions TEXT');                      // id những người được @nhắc tên, cách nhau dấu phẩy
+ensureColumn('messages', 'search_text', 'search_text TEXT');                // chữ thường không dấu, để tìm tin nhắn
+// 2.1.0: mỗi người tự tắt thông báo / ghim cuộc trò chuyện lên đầu
+ensureColumn('members', 'muted_until', 'muted_until INTEGER NOT NULL DEFAULT 0'); // tắt thông báo tới lúc này (-1 = mãi mãi)
+ensureColumn('members', 'pinned_at', 'pinned_at INTEGER');
+// 2.1.0: chủ đề (màu bong bóng chat) và biểu tượng gửi nhanh của cuộc trò chuyện
+ensureColumn('conversations', 'theme', 'theme TEXT');
+ensureColumn('conversations', 'emoji', 'emoji TEXT');
 if (!db.prepare('PRAGMA table_info(messages)').all().some((c) => c.name === 'updated_at')) {
   // Thời điểm tin nhắn thay đổi lần cuối (thu hồi, cảm xúc, dọn ảnh) để máy người dùng đồng bộ
   db.exec('ALTER TABLE messages ADD COLUMN updated_at INTEGER');
@@ -242,7 +253,57 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  -- Tin nhắn được ghim trong cuộc trò chuyện
+  CREATE TABLE IF NOT EXISTS message_pins (
+    message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+    conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    pinned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    pinned_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_message_pins_conv ON message_pins(conversation_id, pinned_at);
+
+  -- Bình chọn: tin nhắn loại 'poll' (câu hỏi nằm ở messages.text)
+  CREATE TABLE IF NOT EXISTS polls (
+    message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+    options TEXT NOT NULL,
+    multi INTEGER NOT NULL DEFAULT 0,
+    closed INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS poll_votes (
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    option INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (message_id, user_id, option)
+  );
 `);
+
+// Chữ thường, bỏ dấu tiếng Việt: để tìm tin nhắn không cần gõ dấu
+function searchKey(text) {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Tin nhắn cũ (trước 2.1.0) chưa có chữ để tìm: bổ sung dần mỗi lần khởi động
+(function backfillSearch() {
+  const rows = db.prepare("SELECT id, text FROM messages WHERE search_text IS NULL AND text IS NOT NULL AND kind <> 'system' LIMIT 50000").all();
+  if (!rows.length) return;
+  const update = db.prepare('UPDATE messages SET search_text = ? WHERE id = ?');
+  db.exec('BEGIN');
+  try {
+    for (const r of rows) update.run(searchKey(r.text), r.id);
+    db.exec('COMMIT');
+  } catch {
+    db.exec('ROLLBACK');
+  }
+})();
 
 // Cache câu lệnh đã chuẩn bị để chạy nhanh hơn
 const statements = new Map();
@@ -303,4 +364,4 @@ function setSetting(key, value) {
   );
 }
 
-module.exports = { db, get, all, run, transaction, getSetting, setSetting, DATA_DIR, UPLOAD_DIR, AVATAR_DIR, IMAGE_DIR, GENERAL_ID };
+module.exports = { db, get, all, run, transaction, getSetting, setSetting, searchKey, DATA_DIR, UPLOAD_DIR, AVATAR_DIR, IMAGE_DIR, GENERAL_ID };
