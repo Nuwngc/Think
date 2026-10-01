@@ -421,6 +421,7 @@ class ChatHeadService : Service() {
   /** Mở khung chat nổi: bong bóng lên góc trên bên phải */
   fun expand() {
     removePreview()
+    unread = 0 // đang đọc trong khung chat: bỏ số chưa đọc trên bong bóng
     if (!headShown || expanded) {
       expanded = true
       return
