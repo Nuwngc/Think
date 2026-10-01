@@ -1,2 +1,29 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Bong bóng chat: vẽ trên ứng dụng khác, chạy nền để nhận tin ngay -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+  <application>
+    <service
+      android:name="expo.modules.thinknative.ChatHeadService"
+      android:exported="false"
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="Bong bong chat noi tren man hinh va giu ket noi de nhan tin nhan ngay" />
+    </service>
+
+    <activity
+      android:name="expo.modules.thinknative.BubbleActivity"
+      android:exported="false"
+      android:theme="@style/Theme.ThinkBubble"
+      android:taskAffinity="${applicationId}.bubble"
+      android:launchMode="singleTask"
+      android:excludeFromRecents="true"
+      android:documentLaunchMode="never"
+      android:windowSoftInputMode="adjustResize"
+      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+      android:screenOrientation="portrait" />
+  </application>
 </manifest>

@@ -10,6 +10,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { BlocksScreen } from "./src/blocks/BlocksScreen";
+import { initBubbles, setBubbles } from "./src/bubbles";
 import { openStandalone, useBlocks } from "./src/blocks/store";
 import { loadPrefs } from "./src/chess/prefs";
 import { TEST_BUILD } from "./src/config";
@@ -105,12 +106,14 @@ export default function App() {
     setupNotifications();
     checkForUpdate();
     if (Platform.OS === "web") return;
+    initBubbles();
     let linkSub: { remove(): void } | null = null;
     if (TEST_BUILD) {
       const onUrl = (url: string | null) => {
         if (url === "thinkbeta://test-crash") ThinkNative?.crashForTest();
         if (url === "thinkbeta://test-render-error") setBomb(true);
         if (url === "thinkbeta://test-flush") flushReports();
+        if (url === "thinkbeta://test-bubbles") setBubbles(true);
       };
       Linking.getInitialURL().then(onUrl).catch(() => undefined);
       linkSub = Linking.addEventListener("url", (e) => onUrl(e.url));

@@ -6,11 +6,39 @@ import { Platform } from "react-native";
 
 type DeviceInfo = { device: string; osVersion: string; appVersion: string; sdk: number; manufacturer: string };
 
+export type BubblesState = { supported: boolean; on: boolean; canDraw: boolean; running: boolean };
+
+/** Thông tin để vẽ bong bóng chat */
+export type HeadInfo = {
+  convId: number;
+  title: string;
+  initial: string;
+  color: string;
+  avatarUrl: string;
+  preview: string;
+  unread: number;
+  general: boolean;
+  /** Hiện cả khi app đang mở (nút "Thử bong bóng") */
+  force?: boolean;
+};
+
+export type ChatHeadEvent = { type: "open" | "disabled" | "dismissed" | "bubble-shown" | "bubble-hidden"; convId: number };
+
 type ThinkNativeModule = {
   takeReports(): string[];
   saveReport(json: string): boolean;
   deviceInfo(): DeviceInfo;
   crashForTest(): void;
+  bubblesState(): BubblesState;
+  setBubbles(on: boolean): boolean;
+  openOverlaySettings(): void;
+  showHead(info: HeadInfo): void;
+  hideHead(): void;
+  bubbleVisible(): boolean;
+  bubbleConv(): number;
+  minimizeBubble(): void;
+  openApp(): void;
+  addListener(event: "onChatHead", listener: (e: ChatHeadEvent) => void): { remove(): void };
 };
 
 export const ThinkNative: ThinkNativeModule | null =

@@ -16,4 +16,7 @@ android {
 
 dependencies {
   implementation "androidx.core:core-ktx:1.13.1"
+  implementation "androidx.appcompat:appcompat:1.7.0"
+  // Khung chat nổi (BubbleActivity) là một màn hình React Native dùng chung JavaScript với app
+  implementation "com.facebook.react:react-android"
 }

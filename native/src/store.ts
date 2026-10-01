@@ -1226,6 +1226,11 @@ async function onMessageNew(msg: Message) {
     return;
   }
   if (!fresh) patchConv(msg.conversationId, (c) => ({ unread: (c.unread || 0) + 1 }));
+  try {
+    hooks.onIncoming(msg); // bong bóng chat
+  } catch {
+    /* bong bóng lỗi không làm hỏng tin nhắn */
+  }
   const quiet = isMuted(get().convs[msg.conversationId]) && !(msg.mentions || []).includes(s.me?.id ?? -1);
   if (!here && s.appActive && !quiet) {
     const st = get();
@@ -1315,10 +1320,11 @@ function onAppState(st: string) {
   if (backgroundTimer) clearTimeout(backgroundTimer);
   backgroundTimer = null;
   if (!active) {
-    // Ở nền lâu: ngắt realtime cho đỡ tốn pin (tin mới sẽ đến bằng thông báo đẩy)
+    // Ở nền lâu: ngắt realtime cho đỡ tốn pin (tin mới sẽ đến bằng thông báo đẩy).
+    // Đang bật bong bóng chat thì giữ kết nối để tin mới hiện bong bóng ngay.
     backgroundTimer = setTimeout(() => {
       backgroundTimer = null;
-      if (!get().appActive && socket?.connected) socket.disconnect();
+      if (!get().appActive && socket?.connected && !hooks.keepAlive()) socket.disconnect();
     }, BACKGROUND_DISCONNECT);
     return;
   }
@@ -1329,6 +1335,32 @@ function onAppState(st: string) {
     dismissConversation(s.currentId);
     if (s.atBottom) markRead(s.currentId);
   }
+}
+
+/* ---------- Bong bóng chat (src/bubbles.ts gắn vào đây, tránh import vòng) ---------- */
+
+type BackgroundHooks = { keepAlive: () => boolean; onIncoming: (msg: Message) => void };
+let hooks: BackgroundHooks = { keepAlive: () => false, onIncoming: () => undefined };
+
+export function setBackgroundHooks(h: BackgroundHooks) {
+  hooks = h;
+}
+
+/** Nối lại realtime nếu đang ngắt (vd vừa bật bong bóng chat khi app ở nền lâu) */
+export function ensureConnected() {
+  if (socket && !socket.connected && get().phase === "ready") socket.connect();
+}
+
+export const lifecycleStarted = () => started;
+
+/** Màn hình đang xem (để khung chat nổi trả lại như cũ khi thu nhỏ) */
+export function viewState() {
+  const s = get();
+  return { currentId: s.currentId, tab: s.tab };
+}
+
+export function restoreView(v: { currentId: number | null; tab: Tab }) {
+  set({ currentId: v.currentId, tab: v.tab });
 }
 
 /** Gọi một lần khi app khởi động */

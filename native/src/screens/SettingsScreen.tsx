@@ -11,9 +11,10 @@ import { applyMe, changePassword, closeSettings, logout, showToast, turnPushOff,
 import { setThemeMode, useColors, useThemeMode, type Colors, type ThemeMode } from "../theme";
 import { Avatar, Button, Card, confirm, Field, FormError, Icon, IconButton, KeyboardAware, SectionLabel, Sheet, SheetItem, useStyles } from "../ui";
 import { checkForUpdate, currentVersionCode, currentVersionName } from "../update";
+import { BubblesSetting } from "./BubblesSetting";
 
 // Cài đặt (mở từ nút bánh răng ở trang cá nhân): tên và giới thiệu, ảnh bìa, giao diện sáng/tối,
-// thông báo, đổi mật khẩu, cập nhật app, đăng xuất.
+// thông báo, bong bóng chat, đổi mật khẩu, cập nhật app, đăng xuất.
 
 export function SettingsScreen() {
   const c = useColors();
@@ -262,6 +263,8 @@ export function SettingsScreen() {
             nền không giới hạn.
           </Text>
         ) : null}
+
+        <BubblesSetting />
 
         <SectionLabel>BẢO MẬT</SectionLabel>
         <Card>

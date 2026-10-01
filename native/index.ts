@@ -6,6 +6,7 @@ import "./src/background";
 import { registerRootComponent } from "expo";
 import * as SplashScreen from "expo-splash-screen";
 import { createElement, type ComponentType } from "react";
+import { AppRegistry } from "react-native";
 
 installErrorReporting();
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -19,3 +20,11 @@ function Root() {
 }
 
 registerRootComponent(Root);
+
+// Khung chat nổi khi chạm bong bóng chat (Android: BubbleActivity trong native/modules/think-native)
+function Bubble(props: { convId?: number }) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const BubbleApp = require("./src/bubble/BubbleApp").default as ComponentType<{ convId?: number }>;
+  return createElement(BubbleApp, props);
+}
+AppRegistry.registerComponent("ThinkBubble", () => Bubble);

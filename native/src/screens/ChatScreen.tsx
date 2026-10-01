@@ -98,7 +98,10 @@ function buildRows(list: ChatItem[], conv: Conversation, meId: number): Row[] {
   return rows.reverse();
 }
 
-export function ChatScreen({ convId }: { convId: number }) {
+/** Khung chat nổi (bong bóng chat): nút thu nhỏ thay cho Quay lại, có nút mở app */
+export type BubbleMode = { onClose: () => void; onOpenApp: () => void };
+
+export function ChatScreen({ convId, bubble }: { convId: number; bubble?: BubbleMode }) {
   const c = useColors();
   const s = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -322,8 +325,12 @@ export function ChatScreen({ convId }: { convId: number }) {
 
   return (
     <KeyboardAware bottomInset={false} style={{ backgroundColor: c.bg }}>
-      <View style={[s.header, { paddingTop: insets.top + 4 }]}>
-        <IconButton name="arrow-back" label="Quay lại" onPress={closeConversation} color={c.text} />
+      <View style={[s.header, { paddingTop: bubble ? 6 : insets.top + 4 }]}>
+        {bubble ? (
+          <IconButton name="keyboard-arrow-down" label="Thu nhỏ" onPress={bubble.onClose} color={c.text} />
+        ) : (
+          <IconButton name="arrow-back" label="Quay lại" onPress={closeConversation} color={c.text} />
+        )}
         <Pressable
           style={s.headerMain}
           onPress={() => setSettingsOpen(true)}
@@ -340,7 +347,7 @@ export function ChatScreen({ convId }: { convId: number }) {
             </Text>
           </View>
         </Pressable>
-        {conv.type === "dm" && peer && !peer.disabled ? (
+        {conv.type === "dm" && peer && !peer.disabled && !bubble ? (
           <Pressable
             onPress={() => setChessOpen(true)}
             hitSlop={8}
@@ -352,7 +359,11 @@ export function ChatScreen({ convId }: { convId: number }) {
           </Pressable>
         ) : null}
         <IconButton name="search" label="Tìm tin nhắn" onPress={() => setSearchOpen(true)} />
-        <IconButton name="info-outline" label="Tùy chỉnh đoạn chat" onPress={() => setSettingsOpen(true)} />
+        {bubble ? (
+          <IconButton name="open-in-new" label="Mở trong app" onPress={bubble.onOpenApp} />
+        ) : (
+          <IconButton name="info-outline" label="Tùy chỉnh đoạn chat" onPress={() => setSettingsOpen(true)} />
+        )}
       </View>
       <PinBar conv={conv} onJump={jumpTo} onShowAll={() => setPinsOpen(true)} />
 
@@ -643,8 +654,22 @@ export function ChatScreen({ convId }: { convId: number }) {
       </Sheet>
 
       <Sheet visible={attachOpen} onClose={() => setAttachOpen(false)} title="Gửi">
-        <SheetItem icon="photo-library" label="Chọn ảnh trong máy" hint="Tối đa 10 ảnh mỗi lần" onPress={() => attach(false)} />
-        <SheetItem icon="photo-camera" label="Chụp ảnh" onPress={() => attach(true)} />
+        {bubble ? (
+          <SheetItem
+            icon="photo-library"
+            label="Gửi ảnh"
+            hint="Mở trong app để chọn hoặc chụp ảnh"
+            onPress={() => {
+              setAttachOpen(false);
+              bubble.onOpenApp();
+            }}
+          />
+        ) : (
+          <>
+            <SheetItem icon="photo-library" label="Chọn ảnh trong máy" hint="Tối đa 10 ảnh mỗi lần" onPress={() => attach(false)} />
+            <SheetItem icon="photo-camera" label="Chụp ảnh" onPress={() => attach(true)} />
+          </>
+        )}
         <SheetItem
           icon="poll"
           label="Tạo bình chọn"
