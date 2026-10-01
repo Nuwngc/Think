@@ -181,8 +181,33 @@ def dismiss_system_dialogs(root=None):
     return False
 
 
+def wait_boot(timeout=240):
+    """Chờ Android chạy xong (máy ảo đôi khi tự khởi động lại phần hệ thống giữa chừng)"""
+    end = time.time() + timeout
+    while time.time() < end:
+        if sh("getprop sys.boot_completed").strip() == "1" and "package:" in sh("pm path android"):
+            return True
+        time.sleep(2)
+    return False
+
+
+def ensure_installed():
+    """App còn cài trên máy ảo không; mất (máy ảo vừa khởi động lại giữa lúc cài) thì cài lại"""
+    for _ in range(3):
+        wait_boot()
+        if "package:" in sh(f"pm path {PKG}"):
+            return True
+        log("  (app chưa có trên máy ảo, cài lại)")
+        log(adb("install", "-r", "-g", args.apk, timeout=240))
+        time.sleep(3)
+    return "package:" in sh(f"pm path {PKG}")
+
+
 def launch():
-    sh(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1")
+    out = sh(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1")
+    if "No activities found" in out or "Unable to connect" in out:
+        ensure_installed()
+        sh(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1")
     time.sleep(3)
 
 
@@ -604,7 +629,11 @@ def s_bubble_app_after():
 
 def main():
     log(f"Máy ảo: {sh('getprop ro.build.version.release').strip()} (API {sh('getprop ro.build.version.sdk').strip()}), {sh('getprop ro.product.model').strip()}")
+    wait_boot()
     log(adb("install", "-r", "-g", args.apk, timeout=240))
+    time.sleep(5)
+    if not ensure_installed():
+        log("::error::Không cài được APK lên máy ảo")
     sdk = int(re.sub(r"\D", "", sh("getprop ro.build.version.sdk")) or 0)
     if sdk >= 33:
         sh(f"pm grant {PKG} android.permission.POST_NOTIFICATIONS")
