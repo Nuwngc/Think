@@ -26,7 +26,9 @@ vi.mock("../src/api", () => {
   return { api, ApiError };
 });
 vi.mock("react-native", () => ({ useColorScheme: () => "light" }));
-vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: vi.fn(() => Promise.resolve("dark")), setItem: vi.fn(() => Promise.resolve()) } }));
+vi.mock("@react-native-async-storage/async-storage", () => ({
+  default: { getItem: vi.fn(() => Promise.resolve("dark")), setItem: vi.fn(() => Promise.resolve()) },
+}));
 
 import { ApiError } from "../src/api";
 import { describeGame } from "../src/chess/format";
@@ -38,6 +40,7 @@ import {
   canDeleteComment,
   createPost,
   loadPosts,
+  loadProfile,
   onSocialEvent,
   openUser,
   resetSocial,
@@ -161,6 +164,36 @@ describe("bảng tin", () => {
     vi.clearAllMocks();
     resetSocial();
     bindSocial({ meId: () => 1, isAdmin: () => false, toast, showMe });
+  });
+
+  it("thành tựu mới: báo một câu cho chủ trang, người khác thì không", async () => {
+    const ach = (isNew: boolean, name = "Kỳ thủ") => ({
+      id: name,
+      icon: "🏆",
+      name,
+      tier: 1,
+      tierName: "Đồng",
+      value: 1,
+      goals: [1, 10, 50],
+      next: 10,
+      text: "Thắng 10 ván cờ vua",
+      done: "Thắng 1 ván cờ vua",
+      progress: 0.1,
+      isNew,
+    });
+    api.profile.mockResolvedValueOnce({ stats: { posts: 0, likes: 0, chess: null, achievements: { list: [ach(true)], earned: 1, total: 36 } } });
+    await loadProfile(1);
+    expect(toast).toHaveBeenCalledWith("🏆 Thành tựu mới: Kỳ thủ (Đồng)");
+    expect(useSocial.getState().profiles[1].achievements?.earned).toBe(1);
+    api.profile.mockResolvedValueOnce({
+      stats: { posts: 0, likes: 0, chess: null, achievements: { list: [ach(true), ach(true, "Nhà nông")], earned: 2, total: 36 } },
+    });
+    await loadProfile(1);
+    expect(toast).toHaveBeenLastCalledWith("🏆 2 thành tựu mới — xem ở trang cá nhân");
+    toast.mockClear();
+    api.profile.mockResolvedValueOnce({ stats: { posts: 0, likes: 0, chess: null, achievements: { list: [ach(true)], earned: 1, total: 36 } } });
+    await loadProfile(2); // trang người khác
+    expect(toast).not.toHaveBeenCalled();
   });
 
   it("tải trang đầu rồi trang cũ hơn", async () => {

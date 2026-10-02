@@ -16,6 +16,9 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - **App Think Beta** (thư mục `native/`): app thật viết bằng React Native, không phải trang web trong khung. GitHub tự build file APK mỗi lần sửa code (mục 13).
 - **Trò chơi** (mục 16): tab riêng chứa **Nông trại**, **Xếp Khối**, **Cờ vua**, **Cờ caro**, có bảng xếp hạng của cả nhóm.
 - **Nông trại** (mục 20, mới ở 2.2.0): trồng 15 loại cây theo thời gian thật, nuôi gà bò, **tự nấu mì cay, pha trà sữa trân châu**, nướng pizza, làm kem xoài… rồi **bán ở chợ** (giá đổi mỗi ngày, có món hot) hoặc **giao đơn cho khách** lấy xu; lên cấp mở thêm cây, món, ô đất; **ghé vườn bạn bè** bắt sâu giúp hoặc **hái trộm**, nuôi chó giữ vườn; bảng xếp hạng cấp độ và xu tuần này. Có trên web và App Think Beta.
+- **Tin nhắn thoại** (mục 23, mới ở 2.5.0): **giữ nút micro để nói, thả tay là gửi**, kéo ngón tay ra xa để hủy; chạm nhanh để ghi rảnh tay. Nghe có dạng sóng, tua, đổi tốc độ 1× / 1,5× / 2×, phát xong tự phát tin kế tiếp. Có trên web và App Think Beta.
+- **Thành tựu** (mục 24, mới ở 2.5.0): huy hiệu **Đồng / Bạc / Vàng** trên trang cá nhân — chuỗi ngày chơi, thắng cờ vua / caro, ELO, Xếp Khối, câu đố, nông trại, bài đăng, tin nhắn.
+- **Đóng băng chuỗi** ❄️ (mục 21, mới ở 2.5.0): mỗi tuần được 1 lượt (giữ tối đa 2), lỡ quên chơi một ngày thì tự dùng để chuỗi không bị đứt.
 - **Quiz hằng ngày + Thử thách nhanh** (mục 22, mới ở 2.4.0): Cờ vua, Xếp Khối, Cờ caro mỗi game có **một câu đố mỗi ngày** cho cả nhóm cùng giải (xem ai giải nhanh nhất) và **200 màn thử thách** mở dần, mỗi màn 1–3 sao, bảng xếp hạng sao; thêm màn được bất cứ lúc nào. Chơi được khi mất mạng (Xếp Khối, cờ caro), có trên web và App Think Beta.
 - **Chuỗi hằng ngày** (mục 21, mới ở 2.3.0): mỗi game (Nông trại, Xếp Khối, Cờ vua, Cờ caro) có **chuỗi ngày chơi liên tiếp** riêng 🔥 và một chuỗi chung; thẻ game hiện số ngày, có lịch 7 ngày, mốc 3 / 7 / 14 / 30… ngày được chúc mừng, buổi tối nhắc nếu chuỗi sắp đứt. Game nào thêm sau này cũng phải có chuỗi.
 - **Cờ vua** (mục 14): thách đấu bạn bè, chọn thời gian (1+0 … 30+0 hoặc không giới hạn), đồng hồ do máy chủ giữ, **quân cờ trượt mượt và kéo thả bằng ngón tay như chess.com**, **điểm ELO và bảng xếp hạng**, chơi với 8 máy cờ mã nguồn mở (có Stockfish), **xem lại ván**, **đánh giá ván kiểu Game Review**: mỗi nước được xếp loại **Thiên tài !!, Tuyệt vời !, Tốt nhất, Rất tốt, Tốt, Theo sách, Thiếu chính xác ?!, Sai lầm ?, Bỏ lỡ, Sai lầm nghiêm trọng ??**, có thanh đánh giá, nhận xét từng nước, tên khai cuộc. Âm thanh quân gỗ giòn kiểu các trang cờ lớn. Có trên cả web lẫn App Think Beta.
@@ -475,6 +478,7 @@ Mỗi game có **chuỗi riêng**: ngày nào có chơi (đi một nước cờ,
 - Chơi lần đầu trong ngày có thông báo nhỏ ("🔥 Chuỗi Cờ vua: 5 ngày liên tiếp!"); đạt **mốc** 3, 7, 14, 30, 50, 100, 150, 200, 365, 500, 1000 ngày thì có bảng chúc mừng.
 - **Nhắc giữ chuỗi**: khoảng 20–23 giờ, ai có chuỗi từ 2 ngày mà hôm nay chưa chơi thì nhận một thông báo (mỗi ngày tối đa một lần). Tắt trong bảng chuỗi.
 - Xếp Khối và cờ caro với máy chơi được khi mất mạng: ngày chơi lưu trên máy, có mạng thì gửi lên (nhận ngày chơi trễ tới 7 ngày), nên chuỗi không bị mất oan.
+- **Đóng băng chuỗi** ❄️: mỗi thứ Hai được thêm 1 lượt (giữ tối đa 2; lần đầu được tặng 1 lượt). Ngày nào lỡ quên **không chơi game nào** mà hôm trước vẫn còn chuỗi, máy chủ tự dùng 1 lượt cho ngày đó: mọi chuỗi được nối qua ngày đó nhưng không cộng thêm. Lịch 7 ngày hiện bông tuyết ở ngày được đóng băng, mở app có thông báo nhỏ. Ngày đó sau này mới gửi lên (chơi lúc mất mạng) thì lượt được trả lại. Số lượt còn hiện ở khung chuỗi (trang Trò chơi) và trong bảng chuỗi.
 - Ngày chơi tính theo **đồng hồ máy chủ**, không theo đồng hồ điện thoại: điện thoại để sai giờ hay sai ngày vẫn tích chuỗi đúng ngày (máy gửi kèm giờ của nó, máy chủ tự trừ độ lệch). Vì vậy chỉnh ngày trên điện thoại sang hôm sau không làm chuỗi tăng — phải chờ qua 0 giờ (giờ Việt Nam) thật.
 - Máy chủ giữ chuỗi (`src/streaks.js`, bảng `streak_days`; API `GET /api/streaks`, `POST /api/streaks/played`, `POST /api/streaks/prefs`; realtime `streak:update`). Web: `public/streaks.js` + `streaks.css`; app: `native/src/streaks/`.
 
@@ -506,6 +510,37 @@ node scripts/puzzles/chess.js --add 50 --minutes 40   # cần Stockfish (có s�
 npm test                                   # kiểm tra mọi câu đố vẫn giải được
 ```
 
+## 23. Tin nhắn thoại
+
+Có trên bản web và App Think Beta (nghe chéo được: ghi trên web, nghe trên app và ngược lại).
+
+- **Ghi**: giữ nút **micro** (cạnh nút ảnh) để nói, **thả tay là gửi**; đang giữ mà **kéo ngón tay ra xa nút** thì thanh ghi âm chuyển đỏ "Thả tay để hủy". **Chạm nhanh** nút micro thì ghi rảnh tay: bấm **Gửi** hoặc **🗑 Hủy** trên thanh ghi âm. Tối đa **2 phút** (tới 2 phút tự gửi); ngắn hơn 0,7 giây coi như bấm nhầm. Đang trả lời tin nào thì tin thoại gắn vào tin đó.
+- **Nghe**: nút phát / tạm dừng, **dạng sóng** chạy theo tiến độ (chạm vào sóng để tua), nút **1× / 1,5× / 2×** (nhớ cho lần sau), mỗi lúc chỉ phát một tin, phát xong tự phát tin thoại kế tiếp của người khác.
+- Lần đầu ghi, máy hỏi quyền **micro** (web: trình duyệt hỏi; app: Android hỏi). Lỡ chặn thì vào cài đặt trình duyệt / Cài đặt → Ứng dụng → Think Beta → Quyền → Micrô để bật lại. Khung chat nổi (bong bóng chat) chỉ nghe, không ghi âm.
+- Tin thoại **chuyển tiếp** và **thu hồi** được như tin thường; không sửa được. Danh sách chat và thông báo hiện "🎤 Tin nhắn thoại (0:12)".
+- Máy chủ: `POST /api/upload/audio` nhận file (WEBM / OGG từ trình duyệt, M4A từ app; nhận dạng theo nội dung file, tối đa 6 MB), lưu ở `uploads/audio/` (cần đăng nhập mới nghe được, có tua) và sao lưu Firebase như ảnh. File tin thoại tính vào **bộ nhớ máy chủ** và được **dọn cùng ảnh** khi dọn / tự dọn (tin vẫn còn, hiện "Tin nhắn thoại đã được dọn khỏi máy chủ"). Dạng sóng và cách tính chung: `public/voice-core.js` (app: `native/src/voice/core.ts`, có kiểm thử so khớp).
+
+## 24. Thành tựu
+
+Trang cá nhân (web và App Think Beta) có mục **Thành tựu**: 12 huy hiệu, mỗi huy hiệu 3 bậc **Đồng / Bạc / Vàng**. Chạm một huy hiệu để xem cách đạt và còn thiếu bao nhiêu; huy hiệu chưa đạt có thanh tiến độ.
+
+| Huy hiệu | Đồng / Bạc / Vàng |
+|---|---|
+| 🔥 Lửa bền bỉ — chơi game nhiều ngày liên tiếp (kỷ lục chuỗi chung) | 3 / 7 / 30 ngày |
+| 🏆 Kỳ thủ — thắng ván cờ vua (cả với máy) | 1 / 10 / 50 ván |
+| 👑 Cao thủ cờ vua — điểm ELO cao nhất | 1300 / 1500 / 1800 |
+| 🎯 Vua caro — thắng cờ caro với bạn bè | 1 / 10 / 50 ván |
+| 🎮 Thợ xếp khối — kỷ lục một ván Xếp Khối | 1.000 / 5.000 / 20.000 điểm |
+| ⭐ Nhà giải đố — sao Thử thách nhanh | 30 / 150 / 450 sao |
+| 📅 Quiz mỗi ngày — số quiz hằng ngày đã giải | 1 / 10 / 50 |
+| 🌾 Nhà nông — cấp nông trại | 5 / 15 / 30 |
+| ✍️ Người kể chuyện — bài đăng | 1 / 10 / 50 |
+| ❤️ Được yêu mến — lượt thích nhận được (không tính tự thích) | 10 / 50 / 200 |
+| 💬 Tám chuyện — tin nhắn đã gửi | 100 / 1.000 / 10.000 |
+| 🎤 Giọng nói quen thuộc — tin nhắn thoại đã gửi | 1 / 20 / 100 |
+
+Máy chủ tự tính từ dữ liệu có sẵn mỗi lần mở trang cá nhân (`src/achievements.js`, trả về trong `GET /api/users/<mã>/profile`), nên thành tích cũ cũng được tính. Vừa đạt bậc mới thì lần mở trang cá nhân kế tiếp có thông báo nhỏ "🏆 Thành tựu mới" và nhãn **Mới** (chỉ chủ trang thấy). Thêm huy hiệu: thêm một dòng vào `DEFS` và cách tính trong `valuesOf`.
+
 ## Cấu trúc thư mục
 
 ```
@@ -528,6 +563,7 @@ src/farm.js          Nông trại: lưu nông trại, ghé vườn bạn bè, b�
 src/farm-logic.js    Luật Nông trại (gieo, thu hoạch, chế biến, đơn hàng, chợ, hái trộm…); src/farm-data.js: cây, món, công trình
 src/streaks.js       Chuỗi hằng ngày của mọi game (API /api/streaks, nhắc giữ chuỗi buổi tối)
 src/puzzles.js       Quiz hằng ngày + Thử thách nhanh: tiến độ, kết quả, bảng xếp hạng (API /api/puzzles)
+src/achievements.js  Thành tựu trên trang cá nhân (Đồng / Bạc / Vàng)
 src/chat-plus.js     Chat 2.1.0: sửa tin, ghim, tìm, chuyển tiếp, tắt thông báo, chủ đề, bình chọn, ảnh đã gửi
 src/reports.js       Báo lỗi app (API /api/app/errors, Quản trị → Báo lỗi app)
 src/engines/         GarboChess-JS (giữ nguyên giấy phép BSD ở đầu file)
@@ -546,6 +582,7 @@ public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu 
                      caro-core.js + caro-ui.js + caro.css (Cờ caro), farm-ui.js + farm.css (Nông trại),
                      streaks.js + streaks.css (chuỗi hằng ngày), chess-anim.js (quân cờ trượt),
                      puzzles-core.js (luật câu đố) + puzzles-ui.js + puzzles.css (quiz, thử thách), puzzles/ (dữ liệu câu đố),
+                     voice-core.js + voice-ui.js (tin nhắn thoại: ghi âm, nghe),
                      theme.js (nền sáng/tối), chess/pieces/ (hình quân cờ), chess/sounds/, blocks/sounds/ (âm thanh),
                      farm/emoji/ (hình Twemoji), farm/sounds/
 public/download/     File cài app Android (think.apk) và version.json

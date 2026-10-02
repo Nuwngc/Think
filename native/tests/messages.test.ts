@@ -66,6 +66,9 @@ describe("messages", () => {
 
   it("trích dẫn ngắn gọn", () => {
     const q = quoteOf(msg(7, { text: "dòng 1\n\n  dòng 2" }));
-    expect(q).toEqual({ id: 7, senderId: 2, deleted: false, missing: false, text: "dòng 1 dòng 2", image: false });
+    expect(q).toEqual({ id: 7, senderId: 2, deleted: false, missing: false, text: "dòng 1 dòng 2", image: false, audio: false });
+    // Trả lời tin nhắn thoại
+    const v = quoteOf(msg(8, { kind: "voice", text: null, audio: { url: "/uploads/audio/a.m4a", ms: 3000, wave: "abc" } }));
+    expect([v.audio, v.image, v.text]).toEqual([true, false, null]);
   });
 });

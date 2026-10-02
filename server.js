@@ -19,7 +19,8 @@ if ((process.env.FIREBASE_SERVICE_ACCOUNT || process.env.THINK_FAKE_FIRESTORE) &
   console.error('❌ Đã cấu hình Firebase nhưng server không được chạy qua start.js. Hãy dùng lệnh: npm start');
   process.exit(1);
 }
-const { db, get, all, run, transaction, getSetting, searchKey, DATA_DIR, AVATAR_DIR, IMAGE_DIR, GENERAL_ID } = require('./src/db');
+const { db, get, all, run, transaction, getSetting, searchKey, DATA_DIR, AVATAR_DIR, IMAGE_DIR, AUDIO_DIR, GENERAL_ID } = require('./src/db');
+const VoiceCore = require('./public/voice-core.js');
 const storage = require('./src/storage');
 const auth = require('./src/auth');
 const push = require('./src/push');
@@ -89,7 +90,7 @@ app.use((req, res, next) => {
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'same-origin',
     'X-Frame-Options': 'DENY',
-    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    'Permissions-Policy': 'camera=(), microphone=(self), geolocation=()', // micro: tin nhắn thoại
   });
   next();
 });
@@ -211,6 +212,12 @@ function serializeMessage(m, reactions) {
     if (m.forwarded) out.forwarded = true; // chuyển tiếp từ cuộc trò chuyện khác
     if (m.mentions) out.mentions = String(m.mentions).split(',').filter(Boolean).map(Number); // @nhắc tên
     if (m.kind === 'poll') out.poll = chatPlus.pollData(m.id); // bình chọn
+    if (m.kind === 'voice') {
+      // Tin nhắn thoại: file ghi âm, độ dài, dạng sóng; file đã bị dọn khỏi máy chủ thì audio = null
+      out.audio = m.audio ? { url: m.audio, ms: m.audio_ms || 0, wave: m.audio_wave || '' } : null;
+      if (m.image_purged && !m.audio) out.audioPurged = true;
+      delete out.imagePurged;
+    }
   }
   if (m.reply_to && !m.deleted) {
     const missing = m.r_sender_id == null; // tin gốc đã bị dọn khỏi máy chủ
@@ -221,7 +228,8 @@ function serializeMessage(m, reactions) {
       deleted: gone,
       missing,
       text: gone || missing ? null : snippet(m.r_text),
-      image: !gone && !missing && (Boolean(m.r_image) || Boolean(m.r_image_purged)),
+      image: !gone && !missing && m.r_kind !== 'voice' && (Boolean(m.r_image) || Boolean(m.r_image_purged)),
+      audio: !gone && !missing && m.r_kind === 'voice', // trả lời tin nhắn thoại
     };
   }
   return out;
@@ -230,7 +238,7 @@ function serializeMessage(m, reactions) {
 // Tin nhắn kèm thông tin tin được trả lời
 const MSG_SELECT = `
   SELECT m.*, r.sender_id AS r_sender_id, r.text AS r_text, r.image AS r_image, r.deleted AS r_deleted,
-         r.image_purged AS r_image_purged
+         r.image_purged AS r_image_purged, r.kind AS r_kind
     FROM messages m LEFT JOIN messages r ON r.id = m.reply_to`;
 
 // Cảm xúc của một danh sách tin nhắn bất kỳ
@@ -275,7 +283,7 @@ function loadMessage(id) {
 const CONV_SELECT = `
   SELECT c.id, c.type, c.name, c.created_at, c.created_by, c.theme, c.emoji, mem.last_read_id, mem.muted_until, mem.pinned_at,
          lm.id AS lm_id, lm.sender_id AS lm_sender_id, lm.text AS lm_text, lm.image AS lm_image,
-         lm.deleted AS lm_deleted, lm.created_at AS lm_created_at, lm.kind AS lm_kind,
+         lm.deleted AS lm_deleted, lm.created_at AS lm_created_at, lm.kind AS lm_kind, lm.audio AS lm_audio, lm.audio_ms AS lm_audio_ms,
          (SELECT COUNT(*) FROM messages m
            WHERE m.conversation_id = c.id AND m.id > mem.last_read_id AND m.sender_id <> :uid
              AND m.kind <> 'system') AS unread,
@@ -317,6 +325,8 @@ function serializeConv(r) {
           deleted: r.lm_deleted,
           created_at: r.lm_created_at,
           kind: r.lm_kind,
+          audio: r.lm_audio,
+          audio_ms: r.lm_audio_ms,
         })
       : null,
   };
@@ -535,6 +545,21 @@ app.use(
   express.static(IMAGE_DIR, {
     index: false,
     setHeaders: (res) => res.set('Cache-Control', 'private, max-age=31536000, immutable'),
+  })
+);
+// Tin nhắn thoại (cần đăng nhập; hỗ trợ tua nhờ Range của express.static)
+const AUDIO_TYPES = { webm: 'audio/webm', ogg: 'audio/ogg', m4a: 'audio/mp4', '3gp': 'audio/3gpp', mp3: 'audio/mpeg', aac: 'audio/aac' };
+app.use(
+  '/uploads/audio',
+  (req, res, next) => (loadSession(req) ? next() : res.status(401).send('Cần đăng nhập để nghe tin nhắn thoại.')),
+  fromCloud('audio'),
+  express.static(AUDIO_DIR, {
+    index: false,
+    setHeaders: (res, filePath) => {
+      res.set('Cache-Control', 'private, max-age=31536000, immutable');
+      const type = AUDIO_TYPES[path.extname(filePath).slice(1)];
+      if (type) res.set('Content-Type', type);
+    },
   })
 );
 
@@ -793,6 +818,20 @@ app.post('/api/upload', requireAuth, requireReady, rawImage, (req, res) => {
   res.json({ url });
 });
 
+// File ghi âm của tin nhắn thoại (tối đa 2 phút). ms = độ dài theo máy ghi
+const rawAudio = express.raw({ type: () => true, limit: '6mb' });
+app.post('/api/upload/audio', requireAuth, requireReady, rawAudio, (req, res) => {
+  const kind = Buffer.isBuffer(req.body) ? VoiceCore.sniffAudio(req.body) : null;
+  if (!kind) return res.status(400).json({ error: 'File ghi âm không hợp lệ. Hãy ghi lại.' });
+  const name = `${crypto.randomUUID()}.${kind}`;
+  fs.writeFileSync(path.join(AUDIO_DIR, name), req.body);
+  cloud.saveFile(`uploads/audio/${name}`);
+  const url = `/uploads/audio/${name}`;
+  storage.recordUpload(url, 'audio', req.body.length, req.user.id);
+  pendingUploads.set(url, { userId: req.user.id, at: Date.now(), kind: 'audio' });
+  res.json({ url });
+});
+
 // Tin vừa gửi theo clientId: máy gửi lại (mạng chập chờn, hết thời gian chờ) thì trả tin cũ, không tạo tin trùng
 const recentSends = new Map(); // `${userId}:${clientId}` -> { id, at }
 
@@ -811,13 +850,24 @@ app.post('/api/conversations/:id/messages', requireAuth, requireReady, (req, res
   const text = typeof req.body?.text === 'string' ? req.body.text.replace(/\r\n?/g, '\n').trim() : '';
   if (text.length > 4000) return res.status(400).json({ error: 'Tin nhắn dài quá 4000 ký tự. Hãy chia nhỏ ra.' });
   let image = null;
-  if (req.body?.image) {
+  let audio = null;
+  if (req.body?.audio) {
+    // Tin nhắn thoại: chỉ có file ghi âm (không kèm chữ, ảnh)
+    const upload = pendingUploads.get(req.body.audio);
+    if (!upload || upload.userId !== req.user.id || upload.kind !== 'audio') return res.status(400).json({ error: 'Bản ghi âm đã hết hạn. Hãy ghi lại.' });
+    pendingUploads.delete(req.body.audio);
+    audio = {
+      url: req.body.audio,
+      ms: Math.min(Math.max(0, Math.round(Number(req.body.audioMs) || 0)), VoiceCore.MAX_MS + 5000),
+      wave: VoiceCore.cleanWave(req.body.audioWave),
+    };
+  } else if (req.body?.image) {
     const upload = pendingUploads.get(req.body.image);
-    if (!upload || upload.userId !== req.user.id) return res.status(400).json({ error: 'Ảnh đã hết hạn. Hãy chọn và gửi lại.' });
+    if (!upload || upload.userId !== req.user.id || upload.kind === 'audio') return res.status(400).json({ error: 'Ảnh đã hết hạn. Hãy chọn và gửi lại.' });
     pendingUploads.delete(req.body.image);
     image = req.body.image;
   }
-  if (!text && !image) return res.status(400).json({ error: 'Tin nhắn đang trống.' });
+  if (!text && !image && !audio) return res.status(400).json({ error: 'Tin nhắn đang trống.' });
   let replyTo = null;
   if (req.body?.replyTo != null) {
     const target = get("SELECT id FROM messages WHERE id = ? AND conversation_id = ? AND kind <> 'system'", Number(req.body.replyTo), convId);
@@ -825,18 +875,24 @@ app.post('/api/conversations/:id/messages', requireAuth, requireReady, (req, res
     replyTo = target.id;
   }
 
-  const mentions = text ? chatPlus.cleanMentions(req.body?.mentions, convId, req.user.id) : [];
+  const body = audio ? '' : text;
+  const mentions = body ? chatPlus.cleanMentions(req.body?.mentions, convId, req.user.id) : [];
   const newId = transaction(() => {
     const id = Number(
       run(
-        'INSERT INTO messages (conversation_id, sender_id, text, image, reply_to, mentions, search_text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        `INSERT INTO messages (conversation_id, sender_id, kind, text, image, audio, audio_ms, audio_wave, reply_to, mentions, search_text, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         convId,
         req.user.id,
-        text || null,
+        audio ? 'voice' : 'text',
+        body || null,
         image,
+        audio ? audio.url : null,
+        audio ? audio.ms : null,
+        audio ? audio.wave : null,
         replyTo,
         mentions.length ? mentions.join(',') : null,
-        text ? searchKey(text) : null,
+        body ? searchKey(body) : null,
         Date.now()
       ).lastInsertRowid
     );
@@ -867,9 +923,11 @@ async function notifyMembers(conv, message, members) {
   const chessShare = /^♟ ([^\n]+)\n(?:[^\n]*\n)?\S*#\/chess\/g\/\d+\s*$/.exec(message.text || '');
   const text = message.kind === 'poll'
     ? `📊 Bình chọn: ${message.text}`
-    : chessShare
-      ? `♟ Chia sẻ ván cờ: ${chessShare[1]}`
-      : message.text ? (message.image ? `📷 ${message.text}` : message.text) : '📷 Đã gửi một ảnh';
+    : message.kind === 'voice'
+      ? `🎤 Tin nhắn thoại${message.audio && message.audio.ms ? ` (${VoiceCore.clock(message.audio.ms)})` : ''}`
+      : chessShare
+        ? `♟ Chia sẻ ván cờ: ${chessShare[1]}`
+        : message.text ? (message.image ? `📷 ${message.text}` : message.text) : '📷 Đã gửi một ảnh';
   const base = {
     type: 'message',
     conversationId: conv.id,
@@ -922,13 +980,14 @@ app.delete('/api/messages/:id', requireAuth, requireReady, (req, res) => {
   const msg = get('SELECT * FROM messages WHERE id = ?', Number(req.params.id));
   if (!msg || msg.sender_id !== req.user.id || msg.kind === 'system') return res.status(404).json({ error: 'Không tìm thấy tin nhắn.' });
   if (!msg.deleted) {
-    run('UPDATE messages SET deleted = 1, text = NULL, image = NULL, search_text = NULL, mentions = NULL, updated_at = ? WHERE id = ?', Date.now(), msg.id);
+    run('UPDATE messages SET deleted = 1, text = NULL, image = NULL, audio = NULL, search_text = NULL, mentions = NULL, updated_at = ? WHERE id = ?', Date.now(), msg.id);
     run('DELETE FROM reactions WHERE message_id = ?', msg.id);
     const wasPinned = run('DELETE FROM message_pins WHERE message_id = ?', msg.id).changes > 0;
     if (wasPinned) {
       for (const uid of memberIds(msg.conversation_id)) io.to(`user:${uid}`).emit('conversation:pins', { conversationId: msg.conversation_id, removed: msg.id });
     }
     removeUpload(msg.image);
+    removeUpload(msg.audio);
     for (const uid of memberIds(msg.conversation_id)) {
       io.to(`user:${uid}`).emit('message:deleted', { conversationId: msg.conversation_id, messageId: msg.id });
     }
@@ -1281,7 +1340,7 @@ setupSocial({
   // Ảnh bài đăng tải lên qua /api/upload giống ảnh tin nhắn
   takeUpload: (url, userId) => {
     const upload = pendingUploads.get(url);
-    if (!upload || upload.userId !== userId) return false;
+    if (!upload || upload.userId !== userId || upload.kind === 'audio') return false;
     pendingUploads.delete(url);
     return true;
   },

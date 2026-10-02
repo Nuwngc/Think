@@ -26,7 +26,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 
 import { ApiError } from "../src/api";
 import { GAME_IDS } from "../src/games/registry";
-import { addPending, cheerText, dayKey, pendingByGame, playsFor, removeSent, weekLabels } from "../src/streaks/logic";
+import { addPending, cheerText, dayKey, freezeText, freshFrozen, pendingByGame, playsFor, removeSent, weekLabels } from "../src/streaks/logic";
 import { bindStreaks, flushStreaks, loadStreaks, markPlayed, onStreakEvent, openStreaks, resetStreaks, useStreaks } from "../src/streaks/store";
 import type { StreakSummary } from "../src/streaks/types";
 
@@ -194,5 +194,25 @@ describe("chuỗi hằng ngày: dữ liệu trong app", () => {
     expect(useStreaks.getState().data?.remind).toBe(false);
     openStreaks("farm");
     expect(useStreaks.getState().sheet).toEqual({ kind: "detail", game: "farm" });
+  });
+
+  it("đóng băng chuỗi: máy chủ vừa dùng lượt cho hôm qua thì báo đúng một lần", async () => {
+    expect(freshFrozen(["2026-10-01", "2026-10-02"], ["2026-10-01"])).toEqual(["2026-10-02"]);
+    expect(freshFrozen(["2026-10-02"], undefined)).toEqual(["2026-10-02"]);
+    expect(freezeText(1, 12)).toBe("❄️ Hôm qua bạn quên chơi — đã dùng 1 lượt đóng băng để giữ chuỗi 12 ngày.");
+    const toast = vi.fn();
+    bindStreaks({ meId: () => 7, toast, online: () => true });
+    const frozen = summary({
+      overall: { current: 12, best: 12, today: false, atRisk: true, week: [true, true, true, true, true, false, false], last: null },
+      freeze: { count: 0, max: 2, used: ["2026-10-01"], week: [false, false, false, false, false, true, false] },
+    });
+    api.streaks.mockResolvedValue(frozen);
+    await loadStreaks();
+    await vi.waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
+    expect(toast.mock.calls[0][0]).toMatch(/đóng băng/);
+    await loadStreaks();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(toast).toHaveBeenCalledTimes(1); // đã báo rồi
+    api.streaks.mockReset();
   });
 });

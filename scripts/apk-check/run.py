@@ -252,9 +252,12 @@ def play_one_block():
     slots = [n for n in nodes(root) if (n.get("content-desc") or "").startswith("Khối ")]
     if not slots:
         raise RuntimeError("Không thấy khối nào ở khay")
+    # Ván dở từ bước trước có thể đã có khối ở giữa bàn: thử giữa bàn trước, rồi lan dần ra bốn phía
+    spots = [(0, 0), (-120, -120), (120, 120), (-120, 120), (120, -120)]
+    spots += [(dx, dy) for dx in (-240, 0, 240) for dy in (-240, 0, 240) if (dx, dy) != (0, 0)]
     for n in slots:
         sx, sy = center(n)
-        for dx, dy in [(0, 0), (-120, -120), (120, 120), (-120, 120), (120, -120)]:
+        for dx, dy in spots:
             sh(f"input swipe {sx} {sy} {bx + dx} {by + dy + 150} 900")
             time.sleep(1.5)
             after = score_of()
@@ -381,6 +384,32 @@ def s_chat():
     tap(r"^Gửi$")
     if wait_for(r"apkcheck1", 15) is None:
         raise RuntimeError("Gửi tin nhắn không hiện lên")
+
+
+def s_voice():
+    """Tin nhắn thoại: giữ nút micro 2,5 giây rồi thả (thanh ghi âm có đồng hồ chạy nên kiểm tra qua máy chủ)"""
+    hide_keyboard()
+    time.sleep(1)
+    mic = wait_for(r"^Ghi âm", 10)
+    if mic is None:
+        raise RuntimeError("Không thấy nút micro trong ô nhập tin")
+    x, y = center(mic)
+    sh(f"input swipe {x} {y} {x} {y} 2500")  # nhấn giữ tại chỗ 2,5 giây rồi thả
+    token, conv = dm_with_tester()
+    end = time.time() + 30
+    while time.time() < end:
+        msgs = api_call(f"/api/conversations/{conv}/messages", token=token).get("messages", [])
+        voice = [m for m in msgs if m.get("kind") == "voice" and m.get("audio")]
+        if voice:
+            a = voice[-1]["audio"]
+            if not str(a.get("url", "")).endswith((".m4a", ".mp4", ".3gp", ".aac", ".webm", ".ogg")):
+                raise RuntimeError(f"File ghi âm lạ: {a.get('url')}")
+            time.sleep(2)
+            if wait_for(r"^Phát tin nhắn thoại", 15) is None:
+                raise RuntimeError("Máy chủ đã nhận tin thoại nhưng khung chat không hiện")
+            return f"máy chủ nhận tin thoại {a.get('ms')} ms, file {a.get('url', '').rsplit('.', 1)[-1]}"
+        time.sleep(1.5)
+    raise RuntimeError("Giữ nút micro rồi thả nhưng máy chủ không nhận được tin thoại")
 
 
 def s_chat_back():
@@ -512,7 +541,8 @@ def s_streaks():
     if wait_for(r"ngày liên tiếp chơi game", 15) is None:
         raise RuntimeError("Trang Trò chơi không hiện khung chuỗi hằng ngày")
     tap(r"ngày liên tiếp chơi game")
-    if wait_for(r"^Nhắc giữ chuỗi", 10) is None:
+    # Bảng chuỗi dài (có mục Đóng băng chuỗi): mục Nhắc giữ chuỗi có thể nằm dưới màn hình
+    if wait_for(r"^(Nhắc giữ chuỗi|Đóng băng chuỗi)", 10) is None:
         raise RuntimeError("Không mở được bảng chuỗi hằng ngày")
     time.sleep(1)
     back()
@@ -854,6 +884,7 @@ def main():
     sdk = int(re.sub(r"\D", "", sh("getprop ro.build.version.sdk")) or 0)
     if sdk >= 33:
         sh(f"pm grant {PKG} android.permission.POST_NOTIFICATIONS")
+    sh(f"pm grant {PKG} android.permission.RECORD_AUDIO")  # tin nhắn thoại (người dùng thật được hỏi lần đầu)
     sh("settings put global window_animation_scale 0")
     sh("settings put global transition_animation_scale 0")
     sh("settings put global animator_duration_scale 0")
@@ -867,6 +898,7 @@ def main():
         step("Quay lại màn đăng nhập", s_back_to_login)
         step("Đăng nhập", s_login)
         step("Nhắn tin", s_chat)
+        step("Tin nhắn thoại (giữ nút micro)", s_voice)
         step("Rời cuộc trò chuyện", s_chat_back)
         step("Mục Trò chơi", s_games_hub)
         step("Nông trại: thu hoạch, gieo hạt (có âm thanh)", s_farm)

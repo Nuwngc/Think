@@ -43,3 +43,11 @@ export const removeSent = (list: PendingDay[], game: string, days: string[], uid
 export function cheerText(name: string, current: number) {
   return current <= 1 ? `🔥 Bắt đầu chuỗi ${name}! Mai chơi tiếp để chuỗi tăng.` : `🔥 Chuỗi ${name}: ${current} ngày liên tiếp!`;
 }
+
+/** Ngày đóng băng chưa báo (seen: các ngày đã báo của người này) */
+export const freshFrozen = (used: string[], seen: unknown) => used.filter((d) => !(Array.isArray(seen) && seen.includes(d)));
+
+/** Lời báo khi máy chủ vừa dùng lượt đóng băng (giống bản web) */
+export function freezeText(n: number, current: number) {
+  return `❄️ Hôm ${n > 1 ? "trước" : "qua"} bạn quên chơi — đã dùng ${n} lượt đóng băng để giữ chuỗi${current ? ` ${current} ngày` : ""}.`;
+}

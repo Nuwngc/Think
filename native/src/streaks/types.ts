@@ -22,6 +22,18 @@ export type StreakSummary = {
   overall: Streak;
   remind: boolean;
   milestones: number[];
+  /** Đóng băng chuỗi (máy chủ cũ không có) */
+  freeze?: StreakFreeze;
+};
+
+export type StreakFreeze = {
+  /** Số lượt còn */
+  count: number;
+  max: number;
+  /** Ngày đã dùng lượt đóng băng trong 7 ngày gần nhất */
+  used: string[];
+  /** 7 ngày gần nhất (giống `week`): ngày nào được đóng băng */
+  week: boolean[];
 };
 
 /** Sự kiện realtime "streak:update": vừa ghi ngày chơi mới */

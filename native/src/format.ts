@@ -1,5 +1,6 @@
 // Chữ và thời gian hiển thị, giống hệt bản web (public/app.js) để hai bên đọc như nhau.
 import type { ChatItem, Conversation, Message, User } from "./types";
+import { voiceLabel } from "./voice/core";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -119,6 +120,7 @@ export function messageSummary(m: ChatItem, names: Names) {
   if (m.kind === "system") return systemText(m, names);
   if (m.deleted) return "Tin nhắn đã được thu hồi";
   if (m.kind === "poll") return `📊 ${oneLine(m.text)}`;
+  if (m.kind === "voice") return voiceLabel(m.audio?.ms);
   if (hasImage(m) && !m.text) return "Đã gửi một ảnh";
   if ("imagePurged" in m && m.imagePurged && !m.text) return "Ảnh đã được dọn khỏi máy chủ";
   const shared = !hasImage(m) && m.text ? chessShareOf(m.text) : null;

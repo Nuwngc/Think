@@ -109,6 +109,49 @@ test('điện thoại để sai ngày giờ: vẫn tính đúng ngày theo đồ
   assert.equal(S.dayKey(cleanScore('blocks', { ...sc, playedAt: behind - 60000 }, now, S.clockSkew(behind, now)).playedAt), '2026-10-12');
 });
 
+test('đóng băng chuỗi: nối chuỗi qua ngày quên chơi, mỗi thứ Hai thêm 1 lượt, trả lại khi ngày đó gửi muộn', () => {
+  // Hàm thuần: ngày đóng băng nối chuỗi nhưng không cộng
+  let s = S.streakOf(days('2026-10-07', '2026-10-08', '2026-10-10'), '2026-10-10', days('2026-10-09'));
+  assert.deepEqual([s.current, s.best, s.last], [3, 3, '2026-10-10']);
+  s = S.streakOf(days('2026-10-07', '2026-10-08'), '2026-10-10', days('2026-10-09'));
+  assert.deepEqual([s.current, s.atRisk], [2, true]); // hôm qua đóng băng: chuỗi còn, chơi hôm nay để giữ
+  assert.equal(S.streakOf(days('2026-10-05'), '2026-10-10', days('2026-10-09')).current, 0); // đóng băng không nối với gì
+
+  for (const id of [905, 906, 907]) run(`INSERT INTO users (id, username, display_name, password_hash, created_at) VALUES (${id}, 'fz${id}', 'Fz', 'x', 0)`);
+  const noon = (d) => T(`${d}T05:00:00Z`);
+  // Chơi 13–15/10 (thứ Ba → thứ Năm): lần đầu được tặng 1 lượt
+  S.recordDays(905, 'chess', ['2026-10-13', '2026-10-14', '2026-10-15'], noon('2026-10-15'));
+  assert.equal(S.summaryOf(905, noon('2026-10-15')).freeze.count, 1);
+  // Quên thứ Sáu 16/10: thứ Bảy mở app thấy chuỗi vẫn còn, đã dùng 1 lượt
+  let sum = S.summaryOf(905, noon('2026-10-17'));
+  assert.deepEqual([sum.overall.current, sum.overall.atRisk, sum.freeze.count], [3, true, 0]);
+  assert.deepEqual(sum.freeze.used, ['2026-10-16']);
+  assert.deepEqual(sum.freeze.week, [false, false, false, false, false, true, false]);
+  assert.equal(sum.games.find((g) => g.id === 'chess').current, 3);
+  const r = S.recordDays(905, 'chess', ['2026-10-17'], noon('2026-10-17'));
+  assert.deepEqual([r.event.current, r.summary.overall.current], [4, 4]);
+  // Quên Chủ nhật, hết lượt: thứ Hai chuỗi đứt, nhưng được thêm 1 lượt mới
+  sum = S.summaryOf(905, noon('2026-10-19'));
+  assert.deepEqual([sum.overall.current, sum.overall.best, sum.freeze.count], [0, 4, 1]);
+  // Gọi lại không dùng / cộng thêm lần nữa
+  assert.equal(S.summaryOf(905, noon('2026-10-19')).freeze.count, 1);
+  // Nhiều tuần không mở app: tối đa 2 lượt
+  assert.equal(S.summaryOf(905, noon('2026-11-10')).freeze.count, 2);
+
+  // Ngày đã đóng băng hóa ra có chơi (gửi muộn lúc mất mạng): trả lại lượt
+  S.recordDays(906, 'chess', ['2026-10-13', '2026-10-14'], noon('2026-10-14'));
+  assert.deepEqual(S.summaryOf(906, noon('2026-10-16')).freeze.used, ['2026-10-15']);
+  sum = S.recordDays(906, 'blocks', ['2026-10-15'], noon('2026-10-16')).summary;
+  assert.deepEqual([sum.overall.current, sum.freeze.count, sum.freeze.used], [3, 1, []]);
+
+  // Gửi muộn làm chuỗi sống lại: ngày quên sau đó được xét lại và đóng băng
+  S.recordDays(907, 'chess', ['2026-10-13'], noon('2026-10-13'));
+  sum = S.summaryOf(907, noon('2026-10-16'));
+  assert.deepEqual([sum.overall.current, sum.freeze.used, sum.freeze.count], [0, ['2026-10-14'], 0]);
+  sum = S.recordDays(907, 'blocks', ['2026-10-14'], noon('2026-10-16')).summary;
+  assert.deepEqual([sum.overall.current, sum.overall.atRisk, sum.freeze.used, sum.freeze.count], [2, true, ['2026-10-15'], 0]);
+});
+
 test('nhắc giữ chuỗi: mỗi người một lần mỗi ngày, bỏ người đã tắt nhắc', async () => {
   const app = { get() {}, post() {} };
   const sent = [];

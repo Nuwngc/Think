@@ -11,7 +11,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { get, all, run, transaction, searchKey, IMAGE_DIR } = require('./db');
+const { get, all, run, transaction, searchKey, IMAGE_DIR, AUDIO_DIR } = require('./db');
 
 // Chủ đề cuộc trò chuyện: màu bong bóng tin của mình (web và app vẽ theo mã này)
 const THEMES = ['default', 'ocean', 'sunset', 'grape', 'forest', 'candy', 'night', 'fire', 'gold', 'mono', 'love', 'mint'];
@@ -115,7 +115,7 @@ function setupChatPlus(ctx) {
     const msg = myMessage(req, res);
     if (!msg) return;
     if (msg.sender_id !== req.user.id || msg.deleted || msg.kind !== 'text') {
-      return res.status(403).json({ error: 'Bạn chỉ sửa được tin nhắn chữ của chính mình.' });
+      return res.status(403).json({ error: msg.kind === 'voice' ? 'Không sửa được tin nhắn thoại.' : 'Bạn chỉ sửa được tin nhắn chữ của chính mình.' });
     }
     const text = typeof req.body?.text === 'string' ? req.body.text.replace(/\r\n?/g, '\n').trim() : '';
     if (text.length > 4000) return res.status(400).json({ error: 'Tin nhắn dài quá 4000 ký tự.' });
@@ -200,10 +200,26 @@ function setupChatPlus(ctx) {
     return out;
   }
 
+  function copyAudio(url, userId) {
+    const m = /^\/uploads\/audio\/([\w-]+)(\.\w+)$/.exec(url || '');
+    if (!m) return null;
+    const src = path.join(AUDIO_DIR, m[1] + m[2]);
+    if (!fs.existsSync(src)) return null;
+    const name = `${crypto.randomUUID()}${m[2]}`;
+    fs.copyFileSync(src, path.join(AUDIO_DIR, name));
+    cloud.saveFile(`uploads/audio/${name}`);
+    const out = `/uploads/audio/${name}`;
+    storage.recordUpload(out, 'audio', fs.statSync(src).size, userId);
+    return out;
+  }
+
   app.post('/api/messages/:id/forward', ...auth, (req, res) => {
     const msg = myMessage(req, res);
     if (!msg) return;
-    if (msg.deleted || msg.kind !== 'text' || (!msg.text && !msg.image)) return res.status(400).json({ error: 'Không chuyển tiếp được tin nhắn này.' });
+    const voice = msg.kind === 'voice';
+    if (msg.deleted || !['text', 'voice'].includes(msg.kind) || (!msg.text && !msg.image && !msg.audio)) {
+      return res.status(400).json({ error: 'Không chuyển tiếp được tin nhắn này.' });
+    }
     const targets = [...new Set((Array.isArray(req.body?.conversationIds) ? req.body.conversationIds : []).map(Number))]
       .filter((id) => Number.isInteger(id) && membership(id, req.user.id))
       .slice(0, MAX_FORWARD);
@@ -212,11 +228,15 @@ function setupChatPlus(ctx) {
     for (const convId of targets) {
       const image = msg.image ? copyImage(msg.image, req.user.id) : null;
       if (msg.image && !image && !msg.text) continue; // ảnh đã bị dọn khỏi máy chủ
+      const audio = voice ? copyAudio(msg.audio, req.user.id) : null;
+      if (voice && !audio) continue; // file ghi âm đã bị dọn khỏi máy chủ
       const id = transaction(() => {
         const newId = Number(
           run(
-            'INSERT INTO messages (conversation_id, sender_id, text, image, forwarded, search_text, created_at) VALUES (?, ?, ?, ?, 1, ?, ?)',
-            convId, req.user.id, msg.text || null, image, msg.text ? searchKey(msg.text) : null, Date.now()
+            `INSERT INTO messages (conversation_id, sender_id, kind, text, image, audio, audio_ms, audio_wave, forwarded, search_text, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+            convId, req.user.id, voice ? 'voice' : 'text', msg.text || null, image, audio, voice ? msg.audio_ms : null, voice ? msg.audio_wave : null,
+            msg.text ? searchKey(msg.text) : null, Date.now()
           ).lastInsertRowid
         );
         run('UPDATE conversations SET last_message_id = ? WHERE id = ?', newId, convId);
@@ -230,7 +250,7 @@ function setupChatPlus(ctx) {
       notifyMembers(conv, message, members).catch((err) => console.warn('[push]', err.message));
       out.push(message);
     }
-    if (!out.length) return res.status(400).json({ error: 'Ảnh của tin này đã bị dọn khỏi máy chủ nên không chuyển tiếp được.' });
+    if (!out.length) return res.status(400).json({ error: voice ? 'File ghi âm của tin này đã bị dọn khỏi máy chủ nên không chuyển tiếp được.' : 'Ảnh của tin này đã bị dọn khỏi máy chủ nên không chuyển tiếp được.' });
     res.json({ messages: out });
   });
 

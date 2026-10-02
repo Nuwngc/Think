@@ -4,6 +4,7 @@ import { AccessibilityInfo, Animated, Easing, Platform, Pressable, StyleSheet, S
 import { useColors, type Colors } from "../theme";
 import { Button, Sheet, useStyles } from "../ui";
 import { Flame } from "./Flame";
+import { Ice, iceWash } from "./Ice";
 import { weekLabels } from "./logic";
 import { closeStreaks, loadStreaks, openStreaks, setRemind, streakOf, useStreaks } from "./store";
 import type { GameStreak, Streak } from "./types";
@@ -62,14 +63,21 @@ function LiveFlame({ size, lit }: { size: number; lit: boolean }) {
 }
 
 /** 7 ngày gần nhất */
-export function WeekStrip({ week, small }: { week: boolean[]; small?: boolean }) {
+export function WeekStrip({ week, small, ice = true }: { week: boolean[]; small?: boolean; ice?: boolean }) {
   const c = useColors();
   const s = useStyles(makeStyles);
   const start = useStreaks((st) => st.data?.weekStartDay ?? 0);
+  const frozen = useStreaks((st) => st.data?.freeze?.week);
   const labels = weekLabels(start);
   const dot = small ? 18 : 24;
+  const iced = week.map((on, i) => ice && !on && Boolean(frozen?.[i]));
+  const nIced = iced.filter(Boolean).length;
   return (
-    <View style={[s.week, small && { gap: 4 }]} accessible accessibilityLabel={`7 ngày gần nhất: ${week.filter(Boolean).length} ngày có chơi`}>
+    <View
+      style={[s.week, small && { gap: 4 }]}
+      accessible
+      accessibilityLabel={`7 ngày gần nhất: ${week.filter(Boolean).length} ngày có chơi${nIced ? `, ${nIced} ngày đóng băng` : ""}`}
+    >
       {week.map((on, i) => (
         <View key={i} style={s.weekItem}>
           <View
@@ -77,14 +85,30 @@ export function WeekStrip({ week, small }: { week: boolean[]; small?: boolean })
               s.dot,
               { width: dot, height: dot, borderRadius: dot / 2 },
               on && { backgroundColor: c.scheme === "dark" ? "#4A2E14" : "#FFE7CC" },
+              iced[i] && { backgroundColor: iceWash(c.scheme === "dark") },
               i === 6 && { borderWidth: 2, borderColor: on ? "#FF9A3D" : c.line },
             ]}
           >
-            {on ? <Flame size={small ? 12 : 16} /> : null}
+            {on ? <Flame size={small ? 12 : 16} /> : iced[i] ? <Ice size={small ? 11 : 14} /> : null}
           </View>
           <Text style={[s.weekLabel, small && { fontSize: 10 }, i === 6 && { color: c.text }]}>{labels[i]}</Text>
         </View>
       ))}
+    </View>
+  );
+}
+
+/** Số lượt đóng băng chuỗi còn lại */
+function FreezePill() {
+  const c = useColors();
+  const s = useStyles(makeStyles);
+  const f = useStreaks((st) => st.data?.freeze);
+  if (!f) return null;
+  const dark = c.scheme === "dark";
+  return (
+    <View style={[s.pill, { backgroundColor: f.count ? iceWash(dark) : c.field }]} accessible accessibilityLabel={`Còn ${f.count} lượt đóng băng chuỗi`}>
+      <Ice size={14} on={f.count > 0} />
+      <Text style={[s.pillText, { color: f.count ? (dark ? "#9FD6FF" : "#1D5F8C") : c.muted }]}>{f.count}</Text>
     </View>
   );
 }
@@ -174,7 +198,10 @@ export function StreakHero() {
         <Text style={[s.heroNum, !(o.today || o.current > 0) && { color: c.text, textShadowRadius: 0 }]}>{o.current}</Text>
       </View>
       <View style={{ flex: 1, gap: 3 }}>
-        <Text style={s.heroTitle}>{title}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={[s.heroTitle, { flex: 1 }]}>{title}</Text>
+          <FreezePill />
+        </View>
         <Text style={[s.heroLine, o.atRisk && { color: c.scheme === "dark" ? "#F2C04E" : "#7A5600", fontWeight: "700" }]}>{line}</Text>
         <WeekStrip week={o.week} />
       </View>
@@ -195,7 +222,7 @@ function Row({ g, focus }: { g: GameStreak; focus: boolean }) {
         <Text style={[s.rowSub, g.atRisk && { color: c.scheme === "dark" ? "#F2C04E" : "#7A5600", fontWeight: "700" }]}>
           {g.atRisk ? "Chơi hôm nay để giữ chuỗi" : g.today ? "Hôm nay đã chơi" : g.best ? `Kỷ lục ${g.best} ngày` : "Chưa có chuỗi"}
         </Text>
-        <WeekStrip week={g.week} small />
+        <WeekStrip week={g.week} small ice={g.current > 0} />
       </View>
       <View style={s.rowCount} accessible accessibilityLabel={`${g.current} ngày, kỷ lục ${g.best} ngày`}>
         <Flame size={26} lit={g.today} />
@@ -265,6 +292,32 @@ export function StreakHost() {
                 </View>
               ))}
             </View>
+            {data.freeze ? (
+              <View style={[s.freeze, { backgroundColor: c.scheme === "dark" ? "#10273A" : "#EEF8FF" }]}>
+                <View style={{ flexDirection: "row", gap: 4 }}>
+                  {Array.from({ length: data.freeze.max }, (_, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        s.freezeSlot,
+                        { backgroundColor: i < data.freeze!.count ? (c.scheme === "dark" ? "#1C4766" : "#CDEBFF") : "rgba(58,155,220,0.12)" },
+                      ]}
+                    >
+                      <Ice size={20} on={i < data.freeze!.count} />
+                    </View>
+                  ))}
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[s.remindTitle, { color: c.scheme === "dark" ? "#BFE3FF" : "#164C70" }]}>
+                    Đóng băng chuỗi: còn {data.freeze.count}/{data.freeze.max} lượt
+                  </Text>
+                  <Text style={s.note}>
+                    Ngày nào lỡ quên không chơi game nào, 1 lượt tự được dùng để giữ mọi chuỗi (ngày đó không cộng thêm). Mỗi thứ Hai được thêm 1 lượt, giữ tối
+                    đa 2.
+                  </Text>
+                </View>
+              </View>
+            ) : null}
             <View style={s.miles} accessible accessibilityLabel={`Các mốc chuỗi. Đã đạt tới ${reached} ngày`}>
               {data.milestones.slice(0, 8).map((m) => (
                 <View key={m} style={[s.mile, m <= reached && { backgroundColor: c.scheme === "dark" ? "#4A2E14" : "#FFEBD6" }]}>
@@ -394,6 +447,10 @@ const makeStyles = (c: Colors) =>
     mile: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: c.field },
     mileText: { color: c.muted, fontSize: 13, fontWeight: "800" },
     remind: { flexDirection: "row", alignItems: "center", gap: 12 },
+    pill: { flexDirection: "row", alignItems: "center", gap: 3, paddingLeft: 6, paddingRight: 8, paddingVertical: 2, borderRadius: 999 },
+    pillText: { fontSize: 13, fontWeight: "800", fontVariant: ["tabular-nums"] },
+    freeze: { flexDirection: "row", gap: 12, alignItems: "flex-start", padding: 12, borderRadius: 16 },
+    freezeSlot: { width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center" },
     remindTitle: { color: c.text, fontSize: 15, fontWeight: "800" },
     cheer: { alignItems: "center", gap: 10, paddingVertical: 8 },
     cheerTitle: { color: c.text, fontSize: 19, fontWeight: "800", textAlign: "center" },

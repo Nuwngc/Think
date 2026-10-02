@@ -51,6 +51,9 @@ import { ConvSettingsSheet } from "./ConvSettingsSheet";
 import { GroupInfoSheet } from "./GroupInfoSheet";
 import { ImageViewer } from "./ImageViewer";
 import { MessageRow } from "./MessageItem";
+import { voiceLabel } from "../voice/core";
+import { releaseVoice } from "../voice/player";
+import { VoiceRecorder } from "../voice/ui";
 
 const GROUP_GAP = 5 * 60 * 1000;
 
@@ -126,6 +129,10 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
   const meId = me?.id ?? 0;
   const listRef = useRef<FlatList<Row>>(null);
   const inputRef = useRef<TextInput>(null);
+  // Đang ghi tin nhắn thoại: thanh ghi âm thay chỗ ô nhập
+  const [recording, setRecording] = useState(false);
+  // Rời khung chat: dừng tin thoại đang phát, trả lại trình phát cho máy
+  useEffect(() => () => releaseVoice(), []);
   // Đặt con trỏ về cuối ô nhập sau khi app tự điền chữ (chọn @tên, bấm Sửa)
   const [caret, setCaret] = useState<number | null>(null);
   const caretToEnd = (text: string, delay = 0) => {
@@ -452,7 +459,7 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
               Đang trả lời {replying.senderId === meId ? "chính mình" : names.nameOf(replying.senderId)}
             </Text>
             <Text style={s.muted} numberOfLines={1}>
-              {replying.text || "📷 Ảnh"}
+              {replying.kind === "voice" ? voiceLabel(replying.audio?.ms) : replying.text || "📷 Ảnh"}
             </Text>
           </View>
           <IconButton name="close" label="Hủy trả lời" size={20} onPress={() => cancelReply(convId)} />
@@ -468,21 +475,25 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
         }}
       />
       <Composer>
-        <IconButton name="add-circle-outline" label="Thêm: ảnh, bình chọn" color={theme.a} onPress={() => setAttachOpen(true)} disabled={offline} />
+        {recording ? null : (
+          <IconButton name="add-circle-outline" label="Thêm: ảnh, bình chọn" color={theme.a} onPress={() => setAttachOpen(true)} disabled={offline} />
+        )}
+        {/* Tin nhắn thoại (khung chat nổi không ghi âm: hỏi quyền micro trên ứng dụng khác dễ bị máy chặn) */}
+        {bubble ? null : <VoiceRecorder convId={convId} accent={theme.a} disabled={offline || Boolean(editing)} onActive={setRecording} />}
         <TextInput
           ref={inputRef}
           value={draft}
           onChangeText={onChangeText}
           placeholder={offline ? "Đang chờ kết nối máy chủ…" : "Nhập tin nhắn…"}
           placeholderTextColor={c.muted}
-          style={s.input}
+          style={[s.input, recording && { display: "none" }]}
           multiline
           maxLength={4000}
           editable={!offline}
           selection={caret != null ? { start: caret, end: caret } : undefined}
           accessibilityLabel="Nhập tin nhắn"
         />
-        {draft.trim() || editing ? (
+        {recording ? null : draft.trim() || editing ? (
           <Pressable
             onPress={send}
             disabled={offline}

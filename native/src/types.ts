@@ -30,7 +30,12 @@ export type ReplyRef = {
   missing: boolean;
   text: string | null;
   image: boolean;
+  /** Tin được trả lời là tin nhắn thoại */
+  audio?: boolean;
 };
+
+/** Tin nhắn thoại: file ghi âm, độ dài (ms), dạng sóng (src/voice/core.ts) */
+export type VoiceAudio = { url: string; ms: number; wave: string };
 
 /** Bình chọn trong cuộc trò chuyện (tin loại "poll", câu hỏi nằm ở text) */
 export type Poll = {
@@ -43,7 +48,7 @@ export type Message = {
   id: number;
   conversationId: number;
   senderId: number;
-  kind: "text" | "system" | "poll";
+  kind: "text" | "system" | "poll" | "voice";
   text: string | null;
   image: string | null;
   deleted: boolean;
@@ -51,6 +56,9 @@ export type Message = {
   replyTo: ReplyRef | null;
   reactions: Reaction[];
   imagePurged?: boolean;
+  /** Tin nhắn thoại (null: file đã bị dọn khỏi máy chủ) */
+  audio?: VoiceAudio | null;
+  audioPurged?: boolean;
   clientId?: string;
   /** Lần sửa gần nhất (đã chỉnh sửa) */
   editedAt?: number;
@@ -70,7 +78,7 @@ export type PendingMessage = {
   clientId: string;
   conversationId: number;
   senderId: number;
-  kind: "text";
+  kind: "text" | "voice";
   text: string | null;
   image: null;
   deleted: false;
@@ -78,6 +86,10 @@ export type PendingMessage = {
   replyTo: ReplyRef | null;
   reactions: Reaction[];
   mentions?: number[];
+  /** Tin nhắn thoại đang gửi: url = file ghi âm trên máy */
+  audio?: VoiceAudio;
+  /** Đã tải file ghi âm lên (gửi lại thì khỏi tải lần nữa) */
+  uploadedAudio?: string;
   localUri?: string;
   mime?: string;
   width?: number;
@@ -163,6 +175,27 @@ export type ProfileStats = {
   chess: { rating: number; games: number; wins: number } | null;
   blocks?: { best: number; games: number } | null;
   caro?: { rating: number; games: number; wins: number } | null;
+  /** Thành tựu (máy chủ cũ không có) */
+  achievements?: { list: Achievement[]; earned: number; total: number };
+};
+
+/** Một thành tựu trên trang cá nhân (src/achievements.js): bậc 0 = chưa đạt, 1 Đồng, 2 Bạc, 3 Vàng */
+export type Achievement = {
+  id: string;
+  icon: string;
+  name: string;
+  tier: number;
+  tierName: string;
+  value: number;
+  goals: number[];
+  next: number | null;
+  /** Việc cần làm tiếp (hoặc bậc cao nhất) */
+  text: string;
+  /** Việc đã làm được ở bậc hiện tại */
+  done: string | null;
+  progress: number;
+  /** Chủ trang vừa đạt (hiện "Mới" một lần) */
+  isNew: boolean;
 };
 
 /** Báo lỗi app (Quản trị → Báo lỗi app) */

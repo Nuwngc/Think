@@ -13,6 +13,8 @@ import { closePoll, openChess, useStore, votePoll } from "../store";
 import { useColors, type Colors } from "../theme";
 import type { ChatItem, Conversation, Message, User } from "../types";
 import { Avatar, Icon, useStyles } from "../ui";
+import { voiceLabel } from "../voice/core";
+import { VoiceBubble } from "../voice/ui";
 
 export type MessageRowProps = {
   item: ChatItem;
@@ -188,6 +190,20 @@ function Bubble(p: MessageRowProps & { mine: boolean }) {
       </View>
     );
   }
+  if (m.kind === "voice") {
+    return (
+      <View
+        style={[
+          s.bubble,
+          { backgroundColor: mine ? p.theme?.a || c.jade : c.theirs, paddingVertical: 6, paddingLeft: 6, paddingRight: 8 },
+          !mine && c.scheme === "light" && s.bubbleShadow,
+        ]}
+      >
+        {m.replyTo ? <Quote {...p} mine={mine} /> : null}
+        <VoiceBubble m={m} mine={mine} accent={p.theme?.a || c.jade} />
+      </View>
+    );
+  }
   const localUri = isPending(m) ? m.localUri : undefined;
   const hasImage = Boolean(m.image || localUri);
   const purged = !hasImage && !isPending(m) && Boolean(m.imagePurged);
@@ -274,7 +290,7 @@ function Quote(p: MessageRowProps & { mine: boolean }) {
     ? "Tin nhắn cũ đã được dọn khỏi máy chủ"
     : r.deleted
       ? "Tin nhắn đã được thu hồi"
-      : r.text || (r.image ? "📷 Ảnh" : "");
+      : r.text || (r.audio ? voiceLabel() : r.image ? "📷 Ảnh" : "");
   return (
     <Pressable
       onPress={() => r.id && !r.missing && p.onPressQuote(r.id)}

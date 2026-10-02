@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 
 import { api, ApiError } from "../api";
-import { addPending, cheerText, dayKey, pendingByGame, playsFor, removeSent, type PendingDay } from "./logic";
+import { addPending, cheerText, dayKey, freezeText, freshFrozen, pendingByGame, playsFor, removeSent, type PendingDay } from "./logic";
 import type { StreakEvent, StreakSummary } from "./types";
 
 // Chuỗi hằng ngày của mọi game trong app (máy chủ: src/streaks.js).
@@ -12,6 +12,7 @@ import type { StreakEvent, StreakSummary } from "./types";
 // Realtime "streak:update" và thông báo nhỏ nối ở src/store.ts qua bindStreaks().
 
 const KEY = "think.streak.days";
+const KEY_ICE = "think.streak.iceSeen";
 
 type Sheet = { kind: "detail"; game: string | null } | { kind: "milestone"; event: StreakEvent } | null;
 
@@ -136,13 +137,33 @@ export async function loadStreaks() {
   set({ loading: true });
   try {
     const data = await api.streaks();
-    if (g0 === gen) set({ data });
+    if (g0 === gen) {
+      set({ data });
+      announceFreeze(bridge.meId(), data).catch(() => undefined);
+    }
   } catch {
     /* lần sau tải lại */
   } finally {
     if (g0 === gen) set({ loading: false });
   }
   await flushStreaks();
+}
+
+/** Máy chủ vừa dùng lượt đóng băng cho ngày quên chơi: báo một lần (mỗi ngày, mỗi người) */
+async function announceFreeze(uid: number, data: StreakSummary) {
+  const used = data.freeze?.used || [];
+  if (!uid || !used.length) return;
+  let seen: Record<string, string[]> = {};
+  try {
+    seen = JSON.parse((await AsyncStorage.getItem(KEY_ICE)) || "{}") || {};
+  } catch {
+    seen = {};
+  }
+  const fresh = freshFrozen(used, seen[uid]);
+  if (!fresh.length) return;
+  seen[uid] = [...(seen[uid] || []), ...fresh].slice(-14);
+  await AsyncStorage.setItem(KEY_ICE, JSON.stringify(seen));
+  bridge.toast(freezeText(fresh.length, data.overall.current));
 }
 
 export function onStreakEvent(evt: StreakEvent) {

@@ -25,8 +25,8 @@ function loadDriver() {
 }
 const Driver = loadDriver();
 
-const { DATA_DIR, UPLOAD_DIR, AVATAR_DIR, IMAGE_DIR } = require('./paths');
-for (const dir of [DATA_DIR, AVATAR_DIR, IMAGE_DIR]) fs.mkdirSync(dir, { recursive: true });
+const { DATA_DIR, UPLOAD_DIR, AVATAR_DIR, IMAGE_DIR, AUDIO_DIR } = require('./paths');
+for (const dir of [DATA_DIR, AVATAR_DIR, IMAGE_DIR, AUDIO_DIR]) fs.mkdirSync(dir, { recursive: true });
 
 const db = new Driver(path.join(DATA_DIR, 'chat.db'));
 try {
@@ -219,6 +219,10 @@ ensureColumn('members', 'pinned_at', 'pinned_at INTEGER');
 // 2.1.0: chủ đề (màu bong bóng chat) và biểu tượng gửi nhanh của cuộc trò chuyện
 ensureColumn('conversations', 'theme', 'theme TEXT');
 ensureColumn('conversations', 'emoji', 'emoji TEXT');
+// 2.5.0: tin nhắn thoại (kind = 'voice'): file ghi âm, độ dài, dạng sóng (public/voice-core.js). Dọn file thì image_purged = 1
+ensureColumn('messages', 'audio', 'audio TEXT');
+ensureColumn('messages', 'audio_ms', 'audio_ms INTEGER');
+ensureColumn('messages', 'audio_wave', 'audio_wave TEXT');
 if (!db.prepare('PRAGMA table_info(messages)').all().some((c) => c.name === 'updated_at')) {
   // Thời điểm tin nhắn thay đổi lần cuối (thu hồi, cảm xúc, dọn ảnh) để máy người dùng đồng bộ
   db.exec('ALTER TABLE messages ADD COLUMN updated_at INTEGER');
@@ -364,4 +368,4 @@ function setSetting(key, value) {
   );
 }
 
-module.exports = { db, get, all, run, transaction, getSetting, setSetting, searchKey, DATA_DIR, UPLOAD_DIR, AVATAR_DIR, IMAGE_DIR, GENERAL_ID };
+module.exports = { db, get, all, run, transaction, getSetting, setSetting, searchKey, DATA_DIR, UPLOAD_DIR, AVATAR_DIR, IMAGE_DIR, AUDIO_DIR, GENERAL_ID };

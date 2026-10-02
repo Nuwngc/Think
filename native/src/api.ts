@@ -185,7 +185,13 @@ export const api = {
   uploadImage: (fileUri: string, mime: string, width: number, height: number) =>
     uploadRaw<{ url: string }>(`/api/upload?w=${Math.round(width)}&h=${Math.round(height)}`, fileUri, mime),
 
-  send: (conversationId: number, body: { text?: string; image?: string; replyTo?: number; clientId?: string; mentions?: number[] }) =>
+  /** File ghi âm của tin nhắn thoại (M4A từ máy ghi của app) */
+  uploadAudio: (fileUri: string, mime: string) => uploadRaw<{ url: string }>("/api/upload/audio", fileUri, mime),
+
+  send: (
+    conversationId: number,
+    body: { text?: string; image?: string; audio?: string; audioMs?: number; audioWave?: string; replyTo?: number; clientId?: string; mentions?: number[] },
+  ) =>
     request<{ message: Message }>(`/api/conversations/${conversationId}/messages`, { method: "POST", body }),
 
   read: (conversationId: number, messageId?: number) =>
