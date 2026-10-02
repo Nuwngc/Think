@@ -5,6 +5,7 @@ import {
   setAudioModeAsync,
   useAudioRecorder,
   useAudioRecorderState,
+  type AudioRecorder,
   type RecordingOptions,
 } from "expo-audio";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
@@ -117,6 +118,16 @@ export const VoiceBubble = memo(function VoiceBubble({ m, mine, accent }: { m: C
 /* ======================= Ghi âm ======================= */
 
 type RecState = "idle" | "starting" | "recording" | "finishing";
+type RecStatus = { durationMillis: number; metering?: number };
+
+/** Đọc thời gian và âm lượng của máy ghi mỗi 0,1 giây — chỉ gắn vào lúc đang ghi (khỏi hỏi máy ghi suốt lúc mở chat) */
+function RecTicker({ recorder, onStatus }: { recorder: AudioRecorder; onStatus: (s: RecStatus) => void }) {
+  const st = useAudioRecorderState(recorder, 100);
+  useEffect(() => {
+    onStatus({ durationMillis: st.durationMillis, metering: st.metering });
+  }, [st.durationMillis, st.metering, onStatus]);
+  return null;
+}
 
 /**
  * Nút micro + thanh ghi âm trong ô nhập tin. onActive(true) khi đang ghi (khung chat ẩn ô nhập để thanh ghi âm
@@ -126,7 +137,7 @@ export function VoiceRecorder({ convId, accent, disabled, onActive }: { convId: 
   const c = useColors();
   const s = useStyles(makeStyles);
   const recorder = useAudioRecorder(VOICE_PRESET);
-  const status = useAudioRecorderState(recorder, 100);
+  const [status, setStatus] = useState<RecStatus>({ durationMillis: 0 });
   const [state, setState] = useState<RecState>("idle");
   const [locked, setLocked] = useState(false);
   const [cancelZone, setCancelZone] = useState(false);
@@ -156,6 +167,7 @@ export function VoiceRecorder({ convId, accent, disabled, onActive }: { convId: 
     stopVoice(); // đang nghe tin thoại thì dừng
     r.current.levels = [];
     setLevels([]);
+    setStatus({ durationMillis: 0 });
     move("starting");
     try {
       let perm = await getRecordingPermissionsAsync();
@@ -304,6 +316,7 @@ export function VoiceRecorder({ convId, accent, disabled, onActive }: { convId: 
 
   return (
     <>
+      {state === "recording" ? <RecTicker recorder={recorder} onStatus={setStatus} /> : null}
       <View
         {...pan.panHandlers}
         style={[s.mic, on && { backgroundColor: c.danger, transform: [{ scale: 1.12 }] }, disabled && !on && { opacity: 0.4 }]}
