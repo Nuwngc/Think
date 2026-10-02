@@ -14,6 +14,9 @@ import { Emo } from "../farm/Emo";
 import { farmSummary, fmt as farmFmt } from "../farm/logic";
 import { loadFarm, serverNow, useFarm } from "../farm/store";
 import { openBlocks, openCaro, openChess, openFarm, useStore } from "../store";
+import { loadStreaks } from "../streaks/store";
+import { StreakChip, StreakHero } from "../streaks/ui";
+import type { GameId } from "./registry";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Icon, useStyles, type IconName } from "../ui";
 
@@ -62,6 +65,7 @@ function Chip({ text, icon, alert }: { text: string; icon?: IconName; alert?: bo
   );
 }
 
+/** Thẻ một game. Mã game (id) phải có trong registry.ts: thẻ tự hiện huy hiệu chuỗi hằng ngày */
 function GameCard({
   id,
   colors,
@@ -74,7 +78,7 @@ function GameCard({
   onPress,
   label,
 }: {
-  id: string;
+  id: GameId;
   colors: [string, string, string];
   title: string;
   sub: string;
@@ -97,7 +101,10 @@ function GameCard({
       <View style={s.cardMain}>
         <Text style={s.cardTitle}>{title}</Text>
         <Text style={s.cardSub}>{sub}</Text>
-        <View style={s.chips}>{chips}</View>
+        <View style={s.chips}>
+          <StreakChip game={id} />
+          {chips}
+        </View>
         <View style={s.cta}>
           <Icon name="play-arrow" size={20} color={ctaColor} />
           <Text style={[s.ctaText, { color: ctaColor }]}>{cta}</Text>
@@ -182,6 +189,7 @@ export function GamesHome() {
     if (!useChess.getState().loaded) loadChess();
     if (!useChess.getState().leaderboard) loadLeaderboard();
     if (!useCaro.getState().loaded && !useCaro.getState().loading) loadCaro();
+    loadStreaks();
   }, []);
 
   const board = (title: string, rows: { userId: number; value: string }[]) => (
@@ -218,6 +226,7 @@ export function GamesHome() {
               loadLeaderboard();
               loadCaro();
               loadFarm({ peek: true });
+              loadStreaks();
               sync();
             }}
             tintColor={c.accent}
@@ -225,6 +234,7 @@ export function GamesHome() {
           />
         }
       >
+        <StreakHero />
         <FarmCard />
         <GameCard
           id="blocks"

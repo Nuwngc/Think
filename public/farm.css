@@ -39,13 +39,19 @@
 
 /* ---------- Thanh trên ---------- */
 .farm-head {
-  display: flex; align-items: center; gap: 8px; padding: calc(10px + var(--safe-top)) 10px 8px 6px;
+  display: flex; align-items: center; gap: 6px; padding: calc(10px + var(--safe-top)) 10px 8px 6px;
   background: var(--surface); border-bottom: 1px solid var(--line);
 }
-.farm-title { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.farm-title { flex: 1; min-width: 0; display: grid; gap: 4px; container-type: inline-size; }
+/* Màn hẹp: bỏ số kinh nghiệm, giữ thanh kinh nghiệm đủ dài */
+@container (max-width: 150px) { .farm-level .farm-xp-num { display: none; } }
+.farm-level .farm-xp { min-width: 40px; }
 .farm-title h1 { font-size: 19px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .farm-level { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
-.farm-level-badge { background: var(--jade); color: #fff; border-radius: 999px; padding: 1px 8px; font-weight: 800; font-size: 12px; }
+.farm-level-badge { background: var(--jade); color: #fff; border-radius: 999px; padding: 1px 8px; font-weight: 800; font-size: 12px; white-space: nowrap; }
+/* Chuỗi hằng ngày (public/streaks.js): gọn lại cho vừa đầu trang */
+.farm-head .streak-badge { height: 30px; padding: 0 8px 0 5px; gap: 2px; font-size: 14px; }
+.farm-head .streak-badge .streak-flame { width: 17px; height: 17px; }
 .farm-xp { flex: 1; max-width: 160px; height: 6px; border-radius: 3px; background: var(--field); overflow: hidden; }
 .farm-xp > i { display: block; height: 100%; width: var(--p, 0%); background: linear-gradient(90deg, var(--turmeric), #F7C948); border-radius: 3px; transition: width .4s ease; }
 .farm-coins {

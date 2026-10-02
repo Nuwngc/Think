@@ -3,6 +3,7 @@
 // Game chạy hẳn trên điện thoại / trình duyệt nên chơi được cả khi mất mạng; điểm các ván chơi lúc offline
 // được gửi lên theo lô khi có mạng lại (mỗi ván có mã riêng nên gửi lại nhiều lần cũng không bị tính trùng).
 const { db, get, all, run, transaction } = require('./db');
+const streaks = require('./streaks');
 
 const GAMES = {
   // Mỗi nước đặt khối được tối đa 9 ô + ăn 6 hàng với combo x10 + dọn sạch bàn: dưới 1700 điểm
@@ -165,6 +166,7 @@ function setupGames({ app, io, requireAuth, requireReady, nameOf }) {
     const prevLeader = leaderOf();
     const accepted = [];
     const rejected = [];
+    const playedDays = new Set();
     transaction(() => {
       for (const raw of list) {
         const s = cleanScore(game, raw, now);
@@ -179,6 +181,7 @@ function setupGames({ app, io, requireAuth, requireReady, nameOf }) {
         );
         accepted.push(s.id); // đã có từ trước cũng coi như nhận rồi (máy người dùng xóa khỏi hàng chờ)
         if (!r.changes) continue;
+        playedDays.add(streaks.dayKey(s.playedAt));
         run(
           `INSERT INTO game_bests (user_id, game, best, best_at, games, lines, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)
            ON CONFLICT(user_id, game) DO UPDATE SET
@@ -193,6 +196,8 @@ function setupGames({ app, io, requireAuth, requireReady, nameOf }) {
       // Dọn điểm từng ván quá cũ (kỷ lục vẫn giữ trong game_bests)
       run('DELETE FROM game_scores WHERE game = ? AND played_at < ?', game, now - KEEP_DAYS * 86400000);
     });
+    // Chuỗi hằng ngày: ngày của các ván vừa gửi (kể cả ván chơi lúc mất mạng)
+    if (playedDays.size) streaks.recordDays(uid, game, [...playedDays], now);
     const out = boards(game, uid);
     const newBest = out.me.best > prevBest;
     if (newBest) {

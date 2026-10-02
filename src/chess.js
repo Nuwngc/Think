@@ -3,6 +3,7 @@
 // Máy chủ giữ luật (chess.js) và đồng hồ; máy người chơi chỉ gửi nước đi.
 const { Chess } = require('chess.js');
 const { get, all, run, transaction } = require('./db');
+const streaks = require('./streaks');
 const engine = require('./chess-engine');
 const { setupAnalysis } = require('./chess-analysis');
 
@@ -673,6 +674,7 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     }
     try {
       const out = applyMove(g, req.body?.move, color);
+      streaks.record(req.user.id, 'chess'); // chuỗi hằng ngày (src/streaks.js)
       res.json({ game: serialize(out.game), san: out.san });
     } catch (err) {
       if (err instanceof ChessError) {

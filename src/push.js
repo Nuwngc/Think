@@ -83,7 +83,7 @@ async function sendToBrowsers(userId, payload) {
     subs.map(async (s) => {
       try {
         await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body, {
-          TTL: 24 * 60 * 60,
+          TTL: Number.isInteger(payload.ttl) && payload.ttl > 0 ? Math.min(payload.ttl, 24 * 60 * 60) : 24 * 60 * 60,
           urgency: 'high',
         });
         sent++;

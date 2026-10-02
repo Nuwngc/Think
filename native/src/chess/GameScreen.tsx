@@ -251,6 +251,7 @@ function Game({ g }: { g: ChessGame }) {
           hints={prefs.hints}
           showLast={prefs.lastMove}
           coords={prefs.coords}
+          animate={prefs.anim}
           arrow={review && prefs.arrows ? (showBest ? beforePos?.best : ply < total ? review.positions[ply]?.best : null) : null}
           badge={showBest && beforePos?.best ? { sq: beforePos.best.slice(2, 4), cls: "best" } : reviewMove ? { sq: reviewMove.uci.slice(2, 4), cls: reviewMove.cls } : null}
         />

@@ -267,7 +267,7 @@ const makeStyles = (c: Colors) =>
   });
 
 /* =========================================================
-   Tùy chọn bàn cờ: chỉ dẫn, tô nước vừa đi, tọa độ, mũi tên gợi ý, âm thanh
+   Tùy chọn bàn cờ: chỉ dẫn, tô nước vừa đi, tọa độ, mũi tên gợi ý, quân trượt, âm thanh
    ========================================================= */
 
 const PREF_ROWS: { key: keyof ChessPrefs; title: string; hint: string }[] = [
@@ -275,6 +275,7 @@ const PREF_ROWS: { key: keyof ChessPrefs; title: string; hint: string }[] = [
   { key: "lastMove", title: "Tô màu nước vừa đi", hint: "Tô vàng ô đi và ô đến của nước gần nhất." },
   { key: "coords", title: "Tọa độ bàn cờ", hint: "Chữ a–h và số 1–8 ở mép bàn cờ." },
   { key: "arrows", title: "Mũi tên gợi ý khi phân tích", hint: "Khi xem lại ván đã phân tích, vẽ mũi tên nước tốt nhất của máy." },
+  { key: "anim", title: "Quân trượt khi đi", hint: "Quân cờ trượt mượt từ ô đi tới ô đến (nước của bạn, của đối thủ, khi xem lại ván), quân bị ăn mờ dần." },
   { key: "sound", title: "Âm thanh", hint: "Tiếng quân cờ khi đi, ăn quân, chiếu tướng, bắt đầu và kết thúc ván." },
 ];
 

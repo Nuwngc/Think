@@ -6,6 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { shortTime } from "../format";
 import { openCaro, showGamesHub, useStore } from "../store";
+import { StreakBadge } from "../streaks/ui";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Button, Icon, IconButton, useStyles, type IconName } from "../ui";
 import { MiniBoard } from "./Board";
@@ -94,6 +95,7 @@ export function CaroHome() {
                 <Text style={s.heroRank}>#{myRank}</Text>
               </View>
             ) : null}
+            <StreakBadge game="caro" onDark />
           </View>
           <Text style={s.heroStats}>
             {rating && rating.games

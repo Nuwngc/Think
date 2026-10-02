@@ -20,6 +20,7 @@ import Svg, { Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "rea
 
 import { confirm, Avatar, Icon, type IconName } from "../ui";
 import { useStore } from "../store";
+import { StreakBadge } from "../streaks/ui";
 import { canPlace, fitsAnywhere, linesIfPlaced, praise, shapeOf, SIZE, type Piece } from "./engine";
 import { preloadBlockSounds, playBlock } from "./sound";
 import { ensureGame, loadBlocks, localBest, pendingFor, placePiece, recordGame, setSound, startGame, sync, useBlocks } from "./store";
@@ -638,6 +639,7 @@ export function BlocksScreen({ onBack }: { onBack: () => void }) {
           <Crown />
           <Text style={styles.bestText}>{fmt(best)}</Text>
         </View>
+        <StreakBadge game="blocks" onDark />
         <View style={{ flex: 1 }} />
         <TopButton icon={soundOn ? "volume-up" : "volume-off"} label={soundOn ? "Tắt âm thanh" : "Bật âm thanh"} pressed={soundOn} onPress={() => {
           setSound(!soundOn);

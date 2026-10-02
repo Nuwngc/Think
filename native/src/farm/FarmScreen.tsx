@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, Pattern, Rect } from "react-native-svg";
 
 import { useStore } from "../store";
+import { StreakBadge } from "../streaks/ui";
 import type { Colors } from "../theme";
 import { Button, IconButton, useStyles } from "../ui";
 import { BuildView, RecipeSheet } from "./Build";
@@ -177,6 +178,7 @@ const Header = memo(function Header({ onBack, onHelp }: { onBack: () => void; on
           </View>
         ) : null}
       </View>
+      {!visiting ? <StreakBadge game="farm" /> : null}
       {farm ? <CoinPill coins={farm.coins} /> : null}
       <IconButton name={sound ? "volume-up" : "volume-off"} label={sound ? "Tắt âm thanh" : "Bật âm thanh"} onPress={() => setSound(!sound)} />
       {!visiting ? <IconButton name="info-outline" label="Cách chơi" onPress={onHelp} /> : null}

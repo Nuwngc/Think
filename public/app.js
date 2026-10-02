@@ -348,6 +348,10 @@
         updateBadge: updateGamesBadge,
       })
     : null;
+  // Chuỗi hằng ngày của mọi game (public/streaks.js, máy chủ src/streaks.js)
+  const streaks = window.ThinkStreaks
+    ? window.ThinkStreaks.create({ h, icon, api, state, toast, onChange: () => games && games.refresh() })
+    : null;
   games = window.ThinkGames
     ? window.ThinkGames.create({ h, icon, api, state, navigate, goBack, toast, chess, caro, nameOf, userOf, avatarEl, withBusy })
     : null;
@@ -412,6 +416,7 @@
     if (chess) chess.reset();
     if (caro) caro.reset();
     if (games) games.reset();
+    if (streaks) streaks.reset();
     if (social) social.reset();
     $('#conv-list').replaceChildren();
     $('#messages').replaceChildren();
@@ -2849,6 +2854,7 @@ ${sections}
         resync();
         if (chess) chess.reload();
         if (caro) caro.reload();
+        if (streaks) streaks.load();
       }
       state.everConnected = true;
     });
@@ -2887,6 +2893,7 @@ ${sections}
     }
     if (games) socket.on('games:score', (data) => games.onScore(data));
     if (games) socket.on('farm:event', (data) => games.onFarmEvent(data));
+    if (streaks) socket.on('streak:update', (data) => streaks.onUpdate(data));
     socket.on('admin:errors', () => {
       if (state.tab === 'admin' && state.adminSeg === 'errors') loadErrors();
       else $('#errors-badge').hidden = false;
@@ -4470,6 +4477,7 @@ ${sections}
     if (chess) chess.load(); // để hiện số việc cần làm ở tab Trò chơi
     if (caro) caro.load();
     if (games) games.sync(); // gửi điểm Xếp Khối chơi lúc offline
+    if (streaks) streaks.load(); // chuỗi hằng ngày (gửi luôn ngày chơi lúc mất mạng)
     syncPush();
     if (LocalDB.ready()) {
       cacheMe(state.me);

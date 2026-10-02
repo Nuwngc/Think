@@ -473,6 +473,41 @@ def s_farm_visit():
         raise RuntimeError("Không về được mục Trò chơi")
 
 
+def streaks_now():
+    token, _ = login_token(args.user, args.password)
+    return api_call("/api/streaks", token=token)
+
+
+def s_streaks():
+    # Chuỗi hằng ngày: vừa chơi Nông trại thì máy chủ ghi hôm nay, trang Trò chơi hiện khung chuỗi
+    data = streaks_now()
+    farm = next((g for g in data.get("games", []) if g.get("id") == "farm"), None)
+    if not farm or not farm.get("today"):
+        raise RuntimeError(f"Chơi Nông trại rồi mà chuỗi chưa ghi hôm nay ({farm})")
+    if wait_for(r"ngày liên tiếp chơi game", 15) is None:
+        raise RuntimeError("Trang Trò chơi không hiện khung chuỗi hằng ngày")
+    tap(r"ngày liên tiếp chơi game")
+    if wait_for(r"^Nhắc giữ chuỗi", 10) is None:
+        raise RuntimeError("Không mở được bảng chuỗi hằng ngày")
+    time.sleep(1)
+    back()
+    if wait_for(r"Xếp Khối", 10) is None:
+        raise RuntimeError("Không đóng được bảng chuỗi hằng ngày")
+    return f"Nông trại {farm.get('current')} ngày"
+
+
+def s_streaks_all():
+    # Cờ vua (máy chủ ghi) và Xếp Khối (app gửi ngày chơi lên) cũng có chuỗi hôm nay
+    today = set()
+    for _ in range(10):
+        data = streaks_now()
+        today = {g["id"] for g in data.get("games", []) if g.get("today")}
+        if {"farm", "chess", "blocks"} <= today:
+            return "hôm nay: " + ", ".join(sorted(today))
+        time.sleep(2)
+    raise RuntimeError(f"Chuỗi hôm nay chưa đủ Nông trại, Cờ vua, Xếp Khối (có: {sorted(today)})")
+
+
 def s_background():
     sh("input keyevent 3")  # nút Home
     time.sleep(4)
@@ -708,10 +743,12 @@ def main():
         step("Mục Trò chơi", s_games_hub)
         step("Nông trại: thu hoạch, gieo hạt (có âm thanh)", s_farm)
         step("Nông trại: ghé vườn bạn rồi quay lại", s_farm_visit)
+        step("Chuỗi hằng ngày", s_streaks)
         step("Cờ vua với máy (có âm thanh)", s_chess_bot)
         step("Rời ván cờ", s_chess_back)
         step("Xếp Khối (có âm thanh)", s_blocks)
         step("Thoát Xếp Khối", s_blocks_back)
+        step("Chuỗi hằng ngày của các game", s_streaks_all)
         step("Chạy nền rồi mở lại", s_background)
         step("Trang cá nhân", s_profile)
         step("Cuộn bảng tin", s_feed_and_scroll)

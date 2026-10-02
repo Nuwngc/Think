@@ -16,7 +16,8 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - **App Think Beta** (thư mục `native/`): app thật viết bằng React Native, không phải trang web trong khung. GitHub tự build file APK mỗi lần sửa code (mục 13).
 - **Trò chơi** (mục 16): tab riêng chứa **Nông trại**, **Xếp Khối**, **Cờ vua**, **Cờ caro**, có bảng xếp hạng của cả nhóm.
 - **Nông trại** (mục 20, mới ở 2.2.0): trồng 15 loại cây theo thời gian thật, nuôi gà bò, **tự nấu mì cay, pha trà sữa trân châu**, nướng pizza, làm kem xoài… rồi **bán ở chợ** (giá đổi mỗi ngày, có món hot) hoặc **giao đơn cho khách** lấy xu; lên cấp mở thêm cây, món, ô đất; **ghé vườn bạn bè** bắt sâu giúp hoặc **hái trộm**, nuôi chó giữ vườn; bảng xếp hạng cấp độ và xu tuần này. Có trên web và App Think Beta.
-- **Cờ vua** (mục 14): thách đấu bạn bè, chọn thời gian (1+0 … 30+0 hoặc không giới hạn), đồng hồ do máy chủ giữ, **điểm ELO và bảng xếp hạng**, chơi với 8 máy cờ mã nguồn mở (có Stockfish), **xem lại ván**, **đánh giá ván kiểu Game Review**: mỗi nước được xếp loại **Thiên tài !!, Tuyệt vời !, Tốt nhất, Rất tốt, Tốt, Theo sách, Thiếu chính xác ?!, Sai lầm ?, Bỏ lỡ, Sai lầm nghiêm trọng ??**, có thanh đánh giá, nhận xét từng nước, tên khai cuộc. Âm thanh quân gỗ giòn kiểu các trang cờ lớn. Có trên cả web lẫn App Think Beta.
+- **Chuỗi hằng ngày** (mục 21, mới ở 2.3.0): mỗi game (Nông trại, Xếp Khối, Cờ vua, Cờ caro) có **chuỗi ngày chơi liên tiếp** riêng 🔥 và một chuỗi chung; thẻ game hiện số ngày, có lịch 7 ngày, mốc 3 / 7 / 14 / 30… ngày được chúc mừng, buổi tối nhắc nếu chuỗi sắp đứt. Game nào thêm sau này cũng phải có chuỗi.
+- **Cờ vua** (mục 14): thách đấu bạn bè, chọn thời gian (1+0 … 30+0 hoặc không giới hạn), đồng hồ do máy chủ giữ, **quân cờ trượt mượt và kéo thả bằng ngón tay như chess.com**, **điểm ELO và bảng xếp hạng**, chơi với 8 máy cờ mã nguồn mở (có Stockfish), **xem lại ván**, **đánh giá ván kiểu Game Review**: mỗi nước được xếp loại **Thiên tài !!, Tuyệt vời !, Tốt nhất, Rất tốt, Tốt, Theo sách, Thiếu chính xác ?!, Sai lầm ?, Bỏ lỡ, Sai lầm nghiêm trọng ??**, có thanh đánh giá, nhận xét từng nước, tên khai cuộc. Âm thanh quân gỗ giòn kiểu các trang cờ lớn. Có trên cả web lẫn App Think Beta.
 - **Xếp Khối** (mục 16): game xếp khối 8×8 (kiểu Block Blast) có combo, hiệu ứng nổ, âm thanh, **chơi được khi mất mạng** (kể cả lúc máy chủ đang ngủ), điểm tự gửi lên **bảng xếp hạng** tuần này / mọi lúc khi có mạng.
 - **Cờ caro** (mục 17, mới ở 2.1.0): bàn 15×15, luật tự do hoặc chặn hai đầu, **chơi với máy** 3 mức (chạy trên máy, không cần mạng), **thách đấu bạn bè** có giờ mỗi nước, **điểm ELO** và bảng xếp hạng. Có trên web và App Think Beta.
 - **Chat 2.1.0** (mục 18): **chủ đề** cho từng cuộc trò chuyện, **biểu tượng gửi nhanh** (👍 kiểu Messenger), **sửa tin nhắn**, **ghim tin nhắn**, **tìm tin nhắn** không cần dấu, **chuyển tiếp**, **tắt thông báo** từng cuộc trò chuyện (1 giờ / 8 giờ / 24 giờ / đến khi bật lại), **ghim cuộc trò chuyện** lên đầu, **@nhắc tên** trong nhóm, **bình chọn**, xem **ảnh đã gửi**.
@@ -394,7 +395,8 @@ Mục **Cờ vua** (trong tab Trò chơi) có trên bản web và App Think Beta
   - **bảng tổng kết**: độ chính xác mỗi bên (cách tính của lichess: trung bình có trọng số theo độ biến động + trung bình điều hòa), số nước từng loại của mỗi bên, **tên khai cuộc** (mã ECO), danh sách **khoảnh khắc đáng chú ý**.
 
   Cách xếp loại: so khả năng thắng (theo điểm Stockfish) trước và sau nước đi, ngưỡng tụt 2 / 5 / 10 / 20 điểm phần trăm cho Rất tốt / Tốt / Thiếu chính xác / Sai lầm / Sai lầm nghiêm trọng. Máy chấm hai nước tốt nhất mỗi thế cờ (MultiPV 2) để biết nước nào là "nước duy nhất". Nước đã đi được chấm cùng thế cờ gốc với nước tốt nhất (lệnh `searchmoves`) nên không bị báo sai vì độ sâu tìm kiếm. Sách khai cuộc lấy từ [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings) (CC0), gọn trong `src/chess-openings.tsv` (tạo lại bằng `scripts/build-openings.js`). Ván đã phân tích từ bản cũ tự được xếp loại lại khi mở. Mỗi ván chỉ phân tích một lần; ván đang chơi không phân tích được (tránh gian lận).
-- **Tùy chọn bàn cờ** (nút ⚙ trên đầu mục Cờ vua và trong ván): bật/tắt **chỉ dẫn nước đi** (chấm ở ô đi được), **tô màu nước vừa đi**, **tọa độ bàn cờ**, **mũi tên gợi ý khi phân tích**, **âm thanh**. Lưu riêng trên từng máy.
+- **Tùy chọn bàn cờ** (nút ⚙ trên đầu mục Cờ vua và trong ván): bật/tắt **chỉ dẫn nước đi** (chấm ở ô đi được), **tô màu nước vừa đi**, **tọa độ bàn cờ**, **mũi tên gợi ý khi phân tích**, **quân trượt khi đi**, **âm thanh**. Lưu riêng trên từng máy.
+- **Đi quân kiểu chess.com**: chạm quân rồi chạm ô đích, hoặc **kéo quân bằng ngón tay** (quân nhấc lên to hơn, ô dưới ngón tay có viền sáng; thả ra ngoài hay vào ô không đi được thì quân trượt về chỗ cũ). Mọi nước đi — của mình, của đối thủ, của máy, khi xem lại ván hay nhảy về đầu ván — đều **trượt mượt** từ ô đi tới ô đến (nhập thành: vua và xe cùng trượt), quân bị ăn mờ dần. Tắt được ở **Quân trượt khi đi**; máy bật "giảm chuyển động" thì tự tắt. Cách tính quân nào trượt đi đâu nằm ở `public/chess-anim.js` (web) và `native/src/chess/anim.ts` (app), có kiểm thử so khớp hai bản.
 - **Âm thanh** (phong cách các trang cờ lớn): tiếng quân gỗ giòn khi đi — **nước của mình và của đối thủ nghe khác nhau** —, ăn quân ("cạch"), nhập thành (hai tiếng), chiếu tướng, phong cấp, **còn 10 giây** (tích tắc), đi sai (kéo quân vào ô không đi được), bắt đầu và kết thúc ván. Các tiếng này tự tổng hợp bằng `scripts/chess-sounds.py` (mô phỏng quân gỗ va bàn gỗ, không lấy file của trang nào), dùng chung cho web (`public/chess/sounds/`) và app (`native/assets/sounds/`).
 - Luật cờ dùng [chess.js](https://github.com/jhlywa/chess.js) (BSD-2-Clause) ở cả máy chủ, web và app. Hình quân cờ là bộ **cburnett** của Colin M.L. Burnett (GPLv2+, xem `public/chess/pieces/LICENSE.txt`).
 
@@ -464,6 +466,22 @@ Thẻ **Nông trại** đứng đầu tab Trò chơi (web: `#/farm`, ghé vườ
 - App Think Beta **báo khi cả ruộng đã chín** (thông báo hẹn giờ ngay trên máy, tắt được trong nút ⓘ Cách chơi); có âm thanh, chữ bay lên, sản phẩm bay về Kho.
 - Máy chủ giữ hết luật (`src/farm-logic.js`), web và app chỉ hiển thị, nên không ai gian xu được. Muốn thêm cây, món mới chỉ cần sửa `src/farm-data.js` (thêm hình bằng `scripts/farm-icons.py`). Hình biểu tượng dùng **Twemoji** (CC-BY 4.0) để máy nào cũng hiện giống nhau, kể cả Android cũ; âm thanh tự tổng hợp (`scripts/farm-sounds.py`).
 
+## 21. Chuỗi hằng ngày
+
+Mỗi game có **chuỗi riêng**: ngày nào có chơi (đi một nước cờ, đặt một khối, làm một việc ở nông trại, ghé vườn bạn…) thì chuỗi tăng 1, bỏ một ngày là chuỗi về 0. Ngày tính theo **giờ Việt Nam**. Ngoài ra có **chuỗi chơi game** chung: ngày nào chơi game bất kỳ cũng tính.
+
+- **Trang Trò chơi**: khung 🔥 chuỗi chung ở đầu trang (lịch 7 ngày, kỷ lục), mỗi thẻ game có nhãn "🔥 5 ngày"; hôm nay chưa chơi mà chuỗi còn thì nhãn vàng **"sắp đứt"**. Trong từng game cũng có huy hiệu chuỗi (đầu trang Nông trại, Xếp Khối, thẻ ELO của Cờ vua và Cờ caro). Bấm vào để xem **bảng chuỗi**: từng game, lịch 7 ngày, kỷ lục, các mốc.
+- Chơi lần đầu trong ngày có thông báo nhỏ ("🔥 Chuỗi Cờ vua: 5 ngày liên tiếp!"); đạt **mốc** 3, 7, 14, 30, 50, 100, 150, 200, 365, 500, 1000 ngày thì có bảng chúc mừng.
+- **Nhắc giữ chuỗi**: khoảng 20–23 giờ, ai có chuỗi từ 2 ngày mà hôm nay chưa chơi thì nhận một thông báo (mỗi ngày tối đa một lần). Tắt trong bảng chuỗi.
+- Xếp Khối và cờ caro với máy chơi được khi mất mạng: ngày chơi lưu trên máy, có mạng thì gửi lên (nhận ngày chơi trễ tới 7 ngày), nên chuỗi không bị mất oan.
+- Máy chủ giữ chuỗi (`src/streaks.js`, bảng `streak_days`; API `GET /api/streaks`, `POST /api/streaks/played`, `POST /api/streaks/prefs`; realtime `streak:update`). Web: `public/streaks.js` + `streaks.css`; app: `native/src/streaks/`.
+
+**Quy tắc cho game mới** (bắt buộc — `npm test` sẽ báo lỗi nếu thiếu):
+
+1. Thêm game vào `GAMES` trong `src/streaks.js`, cùng mã với `GAME_IDS` trong `public/games-ui.js` và `native/src/games/registry.ts`.
+2. Game chạy trên máy chủ: gọi `streaks.record(userId, '<mã game>')` mỗi khi người chơi thật sự chơi. Game chạy trên máy (chơi được khi mất mạng): đặt `client: true`, web gọi `ThinkStreaks.mark('<mã>', uid)`, app gọi `markPlayed("<mã>")`.
+3. Thẻ game ở trang Trò chơi tự có nhãn chuỗi; thêm `ST.badge('<mã>')` (web) / `<StreakBadge game="<mã>" />` (app) vào đầu màn hình game.
+
 ## Cấu trúc thư mục
 
 ```
@@ -484,6 +502,7 @@ src/social.js        Trang cá nhân và bảng tin: bài đăng, thả tim, bì
 src/caro.js          Cờ caro: thách đấu, giờ mỗi nước, ELO, bảng xếp hạng (API /api/caro)
 src/farm.js          Nông trại: lưu nông trại, ghé vườn bạn bè, bảng xếp hạng (API /api/farm)
 src/farm-logic.js    Luật Nông trại (gieo, thu hoạch, chế biến, đơn hàng, chợ, hái trộm…); src/farm-data.js: cây, món, công trình
+src/streaks.js       Chuỗi hằng ngày của mọi game (API /api/streaks, nhắc giữ chuỗi buổi tối)
 src/chat-plus.js     Chat 2.1.0: sửa tin, ghim, tìm, chuyển tiếp, tắt thông báo, chủ đề, bình chọn, ảnh đã gửi
 src/reports.js       Báo lỗi app (API /api/app/errors, Quản trị → Báo lỗi app)
 src/engines/         GarboChess-JS (giữ nguyên giấy phép BSD ở đầu file)
@@ -499,6 +518,7 @@ public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu 
                      games-ui.js (tab Trò chơi), chess-ui.js (Cờ vua), blocks-core.js + blocks.js + blocks.css (Xếp Khối),
                      blocks.html + blocks-page.js (trang Xếp Khối chơi offline), social-ui.js (trang cá nhân, bảng tin),
                      caro-core.js + caro-ui.js + caro.css (Cờ caro), farm-ui.js + farm.css (Nông trại),
+                     streaks.js + streaks.css (chuỗi hằng ngày), chess-anim.js (quân cờ trượt),
                      theme.js (nền sáng/tối), chess/pieces/ (hình quân cờ), chess/sounds/, blocks/sounds/ (âm thanh),
                      farm/emoji/ (hình Twemoji), farm/sounds/
 public/download/     File cài app Android (think.apk) và version.json

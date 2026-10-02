@@ -5,6 +5,7 @@ import type { BlocksBoard, PendingScore } from "./blocks/types";
 import type { CaroGame, CaroOptions, CaroRating } from "./caro/types";
 import type { ChessAnalysis, ChessBot, ChessGame, ChessRating } from "./chess/types";
 import type { ActResult, Catalog, Farm, FriendSummary, Leaderboard, Market, PublicFarm } from "./farm/types";
+import type { StreakSummary } from "./streaks/types";
 import { API_URL } from "./config";
 import { getToken } from "./session";
 import type {
@@ -320,6 +321,15 @@ export const api = {
 
   /** Đấu lại: gửi lời thách đấu mới, đổi bên */
   caroRematch: (id: number) => request<{ game: CaroGame }>(`/api/caro/games/${id}/rematch`, { method: "POST", body: {} }),
+
+  /* ---------------- Chuỗi hằng ngày của mọi game (src/streaks.js) ---------------- */
+
+  streaks: () => request<StreakSummary>("/api/streaks"),
+
+  /** Game chạy trên máy (Xếp Khối, cờ caro với máy): gửi các ngày đã chơi */
+  streaksPlayed: (game: string, days: string[]) => request<StreakSummary>("/api/streaks/played", { method: "POST", body: { game, days } }),
+
+  streaksPrefs: (remind: boolean) => request<StreakSummary>("/api/streaks/prefs", { method: "POST", body: { remind } }),
 
   /* ---------------- Nông trại (máy chủ giữ luật: src/farm.js) ---------------- */
 

@@ -1,0 +1,28 @@
+# Think — ghi chú cho người (và AI) sửa code
+
+- Chủ dự án chỉ dùng điện thoại và đọc tiếng Việt: trả lời, ghi chú, chữ trong app, README đều viết tiếng Việt dễ hiểu. Commit message viết ASCII (tiếng Anh).
+- Hai giao diện dùng chung một máy chủ: web PWA trong `public/` và App Think Beta (Expo / React Native) trong `native/`. Tính năng mới làm cho cả hai, cùng dữ liệu, cùng chữ.
+- Máy chủ giữ luật và dữ liệu (`server.js`, `src/`); web và app chỉ hiển thị, không tin số liệu gửi từ máy người dùng.
+
+## Bí mật — không bao giờ commit
+
+Repo công khai. Không đưa vào git: khóa ký app (`*.jks`, `password.txt`, `github-secret.txt`), `google-services.json`, tài khoản dịch vụ Firebase, file cấu hình có mã bí mật. Khóa ký chỉ nằm trong GitHub Secrets (`THINK_SIGNING_KEY`). Không hỏi hay gửi mật khẩu / mã truy cập trong cuộc trò chuyện.
+
+## Game mới: bắt buộc có chuỗi hằng ngày
+
+Mọi game trên trang Trò chơi phải có chuỗi ngày chơi liên tiếp (README mục 21). Khi thêm game:
+
+1. Thêm vào `GAMES` trong `src/streaks.js`; cùng mã với `GAME_IDS` trong `public/games-ui.js` và `native/src/games/registry.ts`.
+2. Game chạy trên máy chủ: `streaks.record(userId, '<mã>')` mỗi khi người chơi thật sự chơi. Game chạy trên máy (chơi được khi mất mạng): `client: true`, web gọi `ThinkStreaks.mark('<mã>', uid)`, app gọi `markPlayed("<mã>")`.
+3. Thêm huy hiệu chuỗi vào đầu màn hình game: web `ThinkStreaks.instance.badge('<mã>')`, app `<StreakBadge game="<mã>" />`.
+
+`test/streaks.test.js` (chạy bằng `npm test`) báo lỗi nếu thiếu bước 1 hoặc 2.
+
+`public/streaks.js` được service worker phục vụ kiểu cache-first (để `blocks.html` chơi được khi máy chủ ngủ), nên lần mở đầu tiên sau khi deploy có thể vẫn chạy bản cũ: chỉ thêm hàm mới, đừng đổi tên hay bỏ hàm cũ của `ThinkStreaks`.
+
+## Kiểm tra trước khi push
+
+- Máy chủ + web: `npm test`.
+- App: trong `native/`: `npm run check && npm run lint && npm test && npm run check:native`; định dạng bằng prettier `--print-width 160`.
+- Đổi gì trong `native/` thì GitHub Actions build APK (`android-app.yml`) và chạy thử trên máy ảo Android 10 / 14 (`apk-check.yml`, kịch bản `scripts/apk-check/run.py`). Màn hình có đồng hồ đếm từng giây làm uiautomator không đọc được: kiểm tra qua API thay vì đọc màn hình.
+- Phiên bản: `package.json` (máy chủ / web) và `native/package.json` (app), nhớ sửa cả `package-lock.json`.

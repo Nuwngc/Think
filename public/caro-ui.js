@@ -1325,6 +1325,8 @@ window.ThinkCaro = (() => {
       if (!next) return;
       V.ghostHint = null;
       applyBot(i, g.side);
+      // Chuỗi hằng ngày: chơi với máy cũng tính (lưu trên máy, có mạng thì gửi)
+      if (window.ThinkStreaks) window.ThinkStreaks.mark('caro', state.me ? state.me.id : null);
       scheduleBot();
     }
     // Áp một nước (của mình hoặc của máy) vào ván, lưu lại, phát tiếng
@@ -1519,7 +1521,8 @@ window.ThinkCaro = (() => {
           h('div', { class: 'caro-hero-main' },
             h('span', { class: 'caro-hero-label', text: 'Điểm ELO cờ caro' }),
             h('span', { class: 'caro-hero-rating', text: r ? String(r.rating) : '—' })),
-          rank ? h('div', { class: 'caro-hero-rank' }, h('span', { class: 'caro-hero-label', text: 'Hạng' }), h('strong', { text: `#${rank}` })) : null),
+          rank ? h('div', { class: 'caro-hero-rank' }, h('span', { class: 'caro-hero-label', text: 'Hạng' }), h('strong', { text: `#${rank}` })) : null,
+          window.ThinkStreaks && window.ThinkStreaks.instance ? window.ThinkStreaks.instance.badge('caro') : null),
         h('p', {
           class: 'caro-hero-stats',
           text: r && r.games

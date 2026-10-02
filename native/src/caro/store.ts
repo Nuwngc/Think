@@ -80,6 +80,8 @@ type Bridge = {
   toast: (text: string, extra?: { title?: string; senderId?: number; caroGameId?: number }) => void;
   /** Đang xem trang Cờ caro (không mở ván nào) và app đang mở */
   onCaro: () => boolean;
+  /** Vừa đi một nước với máy (chuỗi hằng ngày, src/streaks/store.ts) */
+  played?: () => void;
 };
 
 let bridge: Bridge = {
@@ -517,6 +519,7 @@ export function playBot(i: number) {
   const next = play(fromMoves(g.moves, g.rule), i);
   if (!next) return false;
   applyBot(g, next);
+  bridge.played?.();
   scheduleBot();
   return true;
 }
