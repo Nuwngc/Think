@@ -131,6 +131,452 @@ window.ThinkBlocks = (() => {
   const fmt = (n) => Number(n || 0).toLocaleString('vi-VN');
   const reducedMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+
+  function pieceEl(p, cls) {
+    const s = C.shapeOf(p.shape);
+    const box = el('div', { class: `bb-piece ${cls || ''}`.trim(), style: `--w:${s.w};--h:${s.h}` });
+    for (const [r, c] of s.cells) box.append(el('span', { class: `bb-block is-c${p.color}`, style: `grid-row:${r + 1};grid-column:${c + 1}` }));
+    return box;
+  }
+
+  /** Bật / tắt âm thanh Xếp Khối (lưu trên máy, dùng chung cho ván thường và câu đố) */
+  function setSound(on) {
+    audio.on = Boolean(on);
+    store.set(KEY_SOUND, audio.on);
+    if (audio.on) unlockAudio();
+  }
+
+  /* =========================================================
+     Bàn 8×8 + khay 3 khối: vẽ, kéo thả, chạm chọn rồi chạm bàn, bàn phím, hiệu ứng vỡ ô.
+     Dùng chung cho ván thường (create bên dưới) và câu đố "Quiz hằng ngày" / "Thử thách nhanh" (puzzleBoard).
+     cfg: { get() -> { board, tray, over }, commit(slot, hàng, cột), live: phần tử đọc cho trình đọc màn hình, label }
+     ========================================================= */
+  function makeBoard(cfg) {
+    const B = { drag: null, selected: null, cursor: { r: 3, c: 3 }, preview: null, suppressClick: false, hint: null };
+    const cur = () => cfg.get();
+    const say = (text) => { if (cfg.live) cfg.live.textContent = text; };
+    const grid = el('div', { class: 'bb-grid', role: 'grid', tabindex: '0', 'aria-label': cfg.label || 'Bàn chơi 8 × 8. Chọn khối bằng phím 1, 2, 3; di chuyển bằng phím mũi tên; Enter để đặt.' });
+    const cells = [];
+    for (let i = 0; i < N * N; i++) {
+      const cell = el('div', { class: 'bb-cell', role: 'gridcell', dataset: { i: String(i) } });
+      cells.push(cell);
+      grid.append(cell);
+    }
+    const fx = el('div', { class: 'bb-fx', 'aria-hidden': 'true' });
+    const boardWrap = el('div', { class: 'bb-board' }, grid, fx);
+    const tray = el('div', { class: 'bb-tray', role: 'group', 'aria-label': 'Ba khối để đặt' });
+    const slots = [0, 1, 2].map((k) => {
+      const slot = el('button', { class: 'bb-slot', type: 'button', dataset: { slot: String(k) } });
+      tray.append(slot);
+      return slot;
+    });
+
+    function renderBoard(opts = {}) {
+      const g = cur();
+      if (!g) return;
+      const b = g.board;
+      const pv = B.preview;
+      const ghost = new Set(pv ? pv.cells : []);
+      const hot = new Set();
+      if (pv) {
+        for (const r of pv.rows) for (let j = 0; j < N; j++) hot.add(r * N + j);
+        for (const c of pv.cols) for (let j = 0; j < N; j++) hot.add(j * N + c);
+      }
+      const hint = B.hint && !pv ? new Set(B.hint.cells) : null;
+      const placed = new Set(opts.placed || []);
+      const cursor = B.selected != null && !pv ? B.cursor.r * N + B.cursor.c : -1;
+      for (let i = 0; i < N * N; i++) {
+        const cell = cells[i];
+        const v = b[i];
+        let cls = 'bb-cell';
+        if (v) cls += ` is-c${v}`;
+        if (ghost.has(i)) cls += ` is-ghost g${pv.color}`;
+        if (hot.has(i)) cls += ` is-hot h${pv.color}`;
+        if (hint && hint.has(i) && !v) cls += ` is-hint g${B.hint.color}`;
+        if (placed.has(i)) cls += ' is-placed';
+        if (i === cursor) cls += ' is-cursor';
+        if (cell.className !== cls) cell.className = cls;
+      }
+    }
+
+    function renderTray(opts = {}) {
+      const g = cur();
+      if (!g) return;
+      g.tray.forEach((p, k) => {
+        const slot = slots[k];
+        const dragging = B.drag && B.drag.slot === k;
+        if (!p) {
+          slot.replaceChildren();
+          slot.disabled = true;
+          slot.className = 'bb-slot is-empty';
+          slot.setAttribute('aria-label', 'Đã đặt');
+          return;
+        }
+        const s = C.shapeOf(p.shape);
+        const fits = C.fitsAnywhere(g.board, p.shape);
+        const hinted = B.hint && B.hint.slot === k;
+        slot.disabled = false;
+        slot.className = `bb-slot${fits ? '' : ' is-stuck'}${B.selected === k ? ' is-selected' : ''}${dragging ? ' is-dragging' : ''}${opts.refilled ? ' is-new' : ''}${hinted ? ' is-hint' : ''}`;
+        slot.style.setProperty('--delay', `${k * 60}ms`);
+        slot.setAttribute('aria-label', `Khối ${s.cells.length} ô, rộng ${s.w} cao ${s.h}${fits ? '' : ', không còn chỗ đặt'}${B.selected === k ? ', đang chọn' : ''}${hinted ? ', gợi ý: đặt khối này' : ''}`);
+        slot.setAttribute('aria-pressed', B.selected === k ? 'true' : 'false');
+        slot.replaceChildren(pieceEl(p));
+      });
+    }
+
+    /* ---------------- Kéo thả ---------------- */
+    function gridMetrics() {
+      const rect = grid.getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(grid).paddingLeft) || 0;
+      const inner = rect.width - pad * 2;
+      return { left: rect.left + pad, top: rect.top + pad, pitch: (inner + GAP) / N, cell: (inner + GAP) / N - GAP };
+    }
+
+    function onPointerDown(e) {
+      if (B.drag) return; // đang kéo bằng ngón khác
+      const slot = e.target.closest('.bb-slot');
+      const g = cur();
+      if (!slot || !g || g.over || e.button > 0) return;
+      const k = Number(slot.dataset.slot);
+      const p = g.tray[k];
+      if (!p) return;
+      e.preventDefault();
+      unlockAudio();
+      const m = gridMetrics();
+      const s = C.shapeOf(p.shape);
+      const ghost = pieceEl(p, 'bb-drag');
+      ghost.style.setProperty('--cell', `${m.cell}px`);
+      ghost.style.setProperty('--gap', `${GAP}px`);
+      document.body.append(ghost);
+      const from = slot.getBoundingClientRect();
+      B.drag = {
+        slot: k,
+        piece: p,
+        shape: s,
+        pointerId: e.pointerId,
+        touch: e.pointerType !== 'mouse',
+        ghost,
+        w: s.w * m.pitch - GAP,
+        h: s.h * m.pitch - GAP,
+        m,
+        from,
+        moved: false,
+        x0: e.clientX,
+        y0: e.clientY,
+      };
+      B.selected = null;
+      try { slot.setPointerCapture(e.pointerId); } catch { /* bỏ qua */ }
+      slot.addEventListener('pointermove', onPointerMove);
+      slot.addEventListener('pointerup', onPointerUp);
+      slot.addEventListener('pointercancel', onPointerCancel);
+      moveGhost(e.clientX, e.clientY);
+      renderTray();
+      play('pick', 0.6);
+    }
+
+    function moveGhost(x, y) {
+      const d = B.drag;
+      if (!d) return;
+      // Trên điện thoại khối nổi lên trên ngón tay để không bị che
+      const left = x - d.w / 2;
+      const top = d.touch ? y - d.h - Math.max(36, d.m.pitch * 1.1) : y - d.h / 2;
+      d.ghost.style.transform = `translate(${left}px, ${top}px)`;
+      const c = Math.round((left - d.m.left) / d.m.pitch);
+      const r = Math.round((top - d.m.top) / d.m.pitch);
+      setPreview(d.piece, r, c);
+    }
+
+    function setPreview(piece, r, c) {
+      const g = cur();
+      let next = null;
+      if (piece && g && C.canPlace(g.board, piece.shape, r, c)) {
+        const s = C.shapeOf(piece.shape);
+        const lines = C.linesIfPlaced(g.board, piece.shape, r, c);
+        next = { r, c, color: piece.color, cells: s.cells.map(([dr, dc]) => (r + dr) * N + c + dc), rows: lines.rows, cols: lines.cols };
+      }
+      const same = (B.preview && next && B.preview.r === next.r && B.preview.c === next.c && B.preview.color === next.color) || (!B.preview && !next);
+      B.preview = next;
+      if (!same) renderBoard();
+    }
+
+    function onPointerMove(e) {
+      const d = B.drag;
+      if (!d || e.pointerId !== d.pointerId) return;
+      if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 6) d.moved = true;
+      moveGhost(e.clientX, e.clientY);
+    }
+
+    function endListeners(slot) {
+      slot.removeEventListener('pointermove', onPointerMove);
+      slot.removeEventListener('pointerup', onPointerUp);
+      slot.removeEventListener('pointercancel', onPointerCancel);
+    }
+
+    function onPointerUp(e) {
+      const d = B.drag;
+      if (!d || e.pointerId !== d.pointerId) return;
+      endListeners(slots[d.slot]);
+      const pv = B.preview;
+      if (!d.moved) {
+        // Chạm nhẹ, không kéo: chọn khối (rồi chạm vào bàn để đặt), tiện cho chuột và bàn phím
+        d.ghost.remove();
+        B.drag = null;
+        B.preview = null;
+        B.selected = d.slot;
+        B.suppressClick = true;
+        setTimeout(() => { B.suppressClick = false; }, 0);
+        renderTray();
+        renderBoard();
+        return;
+      }
+      if (pv) {
+        d.ghost.remove();
+        B.drag = null;
+        B.preview = null;
+        cfg.commit(d.slot, pv.r, pv.c);
+      } else {
+        flyBack(d);
+      }
+    }
+
+    function onPointerCancel() {
+      const d = B.drag;
+      if (!d) return;
+      endListeners(slots[d.slot]);
+      flyBack(d);
+    }
+
+    // Thả sai chỗ: khối bay về khay
+    function flyBack(d) {
+      B.drag = null;
+      B.preview = null;
+      renderBoard();
+      play('invalid', 0.5);
+      const g = d.ghost;
+      if (reducedMotion()) {
+        g.remove();
+        renderTray();
+        return;
+      }
+      g.classList.add('is-back');
+      g.style.transform = `translate(${d.from.left + d.from.width / 2 - d.w / 2}px, ${d.from.top + d.from.height / 2 - d.h / 2}px) scale(0.5)`;
+      setTimeout(() => {
+        g.remove();
+        renderTray();
+      }, 180);
+    }
+
+    function cancelDrag() {
+      if (!B.drag) return;
+      endListeners(slots[B.drag.slot]);
+      B.drag.ghost.remove();
+      B.drag = null;
+      B.preview = null;
+    }
+
+    /* ---------------- Chọn khối rồi chạm vào bàn (chuột, bàn phím, trình đọc màn hình) ---------------- */
+    function onSlotClick(e) {
+      if (B.suppressClick) return;
+      const slot = e.target.closest('.bb-slot');
+      if (!slot || e.detail > 0) return; // bấm chuột / chạm đã xử lý ở pointerup; đây là phím Enter / Space
+      const g = cur();
+      const k = Number(slot.dataset.slot);
+      if (!g || g.over || !g.tray[k]) return;
+      B.selected = B.selected === k ? null : k;
+      B.preview = null;
+      if (B.selected != null) {
+        placeCursorNear(g.tray[k]);
+        showCursorPreview();
+        grid.focus({ preventScroll: true });
+      }
+      renderTray();
+      renderBoard();
+    }
+    function placeCursorNear(p) {
+      // Đưa con trỏ tới chỗ đầu tiên đặt được
+      const g = cur();
+      for (let r = 0; r < N; r++) {
+        for (let c = 0; c < N; c++) {
+          if (C.canPlace(g.board, p.shape, r, c)) {
+            B.cursor = { r, c };
+            return;
+          }
+        }
+      }
+    }
+    function showCursorPreview() {
+      const g = cur();
+      const p = B.selected != null && g ? g.tray[B.selected] : null;
+      if (!p) return;
+      setPreview(p, B.cursor.r, B.cursor.c);
+      const s = C.shapeOf(p.shape);
+      const pv = B.preview;
+      say(`Hàng ${B.cursor.r + 1}, cột ${B.cursor.c + 1}${pv ? '' : ', không đặt được'}${pv && (pv.rows.length + pv.cols.length) ? `, ăn ${pv.rows.length + pv.cols.length} hàng` : ''}. Khối ${s.cells.length} ô.`);
+    }
+    function onGridHover(e) {
+      if (B.selected == null || B.drag || e.pointerType !== 'mouse') return;
+      const cell = e.target.closest('.bb-cell');
+      if (!cell) return;
+      const i = Number(cell.dataset.i);
+      B.cursor = { r: Math.floor(i / N), c: i % N };
+      showCursorPreview();
+    }
+    function onGridClick(e) {
+      const g = cur();
+      if (B.selected == null || !g || g.over) return;
+      const cell = e.target.closest('.bb-cell');
+      if (!cell) return;
+      const i = Number(cell.dataset.i);
+      const r = Math.floor(i / N);
+      const c = i % N;
+      const p = g.tray[B.selected];
+      if (p && C.canPlace(g.board, p.shape, r, c)) {
+        const k = B.selected;
+        B.selected = null;
+        B.preview = null;
+        cfg.commit(k, r, c);
+      } else play('invalid', 0.5);
+    }
+    // Phím 1, 2, 3 chọn khối; mũi tên di chuyển; Enter đặt; Escape bỏ chọn. root: khung nhận phím
+    function onKey(e, root) {
+      const g = cur();
+      if (!g || g.over) return;
+      if (['1', '2', '3'].includes(e.key)) {
+        const k = Number(e.key) - 1;
+        if (g.tray[k]) {
+          B.selected = k;
+          placeCursorNear(g.tray[k]);
+          showCursorPreview();
+          renderTray();
+          renderBoard();
+          grid.focus({ preventScroll: true });
+          e.preventDefault();
+        }
+        return;
+      }
+      if (B.selected == null) return;
+      const moves = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+      if (moves[e.key]) {
+        e.preventDefault();
+        const [dr, dc] = moves[e.key];
+        B.cursor = { r: Math.max(0, Math.min(N - 1, B.cursor.r + dr)), c: Math.max(0, Math.min(N - 1, B.cursor.c + dc)) };
+        showCursorPreview();
+        renderBoard();
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        if (e.target !== grid && e.target !== root) return;
+        e.preventDefault();
+        if (B.preview) {
+          const k = B.selected;
+          const { r, c } = B.preview;
+          B.selected = null;
+          B.preview = null;
+          cfg.commit(k, r, c);
+        } else play('invalid', 0.5);
+      } else if (e.key === 'Escape') {
+        B.selected = null;
+        B.preview = null;
+        renderTray();
+        renderBoard();
+      }
+    }
+
+    /* ---------------- Hiệu ứng ---------------- */
+    function centerOf(list) {
+      const rs = list.map((i) => Math.floor(i / N));
+      const cs = list.map((i) => i % N);
+      return { r: (Math.min(...rs) + Math.max(...rs)) / 2, c: (Math.min(...cs) + Math.max(...cs)) / 2 };
+    }
+
+    // Các ô bị xóa vỡ ra thành từng mảnh, lan dần từ chỗ vừa đặt
+    function burst(list, center) {
+      if (reducedMotion()) return;
+      const frag = document.createDocumentFragment();
+      for (const { i, color } of list) {
+        const r = Math.floor(i / N);
+        const c = i % N;
+        const dist = Math.hypot(r - center.r, c - center.c);
+        const shard = el('span', { class: `bb-shard is-c${color}`, style: `--r:${r};--c:${c};--d:${Math.round(dist * 28)}ms;--dx:${((c - center.c) * 6).toFixed(1)}px;--dy:${((r - center.r) * 6 - 10).toFixed(1)}px` });
+        frag.append(shard);
+        setTimeout(() => shard.remove(), 900);
+      }
+      fx.append(frag);
+    }
+
+    function floatText(text, at, cls) {
+      if (reducedMotion()) return;
+      const f = el('span', { class: cls, text, style: `--r:${at.r};--c:${at.c}` });
+      fx.append(f);
+      setTimeout(() => f.remove(), 1000);
+    }
+
+    function banner(text, cls) {
+      const b = el('div', { class: `bb-banner ${cls || ''}`.trim(), text, 'aria-hidden': 'true' });
+      fx.append(b);
+      setTimeout(() => b.remove(), 1300);
+    }
+
+    /** Gợi ý (câu đố): tô ô đích và khối cần đặt. h = { slot, cells, color } hoặc null */
+    function setHint(h) {
+      B.hint = h || null;
+      renderBoard();
+      renderTray();
+    }
+    function clearSelection() {
+      B.selected = null;
+      B.preview = null;
+    }
+
+    tray.addEventListener('pointerdown', onPointerDown);
+    tray.addEventListener('click', onSlotClick);
+    grid.addEventListener('click', onGridClick);
+    grid.addEventListener('pointermove', onGridHover);
+
+    return { grid, cells, fx, boardWrap, tray, slots, renderBoard, renderTray, burst, floatText, banner, centerOf, cancelDrag, onKey, setHint, clearSelection };
+  }
+
+  /* =========================================================
+     Bàn câu đố Xếp Khối (public/puzzles-ui.js): bàn + khay giống hệt game thật, trong một khung nền xanh đêm.
+     cfg: { get() -> { board, tray, over }, commit(slot, hàng, cột), label }
+     ========================================================= */
+  function puzzleBoard(cfg) {
+    const live = el('p', { class: 'visually-hidden', role: 'status', 'aria-live': 'polite' });
+    const bd = makeBoard({ get: cfg.get, commit: cfg.commit, live, label: cfg.label || 'Bàn câu đố 8 × 8. Chọn khối bằng phím 1, 2, 3; di chuyển bằng phím mũi tên; Enter để đặt.' });
+    const root = el('div', { class: 'bb bb-puzzle', tabindex: '-1' }, el('div', { class: 'bb-stage' }, bd.boardWrap), bd.tray, live);
+    root.addEventListener('keydown', (e) => bd.onKey(e, root));
+    root.addEventListener('pointerdown', unlockAudio, { capture: true });
+    // Cỡ ô theo chỗ trống (w × h, tính bằng px) mà trang câu đố dành cho bàn + khay
+    function layout(w, h) {
+      const byWidth = Math.min(w - 16, 460);
+      const byHeight = (h - 70) / 1.32; // khay cao khoảng 0,3 lần bàn
+      const size = Math.max(220, Math.min(byWidth, byHeight));
+      const cell = Math.floor((size - 16 - GAP * (N - 1)) / N);
+      root.style.setProperty('--cell', `${cell}px`);
+      root.style.setProperty('--gap', `${GAP}px`);
+      root.style.setProperty('--mini', `${Math.max(12, Math.min(24, Math.floor(cell * 0.5)))}px`);
+    }
+    return {
+      el: root,
+      layout,
+      render(opts = {}) {
+        bd.renderBoard(opts);
+        bd.renderTray(opts);
+      },
+      renderBoard: bd.renderBoard,
+      renderTray: bd.renderTray,
+      burst: bd.burst,
+      floatText: bd.floatText,
+      banner: bd.banner,
+      centerOf: bd.centerOf,
+      setHint: bd.setHint,
+      clearSelection: bd.clearSelection,
+      destroy: () => bd.cancelDrag(),
+      play,
+      unlock: unlockAudio,
+      soundOn: () => audio.on,
+      setSound,
+    };
+  }
+
   /* =========================================================
      Bộ điều khiển
      host: { api(path, opts) | null, me() -> người dùng | null, nameOf(id), userOf(id), avatarEl(user, cls)?,
@@ -140,10 +586,6 @@ window.ThinkBlocks = (() => {
     const S = {
       root: null,
       game: null,
-      drag: null,
-      selected: null, // chọn khối bằng bàn phím / chạm (không kéo)
-      cursor: { r: 3, c: 3 },
-      preview: null,
       board: store.get(KEY_BOARD, null), // bảng xếp hạng lần tải gần nhất (xem được khi mất mạng)
       syncing: null,
       syncError: false,
@@ -156,6 +598,7 @@ window.ThinkBlocks = (() => {
       bestAtStart: 0,
     };
     const E = {};
+    let BD = null; // bàn + khay (makeBoard), có khi đang mở game
     const uid = () => {
       const me = host.me && host.me();
       return me ? me.id : null;
@@ -258,23 +701,12 @@ window.ThinkBlocks = (() => {
       E.sound = el('button', { class: 'bb-icon-btn', type: 'button', onclick: toggleSound });
       E.score = el('div', { class: 'bb-score' }); // trình đọc màn hình nghe điểm qua E.live (không đọc từng số khi điểm chạy)
       E.combo = el('div', { class: 'bb-combo', 'aria-hidden': 'true' });
-      E.grid = el('div', { class: 'bb-grid', role: 'grid', tabindex: '0', 'aria-label': 'Bàn chơi 8 × 8. Chọn khối bằng phím 1, 2, 3; di chuyển bằng phím mũi tên; Enter để đặt.' });
-      E.cells = [];
-      for (let i = 0; i < N * N; i++) {
-        const cell = el('div', { class: 'bb-cell', role: 'gridcell', dataset: { i: String(i) } });
-        E.cells.push(cell);
-        E.grid.append(cell);
-      }
-      E.fx = el('div', { class: 'bb-fx', 'aria-hidden': 'true' });
-      E.boardWrap = el('div', { class: 'bb-board' }, E.grid, E.fx);
-      E.tray = el('div', { class: 'bb-tray', role: 'group', 'aria-label': 'Ba khối để đặt' });
-      E.slots = [0, 1, 2].map((k) => {
-        const slot = el('button', { class: 'bb-slot', type: 'button', dataset: { slot: String(k) } });
-        E.tray.append(slot);
-        return slot;
-      });
       E.sync = el('p', { class: 'bb-sync', role: 'status' });
       E.live = el('p', { class: 'visually-hidden', role: 'status', 'aria-live': 'polite' });
+      BD = makeBoard({ get: () => S.game, commit, live: E.live });
+      // Nút "Quiz hôm nay" / "Thử thách nhanh" (public/puzzles-ui.js), không có ở trang riêng /blocks.html
+      const PZ = !host.standalone && window.ThinkPuzzles && window.ThinkPuzzles.instance;
+      E.links = PZ && PZ.entry ? PZ.entry('blocks', { dark: true }) : null;
 
       const top = el('header', { class: 'bb-top' },
         el('button', { class: 'bb-icon-btn', type: 'button', 'aria-label': host.standalone ? 'Về Think' : 'Quay lại', onclick: () => host.back && host.back() }, icon('back')),
@@ -285,20 +717,17 @@ window.ThinkBlocks = (() => {
         el('button', { class: 'bb-icon-btn', type: 'button', 'aria-label': 'Ván mới', onclick: askRestart }, icon('restart')),
         el('button', { class: 'bb-icon-btn', type: 'button', 'aria-label': 'Bảng xếp hạng', onclick: openPanel }, icon('board')));
 
-      S.root = el('div', { class: 'bb', tabindex: '-1' },
+      S.root = el('div', { class: `bb${E.links ? ' has-links' : ''}`, tabindex: '-1' },
         top,
         el('div', { class: 'bb-head' }, E.score, E.combo),
-        el('div', { class: 'bb-stage' }, E.boardWrap),
-        E.tray,
+        el('div', { class: 'bb-stage' }, BD.boardWrap),
+        BD.tray,
+        E.links,
         E.sync,
         E.live);
       container.replaceChildren(S.root);
 
-      // Kéo thả bằng ngón tay / chuột
-      E.tray.addEventListener('pointerdown', onPointerDown);
-      E.tray.addEventListener('click', onSlotClick);
-      E.grid.addEventListener('click', onGridClick);
-      E.grid.addEventListener('pointermove', onGridHover);
+      // Kéo thả bằng ngón tay / chuột: xử lý trong makeBoard
       S.root.addEventListener('keydown', onKey);
       S.root.addEventListener('pointerdown', unlockAudio, { capture: true });
       window.addEventListener('online', sync);
@@ -312,7 +741,7 @@ window.ThinkBlocks = (() => {
 
     function unmount() {
       if (!S.mounted) return;
-      cancelDrag();
+      if (BD) BD.cancelDrag();
       if (S.game && S.game.over) recordGame();
       // Không lưu lại ở đây: mỗi nước đã lưu rồi, lưu thêm có thể đè lên ván đang chơi ở thẻ khác
       if (S.panel) {
@@ -328,15 +757,16 @@ window.ThinkBlocks = (() => {
       S.panel = null;
       S.overlay = null;
       S.root = null;
+      BD = null;
     }
 
-    // Cỡ ô: vừa màn hình, chừa chỗ cho điểm và khay khối
+    // Cỡ ô: vừa màn hình, chừa chỗ cho điểm và khay khối (và hàng nút câu đố nếu có)
     function layout() {
       if (!S.root) return;
       const w = S.root.clientWidth;
       const h = S.root.clientHeight;
       const byWidth = Math.min(w - 28, 480);
-      const byHeight = h - 56 - 96 - 150 - 40;
+      const byHeight = h - 56 - 96 - 150 - 40 - (E.links ? 52 : 0);
       const size = Math.max(200, Math.min(byWidth, byHeight));
       const cell = Math.floor((size - 16 - GAP * (N - 1)) / N);
       S.root.style.setProperty('--cell', `${cell}px`);
@@ -407,307 +837,20 @@ window.ThinkBlocks = (() => {
 
     function renderBoard(opts = {}) {
       if (!S.mounted) return;
-      const b = S.game.board;
-      const pv = S.preview;
-      const ghost = new Set(pv ? pv.cells : []);
-      const hot = new Set();
-      if (pv) {
-        for (const r of pv.rows) for (let j = 0; j < N; j++) hot.add(r * N + j);
-        for (const c of pv.cols) for (let j = 0; j < N; j++) hot.add(j * N + c);
-      }
-      const placed = new Set(opts.placed || []);
-      const cursor = S.selected != null && !pv ? S.cursor.r * N + S.cursor.c : -1;
-      for (let i = 0; i < N * N; i++) {
-        const cell = E.cells[i];
-        const v = b[i];
-        let cls = 'bb-cell';
-        if (v) cls += ` is-c${v}`;
-        if (ghost.has(i)) cls += ` is-ghost g${pv.color}`;
-        if (hot.has(i)) cls += ` is-hot h${pv.color}`;
-        if (placed.has(i)) cls += ' is-placed';
-        if (i === cursor) cls += ' is-cursor';
-        if (cell.className !== cls) cell.className = cls;
-      }
-    }
-
-    function pieceEl(p, cls) {
-      const s = C.shapeOf(p.shape);
-      const box = el('div', { class: `bb-piece ${cls || ''}`.trim(), style: `--w:${s.w};--h:${s.h}` });
-      for (const [r, c] of s.cells) box.append(el('span', { class: `bb-block is-c${p.color}`, style: `grid-row:${r + 1};grid-column:${c + 1}` }));
-      return box;
+      BD.renderBoard(opts);
     }
 
     function renderTray(opts = {}) {
       if (!S.mounted) return;
-      S.game.tray.forEach((p, k) => {
-        const slot = E.slots[k];
-        const dragging = S.drag && S.drag.slot === k;
-        if (!p) {
-          slot.replaceChildren();
-          slot.disabled = true;
-          slot.className = 'bb-slot is-empty';
-          slot.setAttribute('aria-label', 'Đã đặt');
-          return;
-        }
-        const s = C.shapeOf(p.shape);
-        const fits = C.fitsAnywhere(S.game.board, p.shape);
-        slot.disabled = false;
-        slot.className = `bb-slot${fits ? '' : ' is-stuck'}${S.selected === k ? ' is-selected' : ''}${dragging ? ' is-dragging' : ''}${opts.refilled ? ' is-new' : ''}`;
-        slot.style.setProperty('--delay', `${k * 60}ms`);
-        slot.setAttribute('aria-label', `Khối ${s.cells.length} ô, rộng ${s.w} cao ${s.h}${fits ? '' : ', không còn chỗ đặt'}${S.selected === k ? ', đang chọn' : ''}`);
-        slot.setAttribute('aria-pressed', S.selected === k ? 'true' : 'false');
-        slot.replaceChildren(pieceEl(p));
-      });
+      BD.renderTray(opts);
     }
 
-    /* ---------------- Kéo thả ---------------- */
-    function gridMetrics() {
-      const rect = E.grid.getBoundingClientRect();
-      const pad = parseFloat(getComputedStyle(E.grid).paddingLeft) || 0;
-      const inner = rect.width - pad * 2;
-      return { left: rect.left + pad, top: rect.top + pad, pitch: (inner + GAP) / N, cell: (inner + GAP) / N - GAP };
-    }
-
-    function onPointerDown(e) {
-      if (S.drag) return; // đang kéo bằng ngón khác
-      const slot = e.target.closest('.bb-slot');
-      if (!slot || !S.game || S.game.over || e.button > 0) return;
-      const k = Number(slot.dataset.slot);
-      const p = S.game.tray[k];
-      if (!p) return;
-      e.preventDefault();
-      unlockAudio();
-      const m = gridMetrics();
-      const s = C.shapeOf(p.shape);
-      const ghost = pieceEl(p, 'bb-drag');
-      ghost.style.setProperty('--cell', `${m.cell}px`);
-      ghost.style.setProperty('--gap', `${GAP}px`);
-      document.body.append(ghost);
-      const from = slot.getBoundingClientRect();
-      S.drag = {
-        slot: k,
-        piece: p,
-        shape: s,
-        pointerId: e.pointerId,
-        touch: e.pointerType !== 'mouse',
-        ghost,
-        w: s.w * m.pitch - GAP,
-        h: s.h * m.pitch - GAP,
-        m,
-        from,
-        moved: false,
-        x0: e.clientX,
-        y0: e.clientY,
-      };
-      S.selected = null;
-      try { slot.setPointerCapture(e.pointerId); } catch { /* bỏ qua */ }
-      slot.addEventListener('pointermove', onPointerMove);
-      slot.addEventListener('pointerup', onPointerUp);
-      slot.addEventListener('pointercancel', onPointerCancel);
-      moveGhost(e.clientX, e.clientY);
-      renderTray();
-      play('pick', 0.6);
-    }
-
-    function moveGhost(x, y) {
-      const d = S.drag;
-      if (!d) return;
-      // Trên điện thoại khối nổi lên trên ngón tay để không bị che
-      const left = x - d.w / 2;
-      const top = d.touch ? y - d.h - Math.max(36, d.m.pitch * 1.1) : y - d.h / 2;
-      d.ghost.style.transform = `translate(${left}px, ${top}px)`;
-      const c = Math.round((left - d.m.left) / d.m.pitch);
-      const r = Math.round((top - d.m.top) / d.m.pitch);
-      setPreview(d.piece, r, c);
-    }
-
-    function setPreview(piece, r, c) {
-      let next = null;
-      if (piece && C.canPlace(S.game.board, piece.shape, r, c)) {
-        const s = C.shapeOf(piece.shape);
-        const lines = C.linesIfPlaced(S.game.board, piece.shape, r, c);
-        next = { r, c, color: piece.color, cells: s.cells.map(([dr, dc]) => (r + dr) * N + c + dc), rows: lines.rows, cols: lines.cols };
-      }
-      const same = (S.preview && next && S.preview.r === next.r && S.preview.c === next.c && S.preview.color === next.color) || (!S.preview && !next);
-      S.preview = next;
-      if (!same) renderBoard();
-    }
-
-    function onPointerMove(e) {
-      const d = S.drag;
-      if (!d || e.pointerId !== d.pointerId) return;
-      if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 6) d.moved = true;
-      moveGhost(e.clientX, e.clientY);
-    }
-
-    function endListeners(slot) {
-      slot.removeEventListener('pointermove', onPointerMove);
-      slot.removeEventListener('pointerup', onPointerUp);
-      slot.removeEventListener('pointercancel', onPointerCancel);
-    }
-
-    function onPointerUp(e) {
-      const d = S.drag;
-      if (!d || e.pointerId !== d.pointerId) return;
-      endListeners(E.slots[d.slot]);
-      const pv = S.preview;
-      if (!d.moved) {
-        // Chạm nhẹ, không kéo: chọn khối (rồi chạm vào bàn để đặt), tiện cho chuột và bàn phím
-        d.ghost.remove();
-        S.drag = null;
-        S.preview = null;
-        S.selected = d.slot;
-        S.suppressClick = true;
-        setTimeout(() => { S.suppressClick = false; }, 0);
-        renderTray();
-        renderBoard();
-        return;
-      }
-      if (pv) {
-        d.ghost.remove();
-        S.drag = null;
-        S.preview = null;
-        commit(d.slot, pv.r, pv.c);
-      } else {
-        flyBack(d);
-      }
-    }
-
-    function onPointerCancel() {
-      const d = S.drag;
-      if (!d) return;
-      endListeners(E.slots[d.slot]);
-      flyBack(d);
-    }
-
-    // Thả sai chỗ: khối bay về khay
-    function flyBack(d) {
-      S.drag = null;
-      S.preview = null;
-      renderBoard();
-      play('invalid', 0.5);
-      const g = d.ghost;
-      if (reducedMotion()) {
-        g.remove();
-        renderTray();
-        return;
-      }
-      g.classList.add('is-back');
-      g.style.transform = `translate(${d.from.left + d.from.width / 2 - d.w / 2}px, ${d.from.top + d.from.height / 2 - d.h / 2}px) scale(0.5)`;
-      setTimeout(() => {
-        g.remove();
-        renderTray();
-      }, 180);
-    }
-
-    function cancelDrag() {
-      if (!S.drag) return;
-      endListeners(E.slots[S.drag.slot]);
-      S.drag.ghost.remove();
-      S.drag = null;
-      S.preview = null;
-    }
-
-    /* ---------------- Chọn khối rồi chạm vào bàn (chuột, bàn phím, trình đọc màn hình) ---------------- */
-    function onSlotClick(e) {
-      if (S.suppressClick) return;
-      const slot = e.target.closest('.bb-slot');
-      if (!slot || e.detail > 0) return; // bấm chuột / chạm đã xử lý ở pointerup; đây là phím Enter / Space
-      const k = Number(slot.dataset.slot);
-      if (!S.game.tray[k]) return;
-      S.selected = S.selected === k ? null : k;
-      S.preview = null;
-      if (S.selected != null) {
-        placeCursorNear(S.game.tray[k]);
-        showCursorPreview();
-        E.grid.focus({ preventScroll: true });
-      }
-      renderTray();
-      renderBoard();
-    }
-    function placeCursorNear(p) {
-      // Đưa con trỏ tới chỗ đầu tiên đặt được
-      for (let r = 0; r < N; r++) {
-        for (let c = 0; c < N; c++) {
-          if (C.canPlace(S.game.board, p.shape, r, c)) {
-            S.cursor = { r, c };
-            return;
-          }
-        }
-      }
-    }
-    function showCursorPreview() {
-      const p = S.selected != null ? S.game.tray[S.selected] : null;
-      if (!p) return;
-      setPreview(p, S.cursor.r, S.cursor.c);
-      const s = C.shapeOf(p.shape);
-      E.live.textContent = `Hàng ${S.cursor.r + 1}, cột ${S.cursor.c + 1}${S.preview ? '' : ', không đặt được'}${S.preview && (S.preview.rows.length + S.preview.cols.length) ? `, ăn ${S.preview.rows.length + S.preview.cols.length} hàng` : ''}. Khối ${s.cells.length} ô.`;
-    }
-    function onGridHover(e) {
-      if (S.selected == null || S.drag || e.pointerType !== 'mouse') return;
-      const cell = e.target.closest('.bb-cell');
-      if (!cell) return;
-      const i = Number(cell.dataset.i);
-      S.cursor = { r: Math.floor(i / N), c: i % N };
-      showCursorPreview();
-    }
-    function onGridClick(e) {
-      if (S.selected == null) return;
-      const cell = e.target.closest('.bb-cell');
-      if (!cell) return;
-      const i = Number(cell.dataset.i);
-      const r = Math.floor(i / N);
-      const c = i % N;
-      const p = S.game.tray[S.selected];
-      if (p && C.canPlace(S.game.board, p.shape, r, c)) {
-        const k = S.selected;
-        S.selected = null;
-        S.preview = null;
-        commit(k, r, c);
-      } else play('invalid', 0.5);
-    }
     function onKey(e) {
       if (S.panel || S.overlay) {
         if (e.key === 'Escape' && S.panel) closePanel();
         return;
       }
-      if (['1', '2', '3'].includes(e.key)) {
-        const k = Number(e.key) - 1;
-        if (S.game.tray[k]) {
-          S.selected = k;
-          placeCursorNear(S.game.tray[k]);
-          showCursorPreview();
-          renderTray();
-          renderBoard();
-          E.grid.focus({ preventScroll: true });
-          e.preventDefault();
-        }
-        return;
-      }
-      if (S.selected == null) return;
-      const moves = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
-      if (moves[e.key]) {
-        e.preventDefault();
-        const [dr, dc] = moves[e.key];
-        S.cursor = { r: Math.max(0, Math.min(N - 1, S.cursor.r + dr)), c: Math.max(0, Math.min(N - 1, S.cursor.c + dc)) };
-        showCursorPreview();
-        renderBoard();
-      } else if (e.key === 'Enter' || e.key === ' ') {
-        if (e.target !== E.grid && e.target !== S.root) return;
-        e.preventDefault();
-        if (S.preview) {
-          const k = S.selected;
-          const { r, c } = S.preview;
-          S.selected = null;
-          S.preview = null;
-          commit(k, r, c);
-        } else play('invalid', 0.5);
-      } else if (e.key === 'Escape') {
-        S.selected = null;
-        S.preview = null;
-        renderTray();
-        renderBoard();
-      }
+      BD.onKey(e, S.root);
     }
 
     /* ---------------- Đặt khối: điểm, hiệu ứng, âm thanh ---------------- */
@@ -733,51 +876,17 @@ window.ThinkBlocks = (() => {
       renderScore();
       renderCombo(res.combo || (S.game.combo >= 2 ? S.game.combo : 0));
       renderTop();
-      const center = centerOf(res.placed);
-      if (res.clearedCells.length) burst(res.clearedCells, center);
-      floatText(`+${res.gained}`, center, 'bb-float');
+      const center = BD.centerOf(res.placed);
+      if (res.clearedCells.length) BD.burst(res.clearedCells, center);
+      BD.floatText(`+${res.gained}`, center, 'bb-float');
       const words = res.allClear ? 'Sạch bàn!' : C.praise(res.lines, res.combo);
-      if (words) banner(words, res.allClear ? 'is-gold' : res.lines >= 4 ? 'is-hot' : '');
+      if (words) BD.banner(words, res.allClear ? 'is-gold' : res.lines >= 4 ? 'is-hot' : '');
       E.live.textContent = `Đặt khối, được ${res.gained} điểm${res.lines ? `, ăn ${res.lines} hàng` : ''}${res.combo >= 2 ? `, combo ${res.combo}` : ''}. Tổng ${S.game.score}.`;
       if (res.over) {
         const record = recordGame();
         setTimeout(() => showEnd(record), res.lines ? 900 : 550);
       }
       if (host.onChange && (res.over || res.state.moves === 1)) host.onChange();
-    }
-
-    function centerOf(cells) {
-      const rs = cells.map((i) => Math.floor(i / N));
-      const cs = cells.map((i) => i % N);
-      return { r: (Math.min(...rs) + Math.max(...rs)) / 2, c: (Math.min(...cs) + Math.max(...cs)) / 2 };
-    }
-
-    // Các ô bị xóa vỡ ra thành từng mảnh, lan dần từ chỗ vừa đặt
-    function burst(cells, center) {
-      if (reducedMotion()) return;
-      const frag = document.createDocumentFragment();
-      for (const { i, color } of cells) {
-        const r = Math.floor(i / N);
-        const c = i % N;
-        const dist = Math.hypot(r - center.r, c - center.c);
-        const shard = el('span', { class: `bb-shard is-c${color}`, style: `--r:${r};--c:${c};--d:${Math.round(dist * 28)}ms;--dx:${((c - center.c) * 6).toFixed(1)}px;--dy:${((r - center.r) * 6 - 10).toFixed(1)}px` });
-        frag.append(shard);
-        setTimeout(() => shard.remove(), 900);
-      }
-      E.fx.append(frag);
-    }
-
-    function floatText(text, at, cls) {
-      if (reducedMotion()) return;
-      const f = el('span', { class: cls, text, style: `--r:${at.r};--c:${at.c}` });
-      E.fx.append(f);
-      setTimeout(() => f.remove(), 1000);
-    }
-
-    function banner(text, cls) {
-      const b = el('div', { class: `bb-banner ${cls || ''}`.trim(), text, 'aria-hidden': 'true' });
-      E.fx.append(b);
-      setTimeout(() => b.remove(), 1300);
     }
 
     /* ---------------- Hết ván ---------------- */
@@ -836,12 +945,8 @@ window.ThinkBlocks = (() => {
     }
 
     function toggleSound() {
-      audio.on = !audio.on;
-      store.set(KEY_SOUND, audio.on);
-      if (audio.on) {
-        unlockAudio();
-        setTimeout(() => play('pick'), 60);
-      }
+      setSound(!audio.on);
+      if (audio.on) setTimeout(() => play('pick'), 60);
       renderTop();
     }
 
@@ -934,5 +1039,5 @@ window.ThinkBlocks = (() => {
     return { mount, unmount, sync, onScore, summary, openPanel, newGame, isMounted: () => S.mounted };
   }
 
-  return { create, _store: store, _pendingFor: pendingFor };
+  return { create, puzzleBoard, setSound, _store: store, _pendingFor: pendingFor };
 })();

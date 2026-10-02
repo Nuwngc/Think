@@ -16,6 +16,7 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - **App Think Beta** (thư mục `native/`): app thật viết bằng React Native, không phải trang web trong khung. GitHub tự build file APK mỗi lần sửa code (mục 13).
 - **Trò chơi** (mục 16): tab riêng chứa **Nông trại**, **Xếp Khối**, **Cờ vua**, **Cờ caro**, có bảng xếp hạng của cả nhóm.
 - **Nông trại** (mục 20, mới ở 2.2.0): trồng 15 loại cây theo thời gian thật, nuôi gà bò, **tự nấu mì cay, pha trà sữa trân châu**, nướng pizza, làm kem xoài… rồi **bán ở chợ** (giá đổi mỗi ngày, có món hot) hoặc **giao đơn cho khách** lấy xu; lên cấp mở thêm cây, món, ô đất; **ghé vườn bạn bè** bắt sâu giúp hoặc **hái trộm**, nuôi chó giữ vườn; bảng xếp hạng cấp độ và xu tuần này. Có trên web và App Think Beta.
+- **Quiz hằng ngày + Thử thách nhanh** (mục 22, mới ở 2.4.0): Cờ vua, Xếp Khối, Cờ caro mỗi game có **một câu đố mỗi ngày** cho cả nhóm cùng giải (xem ai giải nhanh nhất) và **200 màn thử thách** mở dần, mỗi màn 1–3 sao, bảng xếp hạng sao; thêm màn được bất cứ lúc nào. Chơi được khi mất mạng (Xếp Khối, cờ caro), có trên web và App Think Beta.
 - **Chuỗi hằng ngày** (mục 21, mới ở 2.3.0): mỗi game (Nông trại, Xếp Khối, Cờ vua, Cờ caro) có **chuỗi ngày chơi liên tiếp** riêng 🔥 và một chuỗi chung; thẻ game hiện số ngày, có lịch 7 ngày, mốc 3 / 7 / 14 / 30… ngày được chúc mừng, buổi tối nhắc nếu chuỗi sắp đứt. Game nào thêm sau này cũng phải có chuỗi.
 - **Cờ vua** (mục 14): thách đấu bạn bè, chọn thời gian (1+0 … 30+0 hoặc không giới hạn), đồng hồ do máy chủ giữ, **quân cờ trượt mượt và kéo thả bằng ngón tay như chess.com**, **điểm ELO và bảng xếp hạng**, chơi với 8 máy cờ mã nguồn mở (có Stockfish), **xem lại ván**, **đánh giá ván kiểu Game Review**: mỗi nước được xếp loại **Thiên tài !!, Tuyệt vời !, Tốt nhất, Rất tốt, Tốt, Theo sách, Thiếu chính xác ?!, Sai lầm ?, Bỏ lỡ, Sai lầm nghiêm trọng ??**, có thanh đánh giá, nhận xét từng nước, tên khai cuộc. Âm thanh quân gỗ giòn kiểu các trang cờ lớn. Có trên cả web lẫn App Think Beta.
 - **Xếp Khối** (mục 16): game xếp khối 8×8 (kiểu Block Blast) có combo, hiệu ứng nổ, âm thanh, **chơi được khi mất mạng** (kể cả lúc máy chủ đang ngủ), điểm tự gửi lên **bảng xếp hạng** tuần này / mọi lúc khi có mạng.
@@ -482,6 +483,28 @@ Mỗi game có **chuỗi riêng**: ngày nào có chơi (đi một nước cờ,
 2. Game chạy trên máy chủ: gọi `streaks.record(userId, '<mã game>')` mỗi khi người chơi thật sự chơi. Game chạy trên máy (chơi được khi mất mạng): đặt `client: true`, web gọi `ThinkStreaks.mark('<mã>', uid)`, app gọi `markPlayed("<mã>")`.
 3. Thẻ game ở trang Trò chơi tự có nhãn chuỗi; thêm `ST.badge('<mã>')` (web) / `<StreakBadge game="<mã>" />` (app) vào đầu màn hình game.
 
+## 22. Quiz hằng ngày và Thử thách nhanh
+
+Cờ vua, Xếp Khối và Cờ caro có thêm hai chế độ câu đố (web và App Think Beta, dùng chung tiến độ):
+
+- **Quiz hôm nay**: mỗi game một câu mỗi ngày (đổi lúc 0 giờ, giờ Việt Nam), cả nhóm cùng một câu. Khung "Quiz hôm nay" ở trang Trò chơi cho biết đã giải chưa và bao nhiêu người đã giải; giải xong thấy bảng **ai đã giải hôm nay** (nhiều sao hơn xếp trên, rồi ai nhanh hơn), cập nhật ngay khi có người vừa giải. Mỗi người chỉ tính lần giải đầu tiên.
+- **Thử thách nhanh**: 200 màn mỗi game, chia chương 20 màn, dễ tới khó; giải xong màn trước mới mở màn sau. Mỗi màn 1–3 sao: không sai, không gợi ý = 3 sao; sai / gợi ý tổng cộng tối đa 2 lần = 2 sao; còn lại 1 sao. Bảng xếp hạng theo tổng số sao.
+- **Cờ vua**: chiếu hết sau 1, 2, 3 nước và "thắng quân" (bắt đôi, ghim, ăn quân bị bỏ ngỏ). Đi sai thì quân trượt về, đi đúng thì máy đáp; nước chiếu hết cuối cùng đi kiểu nào cũng được. Các thế cờ lấy từ ván máy tự đánh, Stockfish tìm chỗ có đúng một nước hay nhất, chiếu hết 1–2 nước được thử hết mọi nước để chắc chắn.
+- **Xếp Khối**: "đặt hết các khối để dọn sạch bàn" — khối ra 3 cái một lượt như game thật. Câu đố dựng ngược từ lời giải nên chắc chắn giải được; cách giải khác cũng được tính.
+- **Cờ caro**: "thắng trong N nước" (bạn cầm X, luật tự do): mỗi nước phải tạo tứ để đối thủ buộc phải chặn, tới khi có 5 quân. Cách thắng khác lời giải vẫn được tính.
+- Nút **Gợi ý** (tính như một lần sai khi chấm sao), **Làm lại**, **Xem lời giải** (máy tự đi; lần đó không được tính, quiz hôm nay thì không giải lại được nữa). Không có đồng hồ chạy trên màn hình; thời gian chỉ hiện lúc giải xong.
+- Giải câu đố cũng tính là có chơi game đó trong ngày (chuỗi hằng ngày). Giải lúc mất mạng thì kết quả lưu trên máy, có mạng tự gửi.
+- Máy chủ đi lại lời giải để kiểm tra trước khi ghi (`src/puzzles.js`; API `GET /api/puzzles`, `POST /api/puzzles/<game>/level`, `POST /api/puzzles/<game>/daily`; realtime `puzzle:daily`). Luật câu đố: `public/puzzles-core.js` (app: `native/src/puzzles/core.ts`, có kiểm thử so khớp). Dữ liệu: `public/puzzles/<game>.json` và bản giống hệt trong `native/src/puzzles/data/`.
+
+**Thêm màn** (người chơi không bị đổi các màn đã có; app tự tải màn mới từ máy chủ, không cần cài bản mới):
+
+```bash
+node scripts/puzzles/blocks.js --add 50     # vài giây
+node scripts/puzzles/caro.js --add 50 --minutes 20
+node scripts/puzzles/chess.js --add 50 --minutes 40   # cần Stockfish (có sẵn trong node_modules)
+npm test                                   # kiểm tra mọi câu đố vẫn giải được
+```
+
 ## Cấu trúc thư mục
 
 ```
@@ -503,6 +526,7 @@ src/caro.js          Cờ caro: thách đấu, giờ mỗi nước, ELO, bảng 
 src/farm.js          Nông trại: lưu nông trại, ghé vườn bạn bè, bảng xếp hạng (API /api/farm)
 src/farm-logic.js    Luật Nông trại (gieo, thu hoạch, chế biến, đơn hàng, chợ, hái trộm…); src/farm-data.js: cây, món, công trình
 src/streaks.js       Chuỗi hằng ngày của mọi game (API /api/streaks, nhắc giữ chuỗi buổi tối)
+src/puzzles.js       Quiz hằng ngày + Thử thách nhanh: tiến độ, kết quả, bảng xếp hạng (API /api/puzzles)
 src/chat-plus.js     Chat 2.1.0: sửa tin, ghim, tìm, chuyển tiếp, tắt thông báo, chủ đề, bình chọn, ảnh đã gửi
 src/reports.js       Báo lỗi app (API /api/app/errors, Quản trị → Báo lỗi app)
 src/engines/         GarboChess-JS (giữ nguyên giấy phép BSD ở đầu file)
@@ -513,12 +537,14 @@ scripts/blocks-sounds.py Tạo lại âm thanh Xếp Khối (cần Python + nump
 scripts/build-openings.js Tạo lại sách khai cuộc từ bộ dữ liệu lichess
 scripts/caro-sounds.py Tạo lại âm thanh cờ caro
 scripts/farm-sounds.py Tạo lại âm thanh Nông trại; scripts/farm-icons.py chép hình Twemoji cho web và app
+scripts/puzzles/     Tạo câu đố cho Cờ vua, Xếp Khối, Cờ caro (chess.js, blocks.js, caro.js; --add N để thêm màn)
 scripts/apk-check/   Chạy thử APK trên máy ảo Android (run.py) và tạo dữ liệu thử (seed.py)
 public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu trên máy), sw.js (service worker),
                      games-ui.js (tab Trò chơi), chess-ui.js (Cờ vua), blocks-core.js + blocks.js + blocks.css (Xếp Khối),
                      blocks.html + blocks-page.js (trang Xếp Khối chơi offline), social-ui.js (trang cá nhân, bảng tin),
                      caro-core.js + caro-ui.js + caro.css (Cờ caro), farm-ui.js + farm.css (Nông trại),
                      streaks.js + streaks.css (chuỗi hằng ngày), chess-anim.js (quân cờ trượt),
+                     puzzles-core.js (luật câu đố) + puzzles-ui.js + puzzles.css (quiz, thử thách), puzzles/ (dữ liệu câu đố),
                      theme.js (nền sáng/tối), chess/pieces/ (hình quân cờ), chess/sounds/, blocks/sounds/ (âm thanh),
                      farm/emoji/ (hình Twemoji), farm/sounds/
 public/download/     File cài app Android (think.apk) và version.json

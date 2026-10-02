@@ -5,6 +5,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { shortTime } from "../format";
 import { showGamesHub, useStore } from "../store";
+import { PuzzleEntry } from "../puzzles/ui";
 import { StreakBadge } from "../streaks/ui";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Button, Icon, IconButton, Sheet, useStyles, type IconName } from "../ui";
@@ -14,7 +15,7 @@ import { BotSheet, ChallengeSheet, HistorySheet, PrefsSheet } from "./Sheets";
 import { answerChallenge, loadChess, loadLeaderboard, openGame, useChess } from "./store";
 import type { ChessGame, ChessRating } from "./types";
 
-// Tab Cờ vua: điểm của tôi, lời thách đấu, ván đang chơi, bảng xếp hạng, ván gần đây.
+// Tab Cờ vua: điểm của tôi, câu đố (quiz hôm nay, thử thách nhanh), lời thách đấu, ván đang chơi, bảng xếp hạng, ván gần đây.
 
 export function ChessHome() {
   const c = useColors();
@@ -101,6 +102,9 @@ export function ChessHome() {
             <HeroButton title="Chơi với máy" icon="smart-toy" onPress={() => setBotOpen(true)} />
           </View>
         </View>
+
+        {/* Câu đố cờ vua: quiz hôm nay + thử thách nhanh */}
+        <PuzzleEntry game="chess" />
 
         {error && !loaded ? (
           <View style={[s.banner, { backgroundColor: c.dangerWash }]}>

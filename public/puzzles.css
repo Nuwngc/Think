@@ -1,0 +1,253 @@
+/* ===== Câu đố: Quiz hôm nay + Thử thách nhanh (public/puzzles-ui.js) =====
+   Dùng lại màu, nút, bảng trượt của app.css; bàn chơi là bàn của từng game (chess / caro / blocks). */
+:root {
+  --pz-chess: linear-gradient(135deg, #14967A 0%, #0E7C66 50%, #0A5746 100%);
+  --pz-blocks: linear-gradient(135deg, #3B4FC0 0%, #25338A 55%, #1C2566 100%);
+  --pz-caro: linear-gradient(135deg, #E8683F 0%, #C7432B 50%, #8E261F 100%);
+  --pz-star: #F2B01E;
+  --pz-star-off: #D3DBD7;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --pz-star-off: #34453E; }
+}
+:root[data-theme="dark"] { --pz-star-off: #34453E; }
+
+/* ----- Biểu tượng game ----- */
+.pz-gicon { flex: none; width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; color: #fff; }
+.pz-gicon .ic { width: 20px; height: 20px; }
+.pz-gicon.is-chess { background: var(--pz-chess); }
+.pz-gicon.is-chess .ic { fill: currentColor; stroke: currentColor; stroke-width: 1.2; }
+.pz-gicon.is-blocks { background: var(--pz-blocks); }
+.pz-gicon.is-caro { background: var(--pz-caro); }
+.pz-gicon.is-caro .ic { stroke-width: 2.4; }
+.pz-gicon.is-sm { width: 22px; height: 22px; border-radius: 7px; }
+.pz-gicon.is-sm .ic { width: 14px; height: 14px; }
+.pz-gicon.is-lg { width: 52px; height: 52px; border-radius: 16px; background: rgba(255, 255, 255, .18); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .2); }
+.pz-gicon.is-lg .ic { width: 30px; height: 30px; }
+.pz-gicon-blocks {
+  --bb1: #FF5A63; --bb2: #FF9A1F; --bb3: #FFD23F; --bb4: #35D07F; --bb5: #29C4F0; --bb6: #4F7DFF; --bb7: #A56BFF;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2px; width: 58%; aspect-ratio: 1;
+}
+.pz-gicon-blocks .bb-block { border-radius: 3px; }
+.pz-gicon.is-sm .pz-gicon-blocks { gap: 1px; }
+.pz-gicon.is-sm .pz-gicon-blocks .bb-block { border-radius: 1.5px; box-shadow: none; }
+
+/* ----- Sao ----- */
+.pz-stars { display: inline-flex; align-items: center; gap: 1px; }
+.pz-stars .ic { width: 13px; height: 13px; color: var(--pz-star-off); }
+.pz-stars .is-on .ic { color: var(--pz-star); }
+.pz-stars > span { display: grid; }
+.pz-stars.is-mini .ic { width: 11px; height: 11px; }
+.pz-stars.is-big .ic { width: 22px; height: 22px; }
+
+/* ----- Khung ở trang Trò chơi ----- */
+.pz-hub { display: grid; gap: 2px; padding: 10px 10px 8px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); container: pzhub / inline-size; }
+.pz-hub-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 2px 6px 4px; }
+.pz-hub-head h3 { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.pz-hub-head span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.pz-daily { list-style: none; margin: 0; padding: 0; display: grid; }
+.pz-daily-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 5px 6px; border-radius: 13px; color: inherit; text-decoration: none; }
+.pz-daily-row:hover { background: var(--field); }
+.pz-daily-row:focus-visible { outline-offset: -2px; }
+.pz-daily-main { flex: 1; min-width: 0; display: grid; }
+.pz-daily-main strong { font-size: 14.5px; font-weight: 700; line-height: 1.25; }
+.pz-daily-main small, .pz-daily-status small { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pz-daily-status { flex: none; display: grid; justify-items: end; gap: 1px; max-width: 46%; text-align: right; }
+.pz-daily-status strong { font-size: 13px; font-weight: 800; white-space: nowrap; }
+.pz-daily-status .is-solved { color: var(--jade-ink); font-variant-numeric: tabular-nums; }
+.pz-daily-status .is-todo { color: var(--turmeric-ink); }
+.pz-quick { display: grid; gap: 6px; margin-top: 2px; padding: 8px 0 0; border-top: 1px solid var(--line); }
+.pz-quick-label { padding: 0 6px; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.pz-quick-row { min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.pz-quick-btn {
+  min-width: 0; height: 38px; padding: 0 6px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  background: var(--field); color: var(--ink); text-decoration: none;
+  font-size: 12.5px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.pz-quick-btn span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.pz-quick-btn:hover { background: color-mix(in srgb, var(--field), var(--ink) 6%); }
+@container pzhub (max-width: 310px) {
+  .pz-quick-btn .pz-gicon { display: none; }
+  .pz-quick-btn.is-chess { box-shadow: inset 0 -3px 0 #0E7C66; }
+  .pz-quick-btn.is-blocks { box-shadow: inset 0 -3px 0 #3B4FC0; }
+  .pz-quick-btn.is-caro { box-shadow: inset 0 -3px 0 #C7432B; }
+}
+
+/* ----- Hai nút trong từng game (trang Cờ vua, Cờ caro, màn Xếp Khối) ----- */
+.pz-entry { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pz-entry-btn {
+  min-width: 0; display: grid; justify-items: start; align-content: start; gap: 4px; padding: 11px 12px 10px; border-radius: 16px;
+  background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); text-decoration: none;
+  transition: background-color .15s, transform .1s;
+}
+.pz-entry-btn:hover { background: var(--field); }
+.pz-entry-btn:active { transform: scale(.98); }
+.pz-entry-btn > .ic { width: 22px; height: 22px; color: var(--jade-ink); }
+.pz-entry-text { min-width: 0; display: grid; }
+.pz-entry-text strong { font-size: 14.5px; font-weight: 800; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pz-entry-text small { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pz-entry-btn.is-done small { color: var(--jade-ink); }
+/* Trong màn Xếp Khối (nền xanh đêm) */
+.pz-entry.is-dark { width: min(100%, 520px); padding: 0 14px; margin: 6px 0 10px; }
+.bb.has-links .pz-entry.is-dark { margin-bottom: max(12px, env(safe-area-inset-bottom)); }
+.pz-entry.is-dark .pz-entry-btn { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 14px; background: rgba(255, 255, 255, .1); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12); color: #fff; }
+.pz-entry.is-dark .pz-entry-btn > .ic { width: 18px; height: 18px; }
+.pz-entry.is-dark .pz-entry-text strong { font-size: 13.5px; }
+.pz-entry.is-dark .pz-entry-btn:hover { background: rgba(255, 255, 255, .17); }
+.pz-entry.is-dark .pz-entry-btn > .ic { color: #FFD54A; }
+.pz-entry.is-dark .pz-entry-text small { color: rgba(255, 255, 255, .75); }
+.pz-entry.is-dark .pz-entry-btn.is-done small { color: #8FF0C4; }
+.pz-entry.is-dark .pz-entry-btn:focus-visible { outline: 3px solid #FFD54A; outline-offset: 2px; }
+@media (max-width: 379.98px) {
+  .pz-entry.is-dark { gap: 8px; padding: 0 10px; }
+  .pz-entry.is-dark .pz-entry-btn { gap: 6px; padding: 8px; }
+}
+
+/* ----- Cột phải: màn câu đố / bản đồ màn ----- */
+.puzzle-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pz-head .pz-back { display: inline-grid; }
+.pz-head .icon-btn[aria-pressed="false"] { color: var(--muted); }
+.pz-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.pz-loading { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); }
+.pz-loading .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--jade-ink); border-right-color: transparent; animation: spin .7s linear infinite; }
+.pz-empty { flex: 1; display: grid; place-items: center; align-content: center; gap: 16px; padding: 32px; text-align: center; color: var(--muted); }
+.pz-empty p { max-width: 320px; }
+.pz-note { font-size: 13px; color: var(--muted); text-align: center; }
+.pz-queued { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.pz-queued .ic { width: 16px; height: 16px; }
+
+/* Màn câu đố */
+.pz-game { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 12px calc(18px + var(--safe-bottom)); }
+.pz-goal {
+  width: min(100%, 560px); display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px; border-radius: 14px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 14.5px; font-weight: 700; line-height: 1.35;
+}
+.pz-side { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; }
+.pz-side.is-w { background: #fff; box-shadow: inset 0 0 0 1.5px #9AA6A1; }
+.pz-side.is-b { background: #222; box-shadow: inset 0 0 0 1.5px #000; }
+.pz-side.is-x { width: 22px; height: 22px; border-radius: 6px; background: var(--caro-paper, #FFFCF2); box-shadow: inset 0 0 0 1px var(--caro-frame, #8FADD5); }
+.pz-side .caro-mark { width: 18px; height: 18px; }
+.pz-board { position: relative; width: min(100%, 560px); }
+.pz-board.is-chess, .pz-board.is-caro { width: min(100%, 560px, calc(var(--app-h, 100dvh) - 290px)); min-width: min(100%, 260px); }
+.pz-chess-board { width: 100%; }
+.pz-board.is-blocks { width: min(100%, 520px); display: flex; justify-content: center; }
+.pz-status { min-height: 24px; text-align: center; font-weight: 700; color: var(--ink-2); }
+.pz-status.is-turn, .pz-status.is-ok, .pz-status.is-done { color: var(--jade-ink); }
+.pz-status.is-wrong { color: var(--danger); }
+.pz-status.is-info { color: var(--turmeric-ink); }
+.pz-status.is-shake { animation: pz-shake .35s ease; }
+.pz-actions { width: min(100%, 560px); display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pz-actions:empty { display: none; }
+.pz-actions.is-one { grid-template-columns: 1fr; }
+.pz-actions .btn { min-width: 0; padding: 0 10px; white-space: nowrap; }
+.pz-more { display: flex; justify-content: center; min-height: 0; }
+.pz-more:empty { display: none; }
+.pz-link { padding: 6px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 600; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.pz-link:hover { color: var(--ink-2); background: var(--field); }
+.pz-donebox { width: min(100%, 560px); display: grid; gap: 12px; }
+.pz-donecard { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--jade-wash); }
+.pz-donecard-main { min-width: 0; display: grid; gap: 1px; }
+.pz-donecard-main strong { font-weight: 800; color: var(--jade-ink); }
+.pz-donecard-main span { font-size: 13px; color: var(--ink-2); }
+
+/* Bàn cờ vua: ô gợi ý (quân cần đi) và ô đi sai */
+.chess-board .sq.is-hint { box-shadow: inset 0 0 0 4px #F2B01E; z-index: 1; animation: pz-glow .9s ease-in-out infinite alternate; }
+.chess-board .sq.is-wrong::before { content: ''; position: absolute; inset: 0; background: rgba(214, 48, 32, .5); }
+/* Bàn caro: ô gợi ý */
+.caro-cell.is-hint::before { content: ''; position: absolute; inset: 1px; border-radius: 3px; background: color-mix(in srgb, #F2B01E 30%, transparent); box-shadow: inset 0 0 0 2px #F2B01E; animation: pz-glow .9s ease-in-out infinite alternate; }
+/* Bàn Xếp Khối trong khung bo góc */
+.bb.bb-puzzle { width: 100%; height: auto; padding: 12px 4px 4px; border-radius: 22px; box-shadow: 0 10px 28px rgba(10, 20, 60, .22); }
+.bb-puzzle .bb-tray { margin: 12px 0 2px; }
+.bb-cell.is-hint { background: color-mix(in srgb, var(--col) 40%, #1C2662); box-shadow: inset 0 0 0 2px #FFD54A; animation: pz-glow .9s ease-in-out infinite alternate; }
+.bb-slot.is-hint { background: rgba(255, 213, 74, .14); box-shadow: inset 0 0 0 2px #FFD54A; }
+
+/* Ai đã giải hôm nay */
+.pz-solvers { display: grid; gap: 8px; }
+.pz-solvers h4 { margin: 0 4px; font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.pz-solvers ol, .pz-rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.pz-solvers li, .pz-rank li { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 40px; padding: 4px 8px; border-radius: 12px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.pz-solvers li.is-me, .pz-rank li.is-me { background: var(--jade-wash); box-shadow: none; }
+.pz-solver-name, .pz-rank-name { flex: 1; min-width: 0; font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.is-me .pz-solver-name, .is-me .pz-rank-name { color: var(--jade-ink); }
+.pz-solver-stars { flex: none; color: var(--pz-star); font-size: 13px; letter-spacing: 1px; }
+.pz-solver-time { flex: none; min-width: 40px; text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pz-rank-sub { flex: none; font-size: 12px; font-weight: 600; color: var(--muted); }
+.pz-rank-stars { flex: none; display: inline-flex; align-items: center; gap: 3px; min-width: 44px; justify-content: flex-end; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pz-rank-stars .ic { width: 14px; height: 14px; color: var(--pz-star); }
+
+/* Bảng kết quả */
+.pz-layer .sheet-body { gap: 16px; }
+.pz-result { position: relative; display: grid; justify-items: center; gap: 4px; text-align: center; padding-top: 6px; }
+.pz-result h3 { font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+.pz-result-line { color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pz-bigstars { display: flex; align-items: flex-end; gap: 4px; margin-bottom: 4px; }
+.pz-bigstars > span { display: grid; }
+.pz-bigstars .ic { width: 50px; height: 50px; color: var(--pz-star-off); }
+.pz-bigstars > span:nth-child(2) .ic { width: 62px; height: 62px; }
+.pz-bigstars .is-on .ic { color: var(--pz-star); filter: drop-shadow(0 3px 0 color-mix(in srgb, #B37800 60%, transparent)); }
+.pz-bigstars .is-on { animation: pz-star .45s cubic-bezier(.2, 1.5, .4, 1) calc(var(--k) * .14s) both; }
+.pz-confetti { position: absolute; inset: -18px -20px auto; height: 170px; pointer-events: none; overflow: hidden; }
+.pz-confetti span { position: absolute; top: -12px; width: 8px; height: 12px; border-radius: 2px; animation: pz-fall var(--t, 1.4s) cubic-bezier(.3, .1, .6, 1) var(--d, 0s) both; }
+.pz-sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pz-sheet-actions.is-one { grid-template-columns: 1fr; }
+.pz-sheet-actions .btn { min-width: 0; white-space: nowrap; }
+
+/* ----- Bản đồ màn ----- */
+.pz-map { width: min(100%, 500px); margin: 0 auto; display: grid; gap: 18px; padding: 12px 16px calc(28px + var(--safe-bottom)); }
+.pz-maphero { display: grid; gap: 12px; padding: 16px; border-radius: 22px; color: #fff; box-shadow: 0 10px 28px rgba(10, 30, 60, .16); }
+.pz-maphero.is-chess { background: var(--pz-chess); --pz-ink: #0A5746; }
+.pz-maphero.is-blocks { background: var(--pz-blocks); --pz-ink: #1C2566; }
+.pz-maphero.is-caro { background: var(--pz-caro); --pz-ink: #8E261F; }
+.pz-maphero-top { display: flex; align-items: center; gap: 12px; }
+.pz-maphero-main { flex: 1; min-width: 0; display: grid; }
+.pz-maphero-label { font-size: 12.5px; font-weight: 600; color: rgba(255, 255, 255, .85); }
+.pz-maphero-stars { display: flex; align-items: center; gap: 4px; font-size: 34px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.pz-maphero-stars .ic { width: 28px; height: 28px; color: #FFD54A; }
+.pz-maphero-stars small { font-size: 18px; color: rgba(255, 255, 255, .75); align-self: flex-end; margin-bottom: 4px; }
+.pz-maphero-side { flex: none; display: grid; justify-items: end; }
+.pz-maphero-side strong { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pz-maphero-side span { font-size: 12px; color: rgba(255, 255, 255, .85); }
+.pz-maphero-go { background: #fff; color: var(--pz-ink); font-weight: 800; }
+.pz-maphero-go:hover { background: #F0F4F2; }
+.pz-maphero-go .ic { width: 18px; height: 18px; }
+.pz-maphero-done { font-weight: 700; }
+.pz-boardcard { display: grid; gap: 8px; }
+.pz-boardcard-head { display: flex; align-items: center; justify-content: space-between; margin: 0 4px; }
+.pz-boardcard-head h3, .pz-chapter-head h3 { font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.pz-chapter { display: grid; gap: 8px; }
+.pz-chapter-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 4px; }
+.pz-chapter-head h3 span { color: var(--ink-2); }
+.pz-chapter-head > span { flex: none; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.pz-chapter-head > span.is-full { color: var(--jade-ink); }
+.pz-levels { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.pz-lv {
+  position: relative; aspect-ratio: 1; min-width: 0; display: grid; place-items: center; align-content: center; gap: 4px;
+  border-radius: 14px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--line); color: var(--ink);
+  transition: transform .1s, background-color .15s;
+}
+.pz-lv:hover:not(:disabled) { background: var(--field); }
+.pz-lv:active:not(:disabled) { transform: scale(.95); }
+.pz-lv-no { font-size: 17px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.pz-lv.is-done { background: var(--jade-wash); box-shadow: none; color: var(--jade-ink); }
+.pz-lv.is-done:hover { background: color-mix(in srgb, var(--jade-wash), var(--jade-ink) 8%); }
+.pz-lv.is-next { background: var(--jade); color: #fff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--jade) 28%, transparent), 0 6px 16px color-mix(in srgb, var(--jade) 35%, transparent); }
+.pz-lv.is-next:hover { background: var(--jade-deep); }
+.pz-lv.is-next .pz-stars .ic { color: rgba(255, 255, 255, .4); }
+.pz-lv.is-locked { background: var(--field); box-shadow: none; color: var(--muted); cursor: default; }
+.pz-lv.is-locked .pz-lv-no { opacity: .7; }
+.pz-lv-lock { display: grid; }
+.pz-lv-lock .ic { width: 13px; height: 13px; }
+
+@keyframes pz-shake { 0%, 100% { transform: none; } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@keyframes pz-glow { from { filter: brightness(1); } to { filter: brightness(1.25); } }
+@keyframes pz-star { 0% { transform: scale(.2) rotate(-30deg); opacity: 0; } 100% { transform: none; opacity: 1; } }
+@keyframes pz-fall {
+  0% { opacity: 0; transform: translateY(0) rotate(0); }
+  10% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(170px) rotate(var(--r, 200deg)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chess-board .sq.is-hint, .caro-cell.is-hint::before, .bb-cell.is-hint, .pz-bigstars .is-on, .pz-status.is-shake { animation: none; }
+}

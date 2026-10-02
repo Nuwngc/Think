@@ -5,6 +5,7 @@ import { BLOCK_SOURCES, type BlockSound } from "./soundFiles";
 // Âm thanh game Xếp Khối. Tiếng hay phát liên tục (đặt khối, ăn hàng) có 2 trình phát để phát chồng lên nhau được.
 
 const POOL: Partial<Record<BlockSound, number>> = { place: 3, pick: 2, clear1: 2, invalid: 2 };
+const WARM: BlockSound[] = ["pick", "place", "clear1"];
 const players: Partial<Record<BlockSound, AudioPlayer[]>> = {};
 const next: Partial<Record<BlockSound, number>> = {};
 let modeSet = false;
@@ -31,9 +32,40 @@ export function preloadBlockSounds() {
       modeSet = true;
       setAudioModeAsync({ playsInSilentMode: false, interruptionMode: "mixWithOthers", shouldPlayInBackground: false }).catch(() => undefined);
     }
-    for (const name of Object.keys(BLOCK_SOURCES) as BlockSound[]) pool(name);
+    // Chỉ tạo sẵn tiếng hay dùng; tiếng hiếm (combo, kỷ lục…) tạo khi cần — đỡ tốn luồng âm thanh của máy
+    for (const name of WARM) pool(name);
   } catch {
     /* máy không phát được âm thanh */
+  }
+}
+
+let holders = 0;
+/**
+ * Mở một màn có tiếng Xếp Khối: tạo sẵn trình phát. Trả về hàm gọi khi rời màn — màn cuối cùng rời thì trả lại
+ * các luồng âm thanh cho máy (Android chỉ cho mỗi app một số luồng; giữ hết tiếng của mọi game thì tiếng sau không phát được).
+ */
+export function holdBlockSounds() {
+  holders++;
+  preloadBlockSounds();
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    holders = Math.max(0, holders - 1);
+    if (!holders) releaseBlockSounds();
+  };
+}
+
+export function releaseBlockSounds() {
+  for (const name of Object.keys(players) as BlockSound[]) {
+    for (const p of players[name] || []) {
+      try {
+        p.remove();
+      } catch {
+        /* đã trả rồi */
+      }
+    }
+    delete players[name];
   }
 }
 

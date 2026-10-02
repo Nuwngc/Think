@@ -20,6 +20,17 @@ import {
 import { bindChess, closeGame, loadChess, onAnalysisEvent, onChessEvent, openGame, resetChess, useChess } from "./chess/store";
 import { bindFarm, loadFarm, onFarmEvent, openVisit as openFarmVisit, resetFarm, setTab as setFarmTab, useFarm } from "./farm/store";
 import { bindStreaks, loadStreaks, markPlayed, onStreakEvent, resetStreaks } from "./streaks/store";
+import type { GameId as PuzzleGame } from "./puzzles/core";
+import {
+  bindPuzzles,
+  closeRoute as closePuzzles,
+  closePlay as closePuzzlePlay,
+  loadPuzzles,
+  onPuzzleDaily,
+  openRoute as openPuzzleRoute,
+  resetPuzzles,
+  usePuzzles,
+} from "./puzzles/store";
 import { API_URL } from "./config";
 import { convTitle, previewText, type Names } from "./format";
 import type { PreparedImage } from "./images";
@@ -55,8 +66,8 @@ import type { ChatItem, Conversation, Me, Message, PendingMessage, Pin, Reaction
 
 export type Phase = "boot" | "login" | "force" | "ready";
 export type Tab = "chats" | "games" | "me" | "admin";
-/** Trong tab Trò chơi: trang chọn game, Cờ vua, Cờ caro, đang chơi Xếp Khối, hay Nông trại */
-export type GamesView = "hub" | "chess" | "blocks" | "caro" | "farm";
+/** Trong tab Trò chơi: trang chọn game, Cờ vua, Cờ caro, đang chơi Xếp Khối, Nông trại, hay câu đố (quiz hôm nay / thử thách nhanh) */
+export type GamesView = "hub" | "chess" | "blocks" | "caro" | "farm" | "puzzle";
 export type Connection = "connecting" | "online" | "offline";
 
 export type MsgBox = {
@@ -322,6 +333,7 @@ async function enterApp() {
   loadCaro();
   syncBlocks(); // gửi điểm Xếp Khối chơi lúc mất mạng
   loadStreaks(); // chuỗi hằng ngày (gửi luôn ngày chơi lúc mất mạng)
+  loadPuzzles(); // câu đố: sao, quiz hôm nay (gửi luôn kết quả giải lúc mất mạng)
   setupPush().catch(() => undefined);
 }
 
@@ -364,6 +376,7 @@ function resetAll(notice: string | null) {
   resetCaro();
   resetFarm();
   resetStreaks();
+  resetPuzzles();
   resetSocial();
   resetBlocksBoard();
   set({ ...initial, phase: "login", notice, appActive: get().appActive, update: get().update });
@@ -431,6 +444,7 @@ async function resync() {
     if (useCaro.getState().loaded) loadCaro();
     if (useFarm.getState().farm) loadFarm();
     loadStreaks();
+    loadPuzzles();
     refreshSocial();
     syncBlocks();
     const current = get().currentId;
@@ -506,7 +520,7 @@ export async function openConversation(id: number) {
   const keepGame =
     (inChess() && useChess.getState().openId != null) ||
     (inCaro() && (useCaro.getState().openId != null || useCaro.getState().botOpen)) ||
-    (get().tab === "games" && get().gamesView === "farm");
+    (get().tab === "games" && (get().gamesView === "farm" || get().gamesView === "puzzle"));
   set({ currentId: id, atBottom: true, tab: keepGame ? "games" : "chats" });
   hideToastFor(id);
   dismissConversation(id);
@@ -571,6 +585,40 @@ export function openFarm(userId?: number | null, tab?: "field" | "friends") {
   closeUser();
   if (tab) setFarmTab(tab);
   openFarmVisit(userId ?? null);
+}
+
+/**
+ * Mở câu đố của một game: "daily" = quiz hôm nay, "map" = bản đồ màn Thử thách nhanh.
+ * Nút Quay lại (puzzleBack) về đúng chỗ vừa mở: câu đố → bản đồ màn → trang chọn game / trang của game đó.
+ */
+export function openPuzzles(game: PuzzleGame, what: "daily" | "map") {
+  const s = get();
+  const from = s.tab === "games" && s.gamesView !== "puzzle" ? s.gamesView : (usePuzzles.getState().route?.from ?? "hub");
+  leaveChessView();
+  leaveCaroView();
+  set({ tab: "games", gamesView: "puzzle", currentId: null });
+  closeUser();
+  openPuzzleRoute(game, what, from);
+}
+
+/** Quay lại một bậc trong phần câu đố */
+export function puzzleBack() {
+  const r = usePuzzles.getState().route;
+  if (r?.play && r.map) {
+    closePuzzlePlay();
+    return;
+  }
+  leavePuzzles();
+}
+
+/** Rời hẳn phần câu đố, về chỗ đã mở nó */
+export function leavePuzzles() {
+  const from = closePuzzles()?.from ?? "hub";
+  if (get().tab !== "games" || get().gamesView !== "puzzle") return;
+  if (from === "chess") openChess();
+  else if (from === "caro") openCaro();
+  else if (from === "blocks") openBlocks();
+  else showGamesHub();
 }
 
 /** Màn Cài đặt (đổi tên, ảnh bìa, giao diện, mật khẩu…) nằm trong tab Cá nhân */
@@ -1214,6 +1262,7 @@ function connectSocket() {
   s.on("caro:challenge", (data) => onCaroEvent("caro:challenge", data));
   s.on("farm:event", onFarmEvent);
   s.on("streak:update", onStreakEvent);
+  s.on("puzzle:daily", onPuzzleDaily);
   for (const name of ["post:new", "post:likes", "post:comment", "post:comment-deleted", "post:deleted"]) {
     s.on(name, (data) => onSocialEvent(name, data));
   }
@@ -1446,6 +1495,13 @@ bindStreaks({
   meId: () => (get().phase === "ready" ? (get().me?.id ?? 0) : 0),
   toast: (text) => showToast(text, {}, 4000),
   online: () => !get().offline,
+});
+
+bindPuzzles({
+  meId: () => (get().phase === "ready" ? (get().me?.id ?? 0) : 0),
+  online: () => !get().offline,
+  toast: (text) => showToast(text),
+  played: (game) => markPlayed(game),
 });
 
 bindSocial({

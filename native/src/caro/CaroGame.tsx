@@ -24,7 +24,7 @@ import {
 } from "./format";
 import { ActionButton, cellText, ClockBar, ClockFace, Header, PlayerCard, ResultCard, SoundButton, useEndEffects, useMoveSounds, useNow, type Outcome } from "./parts";
 import { RulesSheet } from "./Sheets";
-import { playCaro, preloadCaroSounds } from "./sound";
+import { holdCaroSounds, playCaro } from "./sound";
 import { answerChallenge, closeGame, loadLocal, playMove, rematch, resign, useCaro } from "./store";
 import type { CaroGame as Game, Side } from "./types";
 
@@ -45,7 +45,7 @@ export function CaroGame({ id }: { id: number }) {
   }, [id]);
   useEffect(() => {
     loadLocal();
-    preloadCaroSounds();
+    return holdCaroSounds(); // rời màn: trả lại luồng âm thanh cho máy
   }, []);
 
   if (!g) {

@@ -3,17 +3,18 @@
    (toàn màn hình trên điện thoại). Cờ vua do public/chess-ui.js lo; Cờ caro do public/caro-ui.js; Xếp Khối do public/blocks.js;
    Nông trại do public/farm-ui.js.
    Đường dẫn: #/games (chọn game) · #/chess (cờ vua) · #/chess/g/12 (một ván cờ) · #/caro (cờ caro) · #/blocks (Xếp Khối)
-   · #/farm (nông trại) · #/farm/u/5 (ghé vườn một người) */
+   · #/farm (nông trại) · #/farm/u/5 (ghé vườn một người)
+   · #/quiz/chess, #/levels/chess, #/levels/chess/12 (câu đố: public/puzzles-ui.js mở ở cột phải, cột trái vẫn là trang chọn game) */
 window.ThinkGames = (() => {
   // Mã các game trên trang chọn game. Game nào cũng có chuỗi hằng ngày: mã phải có trong GAMES của src/streaks.js
   // (test/streaks.test.js kiểm tra). Thẻ game vẽ bằng card() bên dưới tự hiện huy hiệu chuỗi.
   const GAME_IDS = ['farm', 'blocks', 'chess', 'caro'];
 
   function create(host) {
-    const { h, icon, api, state, navigate, goBack, toast, chess, caro, nameOf, userOf, avatarEl, withBusy } = host;
+    const { h, icon, api, state, navigate, goBack, toast, chess, caro, puzzles, nameOf, userOf, avatarEl, withBusy } = host;
     const $ = (sel) => document.querySelector(sel);
     const fmt = (n) => Number(n || 0).toLocaleString('vi-VN');
-    let view = null; // 'hub' | 'chess' | 'caro' | 'blocks' | 'farm' | null (đang ở tab khác)
+    let view = null; // 'hub' | 'chess' | 'caro' | 'blocks' | 'farm' | 'puzzle' | null (đang ở tab khác)
 
     const farm = window.ThinkFarm
       ? window.ThinkFarm.create({
@@ -41,7 +42,7 @@ window.ThinkGames = (() => {
       : null;
 
     // Cột phải đang có thứ khác mở (chat, ván cờ, trang cá nhân…)
-    const othersOpen = () => state.currentId != null || ['#chess-pane', '#profile-pane', '#caro-pane', '#blocks-pane', '#farm-pane']
+    const othersOpen = () => state.currentId != null || ['#chess-pane', '#profile-pane', '#caro-pane', '#blocks-pane', '#farm-pane', '#puzzle-pane']
       .some((sel) => { const el = $(sel); return el && !el.hidden; });
 
     // app.js gọi mỗi khi đổi đường dẫn; farmUser = người đang được ghé vườn (#/farm/u/5)
@@ -87,7 +88,7 @@ window.ThinkGames = (() => {
           $('#chat-empty').hidden = false;
         }
       }
-      if ((next === 'hub' || next === 'blocks' || next === 'farm') && was !== next) renderHub();
+      if ((next === 'hub' || next === 'blocks' || next === 'farm' || next === 'puzzle') && was !== next) renderHub();
       if (next === 'hub' && was !== 'hub' && blocks) blocks.sync();
       if (next === 'hub' && was !== 'hub' && farm) farm.load({ peek: true });
     }
@@ -181,6 +182,8 @@ window.ThinkGames = (() => {
       const parts = [
         h('p', { class: 'games-intro', text: 'Chơi cùng cả nhóm: làm nông trại, thách đấu cờ vua, cờ caro, đua điểm Xếp Khối mỗi tuần.' }),
         ST ? ST.hero() : null,
+        // Quiz hôm nay + Thử thách nhanh của Cờ vua, Xếp Khối, Cờ caro (public/puzzles-ui.js)
+        puzzles ? puzzles.panel() : null,
         farm ? card('farm', '#/farm', 'Nông trại', farmSub, farmChips, farmArt(), fs ? 'Ra đồng' : 'Bắt đầu trồng') : null,
         card('blocks', '#/blocks', 'Xếp Khối', blocksSub, blocksChips, blocksArt(), bs && bs.playing != null ? 'Chơi tiếp' : 'Chơi ngay'),
         card('chess', '#/chess', 'Cờ vua', chessSub, chessChips, chessArt(), cs && cs.todo ? 'Vào xem' : 'Vào chơi'),
@@ -242,7 +245,7 @@ window.ThinkGames = (() => {
       reset,
       sync: () => blocks && blocks.sync(),
       onScore: (data) => blocks && blocks.onScore(data),
-      refresh: () => { if (view === 'hub' || view === 'blocks' || view === 'farm') renderHub(); },
+      refresh: () => { if (view === 'hub' || view === 'blocks' || view === 'farm' || view === 'puzzle') renderHub(); },
       onFarmEvent: (data) => farm && farm.onEvent(data),
     };
   }

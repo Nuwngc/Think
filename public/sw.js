@@ -1,5 +1,5 @@
 /* Service worker: lưu giao diện để mở nhanh + hiện thông báo đẩy kể cả khi đã đóng app */
-const CACHE = 'think-v12';
+const CACHE = 'think-v13';
 // Ảnh trong tin nhắn và ảnh đại diện đã xem được giữ lại trên máy (tên file không bao giờ đổi),
 // nên vẫn hiện được khi mất mạng hoặc khi máy chủ đã dọn ảnh cũ. Tắt "Lưu trên máy" thì không giữ nữa.
 const MEDIA = 'think-media';
@@ -21,6 +21,13 @@ const SHELL = [
   '/caro-core.js',
   '/caro-ui.js',
   ...['place-x', 'place-o', 'turn', 'invalid', 'threat', 'start', 'win', 'lose', 'draw'].map((n) => `/caro/sounds/${n}.wav`),
+  // Câu đố (Quiz hôm nay, Thử thách nhanh): luật + dữ liệu, giải được Xếp Khối / cờ caro khi mất mạng
+  '/puzzles.css',
+  '/puzzles-core.js',
+  '/puzzles-ui.js',
+  '/puzzles/chess.json',
+  '/puzzles/blocks.json',
+  '/puzzles/caro.json',
   // Nông trại: giao diện (hình và âm thanh được lưu dần khi dùng, xem OFFLINE_FIRST)
   '/farm.css',
   '/farm-ui.js',

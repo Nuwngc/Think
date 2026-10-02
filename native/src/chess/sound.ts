@@ -8,6 +8,7 @@ import { SOURCES, type SoundName } from "./soundFiles";
 
 export type { SoundName };
 
+const WARM: SoundName[] = ["move", "move-opp", "capture"];
 const players: Partial<Record<SoundName, AudioPlayer>> = {};
 let modeSet = false;
 
@@ -28,9 +29,35 @@ export function preloadSounds() {
       // Tiếng ngắn: phát chung với nhạc của app khác, không giành quyền phát
       setAudioModeAsync({ playsInSilentMode: false, interruptionMode: "mixWithOthers", shouldPlayInBackground: false }).catch(() => undefined);
     }
-    for (const name of Object.keys(SOURCES) as SoundName[]) playerOf(name);
+    // Chỉ tạo sẵn tiếng hay dùng; tiếng khác tạo khi cần — đỡ tốn luồng âm thanh của máy
+    for (const name of WARM) playerOf(name);
   } catch {
     /* máy không phát được âm thanh */
+  }
+}
+
+let holders = 0;
+/** Mở một màn có tiếng cờ vua: tạo sẵn trình phát. Trả về hàm gọi khi rời màn (màn cuối cùng rời thì trả lại luồng âm thanh) */
+export function holdSounds() {
+  holders++;
+  preloadSounds();
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    holders = Math.max(0, holders - 1);
+    if (!holders) releaseSounds();
+  };
+}
+
+export function releaseSounds() {
+  for (const name of Object.keys(players) as SoundName[]) {
+    try {
+      players[name]?.remove();
+    } catch {
+      /* đã trả rồi */
+    }
+    delete players[name];
   }
 }
 

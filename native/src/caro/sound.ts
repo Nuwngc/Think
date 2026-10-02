@@ -7,6 +7,7 @@ import { CARO_SOURCES, type CaroSound } from "./soundFiles";
 export type { CaroSound };
 
 const POOL: Partial<Record<CaroSound, number>> = { "place-x": 2, "place-o": 2, invalid: 2 };
+const WARM: CaroSound[] = ["place-x", "place-o", "invalid"];
 const players: Partial<Record<CaroSound, AudioPlayer[]>> = {};
 const next: Partial<Record<CaroSound, number>> = {};
 const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -39,9 +40,39 @@ export function preloadCaroSounds() {
       // Tiếng ngắn: phát chung với nhạc của app khác, không giành quyền phát
       setAudioModeAsync({ playsInSilentMode: false, interruptionMode: "mixWithOthers", shouldPlayInBackground: false }).catch(() => undefined);
     }
-    for (const name of Object.keys(CARO_SOURCES) as CaroSound[]) pool(name);
+    // Chỉ tạo sẵn tiếng hay dùng; tiếng khác tạo khi cần — đỡ tốn luồng âm thanh của máy
+    for (const name of WARM) pool(name);
   } catch {
     /* máy không phát được âm thanh */
+  }
+}
+
+let holders = 0;
+/** Mở một màn có tiếng caro: tạo sẵn trình phát. Trả về hàm gọi khi rời màn (màn cuối cùng rời thì trả lại luồng âm thanh) */
+export function holdCaroSounds() {
+  holders++;
+  preloadCaroSounds();
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    holders = Math.max(0, holders - 1);
+    if (!holders) releaseCaroSounds();
+  };
+}
+
+export function releaseCaroSounds() {
+  for (const t of timers) clearTimeout(t);
+  timers.clear();
+  for (const name of Object.keys(players) as CaroSound[]) {
+    for (const p of players[name] || []) {
+      try {
+        p.remove();
+      } catch {
+        /* đã trả rồi */
+      }
+    }
+    delete players[name];
   }
 }
 

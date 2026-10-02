@@ -5,6 +5,7 @@ import type { BlocksBoard, PendingScore } from "./blocks/types";
 import type { CaroGame, CaroOptions, CaroRating } from "./caro/types";
 import type { ChessAnalysis, ChessBot, ChessGame, ChessRating } from "./chess/types";
 import type { ActResult, Catalog, Farm, FriendSummary, Leaderboard, Market, PublicFarm } from "./farm/types";
+import type { GameSummary, PuzzleSummary } from "./puzzles/types";
 import type { StreakSummary } from "./streaks/types";
 import { API_URL } from "./config";
 import { getToken } from "./session";
@@ -330,6 +331,20 @@ export const api = {
   streaksPlayed: (game: string, days: string[]) => request<StreakSummary>("/api/streaks/played", { method: "POST", body: { game, days } }),
 
   streaksPrefs: (remind: boolean) => request<StreakSummary>("/api/streaks/prefs", { method: "POST", body: { remind } }),
+
+  /* ---------------- Câu đố: Quiz hằng ngày + Thử thách nhanh (src/puzzles.js) ---------------- */
+
+  puzzles: () => request<PuzzleSummary>("/api/puzzles"),
+  /** Bộ câu đố mới hơn bản trong app (máy chủ đã thêm màn) */
+  puzzleData: (game: string) => request<unknown>(`/puzzles/${game}.json`),
+
+  /** Giải xong màn `level` (tính từ 1). 400 = lời giải sai (bỏ), 409 = màn chưa mở (giữ, gửi sau) */
+  puzzleLevel: (game: string, body: { level: number; moves: unknown[]; mistakes: number; hints: number; ms: number; playedAt: number }) =>
+    request<{ game: string; summary: GameSummary }>(`/api/puzzles/${game}/level`, { method: "POST", body }),
+
+  /** Giải xong quiz của ngày `day` (hôm nay, hoặc hôm qua nếu giải lúc mất mạng). 400 / 409 = bỏ */
+  puzzleDaily: (game: string, body: { day: string; id: string; moves: unknown[]; mistakes: number; hints: number; ms: number; playedAt: number }) =>
+    request<{ game: string; first: boolean; summary: GameSummary }>(`/api/puzzles/${game}/daily`, { method: "POST", body }),
 
   /* ---------------- Nông trại (máy chủ giữ luật: src/farm.js) ---------------- */
 

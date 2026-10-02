@@ -1,5 +1,7 @@
 node_modules/
 data/
+# …trừ dữ liệu câu đố đóng gói trong App Think Beta
+!native/src/puzzles/data/
 .env
 *.log
 # Khóa Firebase: tuyệt đối không đưa lên GitHub

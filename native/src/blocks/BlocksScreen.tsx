@@ -1,11 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   Animated,
   BackHandler,
   Easing,
-  PanResponder,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,76 +11,24 @@ import {
   useWindowDimensions,
   View,
   type GestureResponderEvent,
-  type PanResponderInstance,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 
+import { PuzzleButtons } from "../puzzles/ui";
 import { confirm, Avatar, Icon, type IconName } from "../ui";
 import { useStore } from "../store";
 import { StreakBadge } from "../streaks/ui";
-import { canPlace, fitsAnywhere, linesIfPlaced, praise, shapeOf, SIZE, type Piece } from "./engine";
-import { preloadBlockSounds, playBlock } from "./sound";
+import { canPlace, fitsAnywhere, praise, shapeOf, SIZE, type Piece } from "./engine";
+import { Appear, GAP, GOLD, GridCells, gridStyles, gridWidth, PAD, PieceView, previewOf, Shard, useTrayDrag, type Burst, type Preview } from "./parts";
+import { holdBlockSounds, playBlock } from "./sound";
 import { ensureGame, loadBlocks, localBest, pendingFor, placePiece, recordGame, setSound, startGame, sync, useBlocks } from "./store";
 
 // Game Xếp Khối (kiểu Block Blast): kéo khối từ khay vào bàn 8×8, đầy hàng / cột thì nổ và được điểm.
 // Chơi hoàn toàn trên máy; điểm các ván được gửi lên bảng xếp hạng khi có mạng.
+// Viên khối, hiệu ứng nổ, kéo thả: src/blocks/parts.tsx (dùng chung với câu đố Xếp Khối).
 
-export const BLOCK_COLORS = ["#1C2662", "#FF5A63", "#FF9A1F", "#FFD23F", "#35D07F", "#29C4F0", "#4F7DFF", "#A56BFF"];
-const EMPTY = "#1C2662";
-const GAP = 4;
-const PAD = 8;
-const BORDER = 2;
-const GOLD = "#FFD54A";
-
-/** Trộn màu hex với màu khác (t = 0..1), để làm mặt sáng / tối của khối */
-export function mix(hex: string, other: string, t: number) {
-  const a = hex.replace("#", "");
-  const b = other.replace("#", "");
-  const ch = (s: string, i: number) => parseInt(s.slice(i, i + 2), 16);
-  const out = [0, 2, 4].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t));
-  return `#${out.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
-}
-
-/** Một viên khối: màu chính + viền sáng phía trên / tối phía dưới cho nổi khối */
-export const Block = memo(function Block({ color, size, radius, faded = false }: { color: number; size: number; radius?: number; faded?: boolean }) {
-  const base = BLOCK_COLORS[color] || BLOCK_COLORS[1];
-  const bw = Math.max(2, Math.round(size * 0.085));
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: radius ?? Math.max(4, size * 0.18),
-        backgroundColor: base,
-        borderTopWidth: bw,
-        borderLeftWidth: Math.max(1, Math.round(bw * 0.7)),
-        borderBottomWidth: Math.round(bw * 1.3),
-        borderRightWidth: Math.max(1, Math.round(bw * 0.7)),
-        borderTopColor: mix(base, "#FFFFFF", 0.45),
-        borderLeftColor: mix(base, "#FFFFFF", 0.2),
-        borderBottomColor: mix(base, "#000000", 0.28),
-        borderRightColor: mix(base, "#000000", 0.12),
-        opacity: faded ? 0.5 : 1,
-      }}
-    />
-  );
-});
-
-/** Một khối (nhiều viên) vẽ theo hình */
-export function PieceView({ piece, cell, gap = 3 }: { piece: Piece; cell: number; gap?: number }) {
-  const s = shapeOf(piece.shape);
-  if (!s) return null;
-  return (
-    <View style={{ width: s.w * cell + (s.w - 1) * gap, height: s.h * cell + (s.h - 1) * gap }} pointerEvents="none">
-      {s.cells.map(([r, c]) => (
-        <View key={`${r}-${c}`} style={{ position: "absolute", left: c * (cell + gap), top: r * (cell + gap) }}>
-          <Block color={piece.color} size={cell} />
-        </View>
-      ))}
-    </View>
-  );
-}
+export { Block, BLOCK_COLORS, mix, PieceView } from "./parts";
 
 function Crown({ size = 22, color = GOLD }: { size?: number; color?: string }) {
   return (
@@ -110,43 +56,8 @@ function TopButton({ icon, label, onPress, pressed }: { icon: IconName; label: s
 
 /* ---------------- Hiệu ứng ---------------- */
 
-type Burst = { key: number; cells: { i: number; color: number }[]; center: { r: number; c: number } };
 type Floater = { key: number; text: string; r: number; c: number };
 type Banner = { key: number; text: string; tone: "normal" | "hot" | "gold" };
-
-/** Ô bị xóa vỡ ra: sáng lên, phồng nhẹ rồi thu nhỏ bay đi */
-function Shard({ i, color, cell, center }: { i: number; color: number; cell: number; center: { r: number; c: number } }) {
-  const t = useRef(new Animated.Value(0)).current;
-  const r = Math.floor(i / SIZE);
-  const c = i % SIZE;
-  const dist = Math.hypot(r - center.r, c - center.c);
-  useEffect(() => {
-    Animated.timing(t, { toValue: 1, duration: 560, delay: dist * 28, easing: Easing.in(Easing.quad), useNativeDriver: true }).start();
-  }, [t, dist]);
-  const pitch = cell + GAP;
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        position: "absolute",
-        left: c * pitch,
-        top: r * pitch,
-        opacity: t.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 0.9, 0] }),
-        transform: [
-          { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [0, (c - center.c) * 6] }) },
-          { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, (r - center.r) * 6 + 30] }) },
-          { scale: t.interpolate({ inputRange: [0, 0.25, 1], outputRange: [1, 1.15, 0] }) },
-          { rotate: t.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "40deg"] }) },
-        ],
-      }}
-    >
-      <Block color={color} size={cell} />
-      <Animated.View
-        style={[StyleSheet.absoluteFill, { borderRadius: cell * 0.18, backgroundColor: "#FFFFFF", opacity: t.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.55, 0.2, 0] }) }]}
-      />
-    </Animated.View>
-  );
-}
 
 function FloatText({ text, r, c, cell }: { text: string; r: number; c: number; cell: number }) {
   const t = useRef(new Animated.Value(0)).current;
@@ -198,19 +109,6 @@ function BannerText({ text, tone }: { text: string; tone: Banner["tone"] }) {
   );
 }
 
-/** Ô vừa đặt: phồng nhẹ lên khi rơi vào bàn */
-function PopBlock({ color, cell }: { color: number; cell: number }) {
-  const t = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.spring(t, { toValue: 1, friction: 5, tension: 180, useNativeDriver: true }).start();
-  }, [t]);
-  return (
-    <Animated.View style={{ transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }] }}>
-      <Block color={color} size={cell} />
-    </Animated.View>
-  );
-}
-
 /** Điểm chạy dần lên số mới */
 function useCountUp(target: number) {
   const [shown, setShown] = useState(target);
@@ -252,14 +150,14 @@ export function BlocksScreen({ onBack }: { onBack: () => void }) {
   const game = useBlocks((s) => s.game);
   const soundOn = useBlocks((s) => s.sound);
   const meId = useStore((s) => s.me?.id ?? null);
+  const loggedIn = useStore((s) => s.phase === "ready" && s.me != null);
   const bestSaved = useBlocks((s) => localBest(s, meId));
   const boardBest = useBlocks((s) => (s.board && s.board.uid === meId ? s.board.me.best : 0));
   const pendingCount = useBlocks((s) => pendingFor(s, meId).length);
   const syncError = useBlocks((s) => s.syncError);
 
   const [selected, setSelected] = useState<number | null>(null);
-  const [preview, setPreview] = useState<{ r: number; c: number; color: number; cells: number[]; hot: Set<number> } | null>(null);
-  const [dragSlot, setDragSlot] = useState<number | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
   const [placed, setPlaced] = useState<{ key: number; cells: Set<number> } | null>(null);
   const [bursts, setBursts] = useState<Burst[]>([]);
   const [floats, setFloats] = useState<Floater[]>([]);
@@ -277,8 +175,8 @@ export function BlocksScreen({ onBack }: { onBack: () => void }) {
     [],
   );
 
-  // Cỡ bàn: vừa chiều ngang, chừa chỗ cho điểm và khay khối
-  const avail = height - insets.top - insets.bottom;
+  // Cỡ bàn: vừa chiều ngang, chừa chỗ cho điểm và khay khối (và hàng nút câu đố)
+  const avail = height - insets.top - insets.bottom - (loggedIn ? 24 : 0);
   const boardOuter = Math.max(220, Math.min(width - 24, 480, avail - 56 - 110 - 180));
   const cell = Math.floor((boardOuter - PAD * 2 - GAP * (SIZE - 1)) / SIZE);
   const pitch = cell + GAP;
@@ -286,8 +184,9 @@ export function BlocksScreen({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     loadBlocks().then(() => ensureGame());
-    preloadBlockSounds();
+    const release = holdBlockSounds();
     sync();
+    return release; // rời màn: trả lại luồng âm thanh cho máy
   }, []);
 
   // Rời màn khi ván vừa hết mà chưa kịp hiện kết quả: vẫn ghi điểm
@@ -296,37 +195,14 @@ export function BlocksScreen({ onBack }: { onBack: () => void }) {
   const displayed = useCountUp(game?.score ?? 0);
   const best = Math.max(bestSaved, boardBest, game?.score ?? 0);
 
-  /* ---------- Vị trí trên màn hình (để kéo thả) ---------- */
-  const rootRef = useRef<View>(null);
-  const gridRef = useRef<View>(null);
-  const slotRefs = useRef<(View | null)[]>([null, null, null]);
-  const geo = useRef({ root: { x: 0, y: 0 }, grid: { x: 0, y: 0 }, slots: [] as { x: number; y: number; w: number; h: number }[] });
-  const measure = useCallback(() => {
-    rootRef.current?.measureInWindow((x, y) => (geo.current.root = { x, y }));
-    gridRef.current?.measureInWindow((x, y) => (geo.current.grid = { x: x + PAD + BORDER, y: y + PAD + BORDER }));
-    slotRefs.current.forEach((v, k) => v?.measureInWindow((x, y, w, h) => (geo.current.slots[k] = { x, y, w, h })));
+  const showPreview = useCallback((piece: Piece | null, r: number, c: number) => {
+    const g = useBlocks.getState().game;
+    setPreview((prev) => {
+      if (!g || !piece || !canPlace(g.board, piece.shape, r, c)) return prev ? null : prev;
+      if (prev && prev.r === r && prev.c === c && prev.color === piece.color) return prev;
+      return previewOf(g.board, piece, r, c);
+    });
   }, []);
-
-  const ghost = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const ghostScale = useRef(new Animated.Value(1)).current;
-  const dragRef = useRef<{ slot: number; piece: Piece; w: number; h: number; moved: boolean; x0: number; y0: number; lift: number } | null>(null);
-
-  const showPreview = useCallback(
-    (piece: Piece | null, r: number, c: number) => {
-      const g = useBlocks.getState().game;
-      setPreview((prev) => {
-        if (!g || !piece || !canPlace(g.board, piece.shape, r, c)) return prev ? null : prev;
-        if (prev && prev.r === r && prev.c === c && prev.color === piece.color) return prev;
-        const s = shapeOf(piece.shape)!;
-        const lines = linesIfPlaced(g.board, piece.shape, r, c);
-        const hot = new Set<number>();
-        for (const row of lines.rows) for (let j = 0; j < SIZE; j++) hot.add(row * SIZE + j);
-        for (const col of lines.cols) for (let j = 0; j < SIZE; j++) hot.add(j * SIZE + col);
-        return { r, c, color: piece.color, cells: s.cells.map(([dr, dc]) => (r + dr) * SIZE + c + dc), hot };
-      });
-    },
-    [],
-  );
 
   /* ---------- Đặt khối ---------- */
   const commit = useCallback(
@@ -376,104 +252,35 @@ export function BlocksScreen({ onBack }: { onBack: () => void }) {
     [],
   );
 
-  /* ---------- Kéo thả ---------- */
-  const handlers = useRef({
-    grant: (_k: number, _e: GestureResponderEvent) => {},
-    move: (_e: GestureResponderEvent) => {},
-    release: (_e: GestureResponderEvent) => {},
-  });
-  handlers.current.grant = (k, e) => {
-    const g = useBlocks.getState().game;
-    const piece = g?.tray[k];
-    if (!g || g.over || !piece) return;
-    measure();
-    const s = shapeOf(piece.shape)!;
-    const lift = Platform.OS === "web" ? 0 : Math.max(36, pitch * 1.1);
-    dragRef.current = { slot: k, piece, w: s.w * pitch - GAP, h: s.h * pitch - GAP, moved: false, x0: e.nativeEvent.pageX, y0: e.nativeEvent.pageY, lift };
-    setSelected(null);
-    setDragSlot(k);
-    ghostScale.setValue(0.6);
-    Animated.timing(ghostScale, { toValue: 1, duration: 110, useNativeDriver: true }).start();
-    moveGhost(e.nativeEvent.pageX, e.nativeEvent.pageY);
-    playBlock("pick", 0.6);
-  };
-  const moveGhost = (x: number, y: number) => {
-    const d = dragRef.current;
-    if (!d) return;
-    const left = x - d.w / 2;
-    const top = d.lift ? y - d.h - d.lift : y - d.h / 2;
-    const G = geo.current;
-    ghost.setValue({ x: left - G.root.x, y: top - G.root.y });
-    showPreview(d.piece, Math.round((top - G.grid.y) / pitch), Math.round((left - G.grid.x) / pitch));
-  };
-  handlers.current.move = (e) => {
-    const d = dragRef.current;
-    if (!d) return;
-    const { pageX, pageY } = e.nativeEvent;
-    if (Math.hypot(pageX - d.x0, pageY - d.y0) > 6) d.moved = true;
-    moveGhost(pageX, pageY);
-  };
-  handlers.current.release = (e) => {
-    const d = dragRef.current;
-    dragRef.current = null;
-    if (!d) return;
-    const { pageX, pageY } = e.nativeEvent;
-    if (!d.moved && Math.hypot(pageX - d.x0, pageY - d.y0) <= 6) {
-      // Chạm nhẹ: chọn khối, rồi chạm vào bàn để đặt
-      setDragSlot(null);
+  /* ---------- Kéo thả (src/blocks/parts.tsx) ---------- */
+  const { rootRef, gridRef, slotRefs, measure, responders, ghost, ghostScale, dragSlot, cellAt } = useTrayDrag({
+    pitch,
+    pieceAt: (k) => {
+      const g = useBlocks.getState().game;
+      return g && !g.over ? (g.tray[k] ?? null) : null;
+    },
+    boardNow: () => useBlocks.getState().game?.board ?? null,
+    onPick: () => {
+      setSelected(null);
+      playBlock("pick", 0.6);
+    },
+    onHover: showPreview,
+    onTap: (k) => {
       setPreview(null);
-      setSelected(selected === d.slot ? null : d.slot);
-      return;
-    }
-    // Tính lại chỗ thả theo vị trí cuối cùng
-    const left = pageX - d.w / 2;
-    const top = d.lift ? pageY - d.h - d.lift : pageY - d.h / 2;
-    const G = geo.current;
-    const r = Math.round((top - G.grid.y) / pitch);
-    const c = Math.round((left - G.grid.x) / pitch);
-    const g = useBlocks.getState().game;
-    if (g && canPlace(g.board, d.piece.shape, r, c)) {
-      setDragSlot(null);
-      commit(d.slot, r, c);
-      return;
-    }
-    // Thả sai chỗ: khối bay về khay
-    setPreview(null);
-    playBlock("invalid", 0.5);
-    const slot = G.slots[d.slot];
-    if (!slot) {
-      setDragSlot(null);
-      return;
-    }
-    Animated.parallel([
-      Animated.timing(ghost, { toValue: { x: slot.x + slot.w / 2 - d.w / 2 - G.root.x, y: slot.y + slot.h / 2 - d.h / 2 - G.root.y }, duration: 170, useNativeDriver: true }),
-      Animated.timing(ghostScale, { toValue: 0.5, duration: 170, useNativeDriver: true }),
-    ]).start(() => setDragSlot(null));
-  };
-
-  const responders = useMemo<PanResponderInstance[]>(
-    () =>
-      [0, 1, 2].map((k) =>
-        PanResponder.create({
-          onStartShouldSetPanResponder: () => Boolean(useBlocks.getState().game?.tray[k]) && !useBlocks.getState().game?.over,
-          onMoveShouldSetPanResponder: () => false,
-          onPanResponderTerminationRequest: () => false,
-          onPanResponderGrant: (e) => handlers.current.grant(k, e),
-          onPanResponderMove: (e) => handlers.current.move(e),
-          onPanResponderRelease: (e) => handlers.current.release(e),
-          onPanResponderTerminate: (e) => handlers.current.release(e),
-        }),
-      ),
-    [],
-  );
+      setSelected(selected === k ? null : k);
+    },
+    onDrop: commit,
+    onMiss: () => {
+      setPreview(null);
+      playBlock("invalid", 0.5);
+    },
+  });
 
   // Chạm vào bàn khi đã chọn khối: đặt góc trên trái của khối vào ô đó
   const onBoardPress = (e: GestureResponderEvent) => {
     if (selected == null || !game) return;
     // Tọa độ trên màn hình (locationX tính theo ô con được chạm, không theo cả bàn)
-    const G = geo.current;
-    const r = Math.floor((e.nativeEvent.pageY - G.grid.y) / pitch);
-    const c = Math.floor((e.nativeEvent.pageX - G.grid.x) / pitch);
+    const { r, c } = cellAt(e.nativeEvent.pageX, e.nativeEvent.pageY);
     const p = game.tray[selected];
     if (!p) return;
     if (canPlace(game.board, p.shape, r, c)) {
@@ -586,24 +393,6 @@ export function BlocksScreen({ onBack }: { onBack: () => void }) {
   }, [combo, comboScale]);
 
   /* ---------- Vẽ ---------- */
-  const cells = [];
-  if (game) {
-    for (let i = 0; i < SIZE * SIZE; i++) {
-      const v = game.board[i];
-      const isGhost = preview?.cells.includes(i);
-      const hot = preview?.hot.has(i);
-      let content = null;
-      if (hot) content = <Block color={preview!.color} size={cell} />;
-      else if (isGhost) content = <Block color={preview!.color} size={cell} faded />;
-      else if (v) content = placed?.cells.has(i) ? <PopBlock key={`p${placed.key}`} color={v} cell={cell} /> : <Block color={v} size={cell} />;
-      cells.push(
-        <View key={i} style={[styles.cell, { width: cell, height: cell, borderRadius: Math.max(4, cell * 0.18) }]}>
-          {content}
-        </View>,
-      );
-    }
-  }
-
   const syncText =
     pendingCount && meId == null
       ? `${pendingCount} ván chờ gửi lên bảng xếp hạng (khi bạn đăng nhập Think có mạng).`
@@ -666,7 +455,7 @@ export function BlocksScreen({ onBack }: { onBack: () => void }) {
           ref={gridRef}
           onPress={onBoardPress}
           onLayout={measure}
-          style={[styles.grid, { width: cell * SIZE + GAP * (SIZE - 1) + PAD * 2 + BORDER * 2 }]}
+          style={[gridStyles.grid, { width: gridWidth(cell) }]}
           accessibilityLabel={
             selected != null
               ? `Bàn chơi 8 × 8. Con trỏ hàng ${cursor.r + 1}, cột ${cursor.c + 1}. Dùng thao tác lên, xuống, trái, phải để di chuyển, chạm hai lần để đặt.`
@@ -676,8 +465,8 @@ export function BlocksScreen({ onBack }: { onBack: () => void }) {
           onAccessibilityAction={(e) => onBoardAction(e.nativeEvent.actionName)}
           collapsable={false}
         >
-          {cells}
-          <View style={styles.fx} pointerEvents="none">
+          {game ? <GridCells board={game.board} cell={cell} preview={preview} placed={placed} /> : null}
+          <View style={gridStyles.fx} pointerEvents="none">
             {bursts.flatMap((b) => b.cells.map((x) => <Shard key={`${b.key}-${x.i}`} i={x.i} color={x.color} cell={cell} center={b.center} />))}
             {floats.map((f) => (
               <FloatText key={f.key} text={f.text} r={f.r} c={f.c} cell={cell} />
@@ -717,6 +506,8 @@ export function BlocksScreen({ onBack }: { onBack: () => void }) {
             );
           })}
         </View>
+        {/* Câu đố Xếp Khối (chỉ khi đã vào app, không phải chơi ngay ở màn đăng nhập) */}
+        {loggedIn ? <PuzzleButtons game="blocks" /> : null}
       </View>
 
       {syncText ? <Text style={[styles.sync, { marginBottom: insets.bottom + 10 }]}>{syncText}</Text> : <View style={{ height: insets.bottom + 10 }} />}
@@ -757,16 +548,6 @@ export function BlocksScreen({ onBack }: { onBack: () => void }) {
       {panel ? <Leaderboard onClose={() => setPanel(false)} /> : null}
     </View>
   );
-}
-
-/** Khối mới xuất hiện trong khay: phóng to từ nhỏ */
-function Appear({ children, delay, animate }: { children: React.ReactNode; delay: number; animate: boolean }) {
-  const t = useRef(new Animated.Value(animate ? 0 : 1)).current;
-  useEffect(() => {
-    if (!animate) return;
-    Animated.spring(t, { toValue: 1, delay, friction: 5, tension: 160, useNativeDriver: true }).start();
-  }, [t, delay, animate]);
-  return <Animated.View style={{ opacity: t, transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }) }] }}>{children}</Animated.View>;
 }
 
 /* ---------------- Bảng xếp hạng ---------------- */
@@ -878,18 +659,6 @@ const styles = StyleSheet.create({
   },
   combo: { marginTop: 4, height: 28, paddingHorizontal: 14, borderRadius: 14, justifyContent: "center", backgroundColor: "#FFB82E", borderBottomWidth: 3, borderBottomColor: "#C77100" },
   comboText: { color: "#3A1D00", fontSize: 16, fontWeight: "800" },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: GAP,
-    padding: PAD,
-    borderRadius: 18,
-    backgroundColor: "#121A4C",
-    borderWidth: BORDER,
-    borderColor: "rgba(255,255,255,0.07)",
-  },
-  cell: { backgroundColor: EMPTY },
-  fx: { position: "absolute", left: PAD, top: PAD, right: PAD, bottom: PAD },
   float: {
     position: "absolute",
     width: 120,

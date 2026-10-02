@@ -12,7 +12,7 @@ import { clockText, material, MOVE_CLASS, myColor, NOTABLE, opponentColor, outco
 import { SideAvatar, useNow, useSide } from "./parts";
 import { loadPrefs, usePrefs } from "./prefs";
 import { PrefsSheet } from "./Sheets";
-import { playSound, preloadSounds, soundForSan } from "./sound";
+import { holdSounds, playSound, soundForSan } from "./sound";
 import { abort, answerChallenge, closeGame, draw, loadGameFresh, playMove, rematch, resign, useChess } from "./store";
 import type { ChessGame, Color } from "./types";
 
@@ -90,7 +90,7 @@ function Game({ g }: { g: ChessGame }) {
 
   useEffect(() => {
     loadPrefs();
-    preloadSounds();
+    return holdSounds(); // rời ván: trả lại luồng âm thanh cho máy
   }, []);
 
   const mine = myColor(g, meId);

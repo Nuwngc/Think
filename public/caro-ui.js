@@ -427,7 +427,7 @@ window.ThinkCaro = (() => {
     }
 
     function otherPaneOpen() {
-      return ['#chat-pane', '#chess-pane', '#blocks-pane', '#farm-pane', '#profile-pane'].some((sel) => {
+      return ['#chat-pane', '#chess-pane', '#blocks-pane', '#farm-pane', '#profile-pane', '#puzzle-pane'].some((sel) => {
         const el = $(sel);
         return el && !el.hidden;
       });
@@ -811,7 +811,28 @@ window.ThinkCaro = (() => {
         if (next != null) moveCursor(next, true);
       });
 
-      return { el: grid, set, clearGhost, celebrate, focus: () => cells[cur.cursor].focus({ preventScroll: true }) };
+      // Câu đố: tô ô gợi ý (null = bỏ tô)
+      let hintAt = -1;
+      function hint(i) {
+        if (hintAt >= 0) cells[hintAt].classList.remove('is-hint');
+        hintAt = i == null || i < 0 ? -1 : i;
+        if (hintAt >= 0) cells[hintAt].classList.add('is-hint');
+      }
+
+      return { el: grid, set, clearGhost, celebrate, shake, hint, focus: () => cells[cur.cursor].focus({ preventScroll: true }) };
+    }
+
+    // Bàn câu đố (Quiz hằng ngày, Thử thách nhanh: public/puzzles-ui.js): cùng bàn, cách chạm ngắm rồi đánh và âm thanh của caro
+    function puzzleBoard(opts) {
+      const board = makeBoard(opts);
+      board.el.addEventListener('pointerdown', unlockAudio, { capture: true });
+      return {
+        ...board,
+        play,
+        unlock: unlockAudio,
+        soundOn: () => audio.on,
+        setSound: (on) => { if (audio.on !== Boolean(on)) toggleSound(); },
+      };
     }
 
     /* =========================================================
@@ -1536,6 +1557,9 @@ window.ThinkCaro = (() => {
             icon('swords'), h('strong', { text: 'Thách đấu' }), h('span', { text: 'Tính điểm với bạn bè' }))));
 
       const parts = [hero];
+      // Quiz hôm nay + Thử thách nhanh (public/puzzles-ui.js)
+      const puzzles = window.ThinkPuzzles && window.ThinkPuzzles.instance;
+      if (puzzles) parts.push(puzzles.entry('caro'));
       if (botPlaying) {
         const st = C.fromMoves(bot.moves, bot.rule);
         parts.push(h('button', { class: 'caro-resume', type: 'button', onclick: () => navigate('#/caro/bot') },
@@ -1954,6 +1978,7 @@ window.ThinkCaro = (() => {
       openLeaderboard,
       badge: todo,
       summary,
+      puzzleBoard,
     };
   }
 

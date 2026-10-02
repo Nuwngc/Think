@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="/caro.css">
   <link rel="stylesheet" href="/farm.css">
   <link rel="stylesheet" href="/streaks.css">
+  <link rel="stylesheet" href="/puzzles.css">
   <script src="/theme.js"></script>
   <script src="/socket.io/socket.io.min.js" defer></script>
   <script src="/localdb.js" defer></script>
@@ -32,6 +33,8 @@
   <script src="/blocks.js" defer></script>
   <script src="/caro-core.js" defer></script>
   <script src="/caro-ui.js" defer></script>
+  <script src="/puzzles-core.js" defer></script>
+  <script src="/puzzles-ui.js" defer></script>
   <script src="/farm-ui.js" defer></script>
   <script src="/games-ui.js" defer></script>
   <script src="/social-ui.js" defer></script>
@@ -97,6 +100,11 @@
     <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6"/><path d="M18 6.5a8 8 0 0 1 0 11"/></symbol>
     <symbol id="i-volume-off" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></symbol>
     <symbol id="i-caro" viewBox="0 0 24 24"><path d="m4 4 6 6M10 4l-6 6"/><circle cx="16.5" cy="16.5" r="3.8"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/><path d="m9.2 14.6 2 2 3.8-3.8"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.5 3 5.5 13.5h6L10.5 21l8-10.5h-6Z"/></symbol>
+    <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9.5 18h5"/><path d="M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3Z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/></symbol>
     <symbol id="i-group" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M18.2 14.8c1.8.8 3 2.5 3.3 5.2"/></symbol>
   </svg>
 
@@ -495,6 +503,8 @@
       <div id="caro-pane" class="caro-pane" hidden></div>
       <div id="blocks-pane" class="blocks-pane" hidden></div>
       <div id="farm-pane" class="farm-pane" hidden></div>
+      <!-- Câu đố: Quiz hôm nay, Thử thách nhanh (public/puzzles-ui.js) -->
+      <div id="puzzle-pane" class="puzzle-pane" hidden></div>
       <div id="profile-pane" class="profile-pane" hidden></div>
     </section>
   </div>

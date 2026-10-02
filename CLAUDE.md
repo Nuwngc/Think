@@ -20,6 +20,10 @@ Mọi game trên trang Trò chơi phải có chuỗi ngày chơi liên tiếp (R
 
 `public/streaks.js` được service worker phục vụ kiểu cache-first (để `blocks.html` chơi được khi máy chủ ngủ), nên lần mở đầu tiên sau khi deploy có thể vẫn chạy bản cũ: chỉ thêm hàm mới, đừng đổi tên hay bỏ hàm cũ của `ThinkStreaks`.
 
+## Câu đố (Quiz hằng ngày + Thử thách nhanh)
+
+Dữ liệu ở `public/puzzles/<game>.json` và bản giống hệt `native/src/puzzles/data/<game>.json` (kiểm thử so khớp). Chỉ tạo bằng `scripts/puzzles/<game>.js`; thêm màn bằng `--add N` (chỉ thêm vào cuối, không sửa màn cũ — tiến độ người chơi tính theo số màn). Luật câu đố có hai bản giống hệt: `public/puzzles-core.js` và `native/src/puzzles/core.ts` — sửa một bên thì sửa cả bên kia.
+
 ## Kiểm tra trước khi push
 
 - Máy chủ + web: `npm test`.

@@ -130,6 +130,8 @@ export type BoardProps = {
   badge?: { sq: string; cls: MoveClass } | null;
   /** Chạm vào ô không đi được khi đang chọn quân (để phát tiếng báo) */
   onIllegal?: () => void;
+  /** Tô sáng một ô (vd gợi ý của câu đố: quân cần đi) */
+  highlight?: string | null;
 };
 
 const ARROW = "rgba(21,120,90,0.78)";
@@ -219,6 +221,7 @@ export function Board({
   arrow,
   badge,
   onIllegal,
+  highlight,
 }: BoardProps) {
   const cell = Math.floor(size / 8);
   const chess = useMemo(() => {
@@ -499,6 +502,21 @@ export function Board({
           })}
         </View>
       ))}
+      {highlight && /^[a-h][1-8]$/.test(highlight) ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.sprite,
+            styles.focus,
+            {
+              width: cell,
+              height: cell,
+              borderWidth: Math.max(3, cell * 0.09),
+              transform: [{ translateX: squareXY(highlight, cell, orientation).x }, { translateY: squareXY(highlight, cell, orientation).y }],
+            },
+          ]}
+        />
+      ) : null}
       {/* Lớp quân cờ */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {animate
@@ -624,6 +642,7 @@ export function KnightIcon({ size = 24, color, hole }: { size?: number; color: s
 const styles = StyleSheet.create({
   row: { flexDirection: "row" },
   sprite: { position: "absolute", left: 0, top: 0 },
+  focus: { borderColor: "rgba(30,170,140,0.95)", backgroundColor: "rgba(76,201,170,0.3)" },
   center: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   rank: { position: "absolute", left: 2, top: 1, fontWeight: "700" },
   file: { position: "absolute", right: 3, bottom: 0, fontWeight: "700" },

@@ -15,12 +15,14 @@ import { farmSummary, fmt as farmFmt } from "../farm/logic";
 import { loadFarm, serverNow, useFarm } from "../farm/store";
 import { openBlocks, openCaro, openChess, openFarm, useStore } from "../store";
 import { loadStreaks } from "../streaks/store";
+import { loadPuzzles } from "../puzzles/store";
+import { QuizPanel } from "../puzzles/ui";
 import { StreakChip, StreakHero } from "../streaks/ui";
 import type { GameId } from "./registry";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Icon, useStyles, type IconName } from "../ui";
 
-// Tab Trò chơi: chọn game (Nông trại, Xếp Khối, Cờ vua, Cờ caro) + bảng xếp hạng của cả nhóm
+// Tab Trò chơi: chọn game (Nông trại, Xếp Khối, Cờ vua, Cờ caro), quiz hôm nay + thử thách nhanh, bảng xếp hạng của cả nhóm
 
 const fmt = (n: number) => Number(n || 0).toLocaleString("vi-VN");
 const ART = [1, 1, 0, 5, 0, 1, 0, 5, 3, 3, 3, 5, 0, 7, 7, 0];
@@ -190,6 +192,7 @@ export function GamesHome() {
     if (!useChess.getState().leaderboard) loadLeaderboard();
     if (!useCaro.getState().loaded && !useCaro.getState().loading) loadCaro();
     loadStreaks();
+    loadPuzzles();
   }, []);
 
   const board = (title: string, rows: { userId: number; value: string }[]) => (
@@ -227,6 +230,7 @@ export function GamesHome() {
               loadCaro();
               loadFarm({ peek: true });
               loadStreaks();
+              loadPuzzles();
               sync();
             }}
             tintColor={c.accent}
@@ -235,6 +239,8 @@ export function GamesHome() {
         }
       >
         <StreakHero />
+        {/* Quiz hôm nay (mỗi game một câu) + Thử thách nhanh */}
+        <QuizPanel />
         <FarmCard />
         <GameCard
           id="blocks"

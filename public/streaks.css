@@ -57,6 +57,11 @@
 .streak-week.is-small small { font-size: 10px; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .streak-week li.is-on .streak-dot { background: #4A2E14; } }
 :root[data-theme="dark"] .streak-week li.is-on .streak-dot { background: #4A2E14; }
+/* Điện thoại hẹp (360 px): bảy chấm của tuần vẫn vừa khung, trang Trò chơi không bị tràn ngang */
+@media (max-width: 379.98px) {
+  .streak-hero { gap: 10px; }
+  .streak-hero .streak-week { gap: 3px; }
+}
 
 /* Huy hiệu trong từng game */
 .streak-badge {
