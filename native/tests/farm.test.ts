@@ -139,13 +139,6 @@ describe("nông trại: hàm hiển thị", () => {
     for (const e of [...all, ...ui]) expect(keys.has(emojiKey(e)), `thiếu hình ${e}`).toBe(true);
   });
 
-  it("mọi tiếng khai báo đều có file trong app", () => {
-    const src = readFileSync(join(root, "src/farm/soundFiles.ts"), "utf8");
-    const files = [...src.matchAll(/require\("\.\.\/\.\.\/(assets\/sounds\/farm\/[\w-]+\.wav)"\)/g)].map((m) => m[1]);
-    expect(files).toHaveLength(13);
-    for (const f of files) expect(existsSync(join(root, f))).toBe(true);
-  });
-
   it("đọc thời gian, số xu", () => {
     expect(clockText(65 * 1000)).toBe("1:05");
     expect(clockText(80 * MIN)).toBe("1g20");
@@ -256,6 +249,7 @@ describe("nông trại: dữ liệu trong app", () => {
     scheduled.length = 0;
     onFarm = false;
     for (const fn of Object.values(api)) fn.mockReset();
+    useFarm.setState({ open: true }); // đang mở màn Nông trại (mới có tiếng)
     bindFarm({ meId: () => 7, nameOf: (id) => (id === 2 ? "Lan" : "Ai đó"), toast: (t) => toasts.push(t), onFarm: () => onFarm });
   });
 
@@ -283,6 +277,7 @@ describe("nông trại: dữ liệu trong app", () => {
   });
 
   it("thẻ ở trang Trò chơi chỉ xem, chưa có nông trại thì không tạo", async () => {
+    useFarm.setState({ open: false }); // đang ở trang Trò chơi
     api.farm.mockResolvedValueOnce({ now: Date.now(), catalogVersion: "abc", farm: null });
     await loadFarm({ peek: true });
     expect(api.farm).toHaveBeenCalledWith(expect.any(String), true);

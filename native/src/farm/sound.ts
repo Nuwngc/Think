@@ -2,13 +2,16 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-aud
 
 import { FARM_SOURCES, type FarmSound } from "./soundFiles";
 
-// Âm thanh Nông trại. Tiếng hay lặp nhanh (gieo, thu hoạch, xu) có 2 trình phát để phát chồng lên nhau được.
+// Âm thanh Nông trại.
+// Mỗi trình phát giữ một luồng âm thanh của máy, mà máy chỉ cho mỗi app một số luồng (cờ vua, cờ caro, Xếp Khối
+// cũng dùng). Vì vậy: chỉ tạo trình phát cho tiếng thật sự phát, mỗi tiếng một trình phát, và trả lại hết khi rời
+// nông trại.
 
 export type { FarmSound };
 
-const POOL: Partial<Record<FarmSound, number>> = { plant: 2, harvest: 2, coin: 2, bug: 2 };
-const players: Partial<Record<FarmSound, AudioPlayer[]>> = {};
-const next: Partial<Record<FarmSound, number>> = {};
+/** Tiếng hay dùng nhất: tạo sẵn khi mở nông trại để lần bấm đầu không bị trễ */
+const WARM: FarmSound[] = ["plant", "harvest", "coin"];
+const players: Partial<Record<FarmSound, AudioPlayer>> = {};
 const timers = new Set<ReturnType<typeof setTimeout>>();
 let modeSet = false;
 let enabled = true;
@@ -18,20 +21,20 @@ export function setFarmSound(on: boolean) {
   if (!on) {
     for (const t of timers) clearTimeout(t);
     timers.clear();
+    releaseFarmSounds();
   }
 }
 
-function pool(name: FarmSound) {
-  let list = players[name];
-  if (!list) {
-    list = [];
-    for (let i = 0; i < (POOL[name] || 1); i++) list.push(createAudioPlayer(FARM_SOURCES[name]));
-    players[name] = list;
+function player(name: FarmSound) {
+  let p = players[name];
+  if (!p) {
+    p = createAudioPlayer(FARM_SOURCES[name]);
+    players[name] = p;
   }
-  return list;
+  return p;
 }
 
-/** Tạo sẵn trình phát khi mở nông trại, để tiếng đầu tiên không bị trễ */
+/** Gọi khi mở nông trại */
 export function preloadFarmSounds() {
   if (!enabled) return;
   try {
@@ -40,18 +43,29 @@ export function preloadFarmSounds() {
       // Tiếng ngắn: phát chung với nhạc của app khác, không giành quyền phát
       setAudioModeAsync({ playsInSilentMode: false, interruptionMode: "mixWithOthers", shouldPlayInBackground: false }).catch(() => undefined);
     }
-    for (const name of Object.keys(FARM_SOURCES) as FarmSound[]) pool(name);
+    for (const name of WARM) player(name);
   } catch {
     /* máy không phát được âm thanh */
   }
 }
 
+/** Gọi khi rời nông trại: trả lại các luồng âm thanh cho máy */
+export function releaseFarmSounds() {
+  for (const t of timers) clearTimeout(t);
+  timers.clear();
+  for (const name of Object.keys(players) as FarmSound[]) {
+    try {
+      players[name]?.remove();
+    } catch {
+      /* đã trả rồi */
+    }
+    delete players[name];
+  }
+}
+
 function playNow(name: FarmSound, volume: number) {
   try {
-    const list = pool(name);
-    const k = (next[name] || 0) % list.length;
-    next[name] = k + 1;
-    const p = list[k];
+    const p = player(name);
     p.volume = volume;
     p.seekTo(0)
       .then(() => p.play())

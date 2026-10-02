@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { api, ApiError } from "../api";
 import { allRipeAt, itemsOf, newLogEntries, unknownItem } from "./logic";
 import { scheduleFarmReady } from "./notify";
-import { playFarm, setFarmSound, type FarmSound } from "./sound";
+import { playFarm as playSound, setFarmSound, type FarmSound } from "./sound";
 import type { ActResult, Catalog, Farm, FarmAction, FarmEvent, FarmTab, FriendSummary, Item, Leaderboard, LevelUp, Market, PublicFarm } from "./types";
 
 // Dữ liệu game Nông trại trong app. Máy chủ giữ hết luật (src/farm.js); app chỉ hiển thị và gửi thao tác.
@@ -118,6 +118,11 @@ const save = (key: string, value: unknown) => {
 export const serverNow = () => Date.now() + get().skew;
 
 export const itemOf = (s: Pick<State, "items">, id: string) => s.items[id] || unknownItem(id);
+
+/** Chỉ kêu khi đang mở nông trại (thao tác xong sau khi đã rời màn thì thôi) */
+function playFarm(name: FarmSound) {
+  if (get().open) playSound(name);
+}
 
 /* ---------------- Lựa chọn lưu trên máy ---------------- */
 

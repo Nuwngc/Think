@@ -14,7 +14,7 @@ import { badges, fmt } from "./logic";
 import { OrdersView } from "./Orders";
 import { Meter, farmPalette, useFarmColors, useReducedMotion } from "./parts";
 import { HelpSheet, LevelUpSheet, PlotInfoSheet, SeedSheet } from "./Sheets";
-import { preloadFarmSounds } from "./sound";
+import { preloadFarmSounds, releaseFarmSounds } from "./sound";
 import { StorageView } from "./Storage";
 import { loadFarm, loadSocial, loadVisit, openVisit, serverNow, setFarmOpen, setSound, setTab, useFarm, type Fx, type Point } from "./store";
 import type { FarmTab } from "./types";
@@ -263,7 +263,10 @@ export function FarmScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     setFarmOpen(true);
     preloadFarmSounds();
-    return () => setFarmOpen(false);
+    return () => {
+      setFarmOpen(false);
+      releaseFarmSounds();
+    };
   }, []);
 
   // Đồng hồ: cây lớn, món làm xong, khách tới (dừng khi app chạy nền)
