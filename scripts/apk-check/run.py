@@ -419,6 +419,39 @@ def s_blocks_back():
         raise RuntimeError("Không thoát được Xếp Khối")
 
 
+def s_farm():
+    tap(r"^Nông trại")
+    if wait_for(r"^Ô 1: Lúa mì đã chín", 40) is None:
+        raise RuntimeError("Không mở được Nông trại (không thấy ô lúa mì chín sẵn)")
+    time.sleep(2)
+    tap(r"^Ô 1: Lúa mì đã chín")  # thu hoạch (có tiếng, chữ bay lên)
+    if wait_for(r"^Ô 1: đất trống", 20) is None:
+        raise RuntimeError("Bấm ô chín nhưng không thu hoạch được")
+    tap(r"^Ô 1: đất trống")
+    tap(r"^Lúa mì\.", 15)  # bảng gieo hạt
+    if wait_for(r"^Ô 1: Lúa mì, còn", 20) is None:
+        raise RuntimeError("Chọn hạt lúa mì nhưng không gieo được")
+    for name in ("Chế biến", "Đơn hàng", "Kho", "Bạn bè"):
+        tap(rf"^{name}")
+        time.sleep(1.5)
+        if not alive():
+            raise RuntimeError(f"Mở mục {name} thì app bị tắt")
+    return "thu hoạch, gieo hạt, mở đủ các mục"
+
+
+def s_farm_visit():
+    tap(r"^Ghé vườn của ", 25)
+    if wait_for(r"^Vườn của ", 20) is None:
+        raise RuntimeError("Không sang được vườn bạn bè")
+    time.sleep(2)
+    back()  # về vườn của mình
+    if wait_for(r"^Ruộng", 10) is None:
+        raise RuntimeError("Bấm Quay lại không về vườn của mình")
+    back()  # về trang Trò chơi
+    if wait_for(r"Xếp Khối", 15) is None:
+        raise RuntimeError("Không về được mục Trò chơi")
+
+
 def s_background():
     sh("input keyevent 3")  # nút Home
     time.sleep(4)
@@ -652,6 +685,8 @@ def main():
         step("Nhắn tin", s_chat)
         step("Rời cuộc trò chuyện", s_chat_back)
         step("Mục Trò chơi", s_games_hub)
+        step("Nông trại: thu hoạch, gieo hạt (có âm thanh)", s_farm)
+        step("Nông trại: ghé vườn bạn rồi quay lại", s_farm_visit)
         step("Cờ vua với máy (có âm thanh)", s_chess_bot)
         step("Rời ván cờ", s_chess_back)
         step("Xếp Khối (có âm thanh)", s_blocks)

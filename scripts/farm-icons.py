@@ -72,7 +72,6 @@ def main():
 
     lines = [
         '// Tạo bằng scripts/farm-icons.py — đừng sửa tay. Hình Twemoji (CC-BY 4.0).',
-        '/* eslint-disable @typescript-eslint/no-require-imports */',
         'export const ICONS: Record<string, number> = {',
     ]
     lines += [f'  "{k}": require("../../assets/farm/{k}.png"),' for k in keys]

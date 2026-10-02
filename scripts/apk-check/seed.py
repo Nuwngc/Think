@@ -3,7 +3,7 @@
 
 Máy chủ phải chạy với ADMIN_PASSWORD đặt sẵn. Tạo 2 tài khoản:
   tester / tester12345  (app trên máy ảo đăng nhập bằng tài khoản này)
-  ban    / ban12345     (gửi tin nhắn, đăng bài, có điểm Xếp Khối để các màn hình có dữ liệu)
+  ban    / ban12345     (gửi tin nhắn, đăng bài, có điểm Xếp Khối, có nông trại để các màn hình có dữ liệu)
 """
 import json
 import os
@@ -83,6 +83,8 @@ def main():
     ban.call("/api/posts", "POST", {"text": "Bài đăng thử trên bảng tin 🎉"})
     now = int(time.time() * 1000)
     ban.call("/api/games/blocks/scores", "POST", {"scores": [{"id": "seed-ban-00000001", "score": 1234, "moves": 60, "lines": 20, "durationMs": 300000, "playedAt": now - 60000}]})
+    # Nông trại của "ban": có sẵn 2 ô lúa mì chín để người thử ghé vườn
+    ban.call("/api/farm")
     out = {"testerId": tester_id, "banId": ban_id, "dm": conv}
     print(json.dumps(out))
 

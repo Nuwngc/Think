@@ -18,6 +18,7 @@ import {
   useCaro,
 } from "./caro/store";
 import { bindChess, closeGame, loadChess, onAnalysisEvent, onChessEvent, openGame, resetChess, useChess } from "./chess/store";
+import { bindFarm, loadFarm, onFarmEvent, openVisit as openFarmVisit, resetFarm, setTab as setFarmTab, useFarm } from "./farm/store";
 import { API_URL } from "./config";
 import { convTitle, previewText, type Names } from "./format";
 import type { PreparedImage } from "./images";
@@ -53,8 +54,8 @@ import type { ChatItem, Conversation, Me, Message, PendingMessage, Pin, Reaction
 
 export type Phase = "boot" | "login" | "force" | "ready";
 export type Tab = "chats" | "games" | "me" | "admin";
-/** Trong tab Trò chơi: trang chọn game, Cờ vua, Cờ caro, hay đang chơi Xếp Khối */
-export type GamesView = "hub" | "chess" | "blocks" | "caro";
+/** Trong tab Trò chơi: trang chọn game, Cờ vua, Cờ caro, đang chơi Xếp Khối, hay Nông trại */
+export type GamesView = "hub" | "chess" | "blocks" | "caro" | "farm";
 export type Connection = "connecting" | "online" | "offline";
 
 export type MsgBox = {
@@ -359,6 +360,7 @@ function resetAll(notice: string | null) {
   saveTimer = null;
   resetChess();
   resetCaro();
+  resetFarm();
   resetSocial();
   resetBlocksBoard();
   set({ ...initial, phase: "login", notice, appActive: get().appActive, update: get().update });
@@ -424,6 +426,7 @@ async function resync() {
     });
     if (useChess.getState().loaded) loadChess();
     if (useCaro.getState().loaded) loadCaro();
+    if (useFarm.getState().farm) loadFarm();
     refreshSocial();
     syncBlocks();
     const current = get().currentId;
@@ -496,7 +499,10 @@ export async function openConversation(id: number) {
     }
   }
   // Đang trong một ván cờ / caro thì giữ tab Trò chơi: đóng chat là quay lại ván
-  const keepGame = (inChess() && useChess.getState().openId != null) || (inCaro() && (useCaro.getState().openId != null || useCaro.getState().botOpen));
+  const keepGame =
+    (inChess() && useChess.getState().openId != null) ||
+    (inCaro() && (useCaro.getState().openId != null || useCaro.getState().botOpen)) ||
+    (get().tab === "games" && get().gamesView === "farm");
   set({ currentId: id, atBottom: true, tab: keepGame ? "games" : "chats" });
   hideToastFor(id);
   dismissConversation(id);
@@ -527,7 +533,7 @@ function leaveCaroView() {
 
 export function setTab(tab: Tab) {
   // Bấm lại tab Trò chơi khi đang ở trong một game: về trang chọn game
-  const gamesView = tab === "games" && get().tab === "games" ? "hub" : get().gamesView === "blocks" ? "hub" : get().gamesView;
+  const gamesView = tab === "games" && get().tab === "games" ? "hub" : get().gamesView === "blocks" || get().gamesView === "farm" ? "hub" : get().gamesView;
   if (!(tab === "games" && gamesView === "chess")) leaveChessView();
   // Đổi tab khi đang trong ván caro: đóng ván (quay lại tab Trò chơi thì ở trang Cờ caro)
   leaveCaroView();
@@ -551,6 +557,16 @@ export function openBlocks() {
   leaveCaroView();
   set({ tab: "games", gamesView: "blocks", currentId: null });
   closeUser();
+}
+
+/** Mở game Nông trại; có userId thì ghé luôn vườn của người đó; tab = mục muốn mở (vd Bạn bè) */
+export function openFarm(userId?: number | null, tab?: "field" | "friends") {
+  leaveChessView();
+  leaveCaroView();
+  set({ tab: "games", gamesView: "farm", currentId: null });
+  closeUser();
+  if (tab) setFarmTab(tab);
+  openFarmVisit(userId ?? null);
 }
 
 /** Màn Cài đặt (đổi tên, ảnh bìa, giao diện, mật khẩu…) nằm trong tab Cá nhân */
@@ -1192,6 +1208,7 @@ function connectSocket() {
   s.on("games:score", onScoreEvent);
   s.on("caro:game", (data) => onCaroEvent("caro:game", data));
   s.on("caro:challenge", (data) => onCaroEvent("caro:challenge", data));
+  s.on("farm:event", onFarmEvent);
   for (const name of ["post:new", "post:likes", "post:comment", "post:comment-deleted", "post:deleted"]) {
     s.on(name, (data) => onSocialEvent(name, data));
   }
@@ -1403,6 +1420,13 @@ bindCaro({
     showToast(text, extra || {}, 4500);
   },
   onCaro: () => inCaro() && get().currentId == null && get().appActive,
+});
+
+bindFarm({
+  meId: () => (get().phase === "ready" ? (get().me?.id ?? 0) : 0),
+  nameOf: (id) => namesOf(get()).nameOf(id),
+  toast: (text) => showToast(text, {}, 4500),
+  onFarm: () => get().tab === "games" && get().gamesView === "farm" && get().currentId == null && get().appActive,
 });
 
 bindBlocks({

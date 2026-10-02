@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,11 +10,14 @@ import { MiniBoard as CaroMiniBoard } from "../caro/Board";
 import { caroSummary, loadCaro, loadLocal as loadCaroLocal, useCaro } from "../caro/store";
 import { MiniBoard } from "../chess/Board";
 import { chessBadge, loadChess, loadLeaderboard, useChess } from "../chess/store";
-import { openBlocks, openCaro, openChess, useStore } from "../store";
+import { Emo } from "../farm/Emo";
+import { farmSummary, fmt as farmFmt } from "../farm/logic";
+import { loadFarm, serverNow, useFarm } from "../farm/store";
+import { openBlocks, openCaro, openChess, openFarm, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Icon, useStyles, type IconName } from "../ui";
 
-// Tab Trò chơi: chọn game (Xếp Khối, Cờ vua, Cờ caro) + bảng xếp hạng của cả nhóm
+// Tab Trò chơi: chọn game (Nông trại, Xếp Khối, Cờ vua, Cờ caro) + bảng xếp hạng của cả nhóm
 
 const fmt = (n: number) => Number(n || 0).toLocaleString("vi-VN");
 const ART = [1, 1, 0, 5, 0, 1, 0, 5, 3, 3, 3, 5, 0, 7, 7, 0];
@@ -105,6 +108,56 @@ function GameCard({
   );
 }
 
+// Hình trên thẻ Nông trại: sáu ô đất có cây đang lớn
+const FARM_ART = ["🌽", "🌱", "🥕", "🍓", "🌶️", "🌱"];
+
+/** Thẻ Nông trại: cấp, xu, ô đã chín / món đã xong / đơn giao được */
+function FarmCard() {
+  const s = useStyles(makeStyles);
+  const farm = useFarm((st) => st.farm);
+  const started = useFarm((st) => st.started);
+  const [t, setT] = useState(serverNow);
+  useEffect(() => {
+    loadFarm({ peek: true });
+    const id = setInterval(() => setT(serverNow()), 15000);
+    return () => clearInterval(id);
+  }, []);
+  const fs = farmSummary(farm, t);
+  const fresh = !fs && started === false;
+  return (
+    <GameCard
+      id="farm"
+      colors={["#6DB33F", "#3E8E2F", "#2C6B22"]}
+      title="Nông trại"
+      sub={fs ? `Cấp ${fs.level} · ${farmFmt(fs.coins)} xu` : "Trồng rau, nấu mì cay, bán trà sữa"}
+      chips={
+        <>
+          {fs?.ripe ? <Chip text={`${fs.ripe} ô đã chín`} alert /> : null}
+          {fs?.done ? <Chip text={`${fs.done} món đã xong`} alert /> : null}
+          {fs?.orders ? <Chip text={`${fs.orders} đơn giao được`} alert /> : null}
+          {fresh ? <Chip text="Mới" alert /> : null}
+          {!fs || fs.ripe + fs.done + fs.orders === 0 ? <Chip text="Ghé vườn bạn bè, hái trộm" /> : null}
+        </>
+      }
+      cta={fs ? "Ra đồng" : "Bắt đầu trồng"}
+      ctaColor="#2C6B22"
+      art={
+        <View style={s.farmArt}>
+          {FARM_ART.map((ch, i) => (
+            <View key={i} style={s.farmPlot}>
+              <View style={s.farmFurrow} />
+              <View style={[s.farmFurrow, { top: 15 }]} />
+              <Emo ch={ch} size={22} />
+            </View>
+          ))}
+        </View>
+      }
+      onPress={() => openFarm()}
+      label={`Nông trại. ${fs ? `Cấp ${fs.level}, ${fs.coins} xu.${fs.ripe ? ` ${fs.ripe} ô đã chín.` : ""}` : ""} Chạm để vào`}
+    />
+  );
+}
+
 export function GamesHome() {
   const c = useColors();
   const s = useStyles(makeStyles);
@@ -153,7 +206,7 @@ export function GamesHome() {
     <View style={[s.root, { paddingTop: insets.top }]}>
       <View style={s.header}>
         <Text style={s.brand}>Trò chơi</Text>
-        <Text style={s.kicker}>Chơi cùng cả nhóm: thách đấu cờ vua, cờ caro, đua điểm Xếp Khối mỗi tuần</Text>
+        <Text style={s.kicker}>Chơi cùng cả nhóm: trồng trọt, thách đấu cờ vua, cờ caro, đua điểm Xếp Khối mỗi tuần</Text>
       </View>
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32, gap: 14 }}
@@ -164,6 +217,7 @@ export function GamesHome() {
               loadChess();
               loadLeaderboard();
               loadCaro();
+              loadFarm({ peek: true });
               sync();
             }}
             tintColor={c.accent}
@@ -171,6 +225,7 @@ export function GamesHome() {
           />
         }
       >
+        <FarmCard />
         <GameCard
           id="blocks"
           colors={["#3B4FC0", "#25338A", "#1C2566"]}
@@ -278,6 +333,28 @@ const makeStyles = (c: Colors) =>
     },
     artEmpty: { flex: 1, borderRadius: 5, backgroundColor: "rgba(255,255,255,0.08)" },
     chessArt: { transform: [{ rotate: "-5deg" }], borderRadius: 8, overflow: "hidden", elevation: 4 },
+    farmArt: {
+      width: 112,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 5,
+      padding: 6,
+      borderRadius: 14,
+      backgroundColor: "rgba(30,60,20,0.35)",
+      transform: [{ rotate: "-5deg" }],
+    },
+    farmPlot: {
+      width: 30,
+      height: 30,
+      borderRadius: 7,
+      backgroundColor: "#8B5B3A",
+      borderBottomWidth: 3,
+      borderBottomColor: "#7A4E31",
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
+    },
+    farmFurrow: { position: "absolute", left: 0, right: 0, top: 6, height: 2, backgroundColor: "rgba(0,0,0,0.16)" },
     caroArt: { transform: [{ rotate: "6deg" }], borderRadius: 10, elevation: 4, shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
     board: { backgroundColor: c.surface, borderRadius: 18, padding: 14, gap: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: c.line },
     boardTitle: { color: c.muted, fontSize: 12, fontWeight: "800", letterSpacing: 0.6 },

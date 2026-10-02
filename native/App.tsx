@@ -25,7 +25,7 @@ import { LoginScreen } from "./src/screens/LoginScreen";
 import { MainScreen } from "./src/screens/MainScreen";
 import { ToastHost } from "./src/screens/ToastHost";
 import { openComments } from "./src/social/store";
-import { boot, openBlocks, openCaro, openChess, openConversation, sendImages, setTab, showToast, startLifecycle, useStore } from "./src/store";
+import { boot, openBlocks, openCaro, openChess, openConversation, openFarm, sendImages, setTab, showToast, startLifecycle, useStore } from "./src/store";
 import { loadThemeMode, useColors, useThemeMode } from "./src/theme";
 import { confirm } from "./src/ui";
 import { checkForUpdate } from "./src/update";
@@ -37,12 +37,14 @@ function handleResponse(resp: unknown) {
   const a: NotificationAction | null = parseResponse(resp as any);
   if (!a || seen.has(a.key)) return;
   seen.add(a.key);
-  if (a.action === "open" && (a.conversationId || a.type === "chess" || a.type === "caro" || (a.type === "post" && a.postId))) {
+  if (a.action === "open" && (a.conversationId || a.type === "chess" || a.type === "caro" || a.type === "farm" || (a.type === "post" && a.postId))) {
     const go =
       a.type === "chess"
         ? () => openChess(a.gameId)
         : a.type === "caro"
           ? () => openCaro(a.gameId)
+          : a.type === "farm"
+            ? () => openFarm()
           : a.type === "post"
             ? () => {
                 // Thả tim / bình luận bài của bạn: mở trang cá nhân và bảng bình luận của bài đó

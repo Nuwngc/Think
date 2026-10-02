@@ -118,6 +118,7 @@
 @keyframes farm-twinkle { 50% { opacity: .35; transform: scale(.8); } }
 .fplot-bug { position: absolute; top: 6%; left: 6%; width: 30%; height: 30%; animation: farm-crawl 1.2s ease-in-out infinite alternate; }
 @keyframes farm-crawl { to { transform: translate(8%, 5%) rotate(8deg); } }
+.fplot-bug.is-stolen { width: 26%; height: 26%; animation: none; }
 .fplot-time {
   position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); padding: 1px 7px; border-radius: 999px;
   background: rgba(0, 0, 0, 0.45); color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap;

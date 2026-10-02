@@ -9,12 +9,13 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - **Trang cá nhân và bảng tin** (mục 15): đăng bài (chữ + ảnh), thả tim ❤️, bình luận, xem trang của từng người; **chia sẻ ván cờ** lên trang cá nhân hoặc gửi vào cuộc trò chuyện.
 - Phòng chung cho cả nhóm, nhắn riêng 1-1, và **nhóm chat riêng** tự tạo (đặt tên, thêm/xóa người, rời nhóm, có trưởng nhóm).
 - Gửi ảnh (tự nén trên máy trước khi gửi), dán ảnh bằng Ctrl+V trên máy tính.
-- Thanh điều hướng dưới cùng: **Tin nhắn**, **Trò chơi** (Cờ vua + Xếp Khối), **Cá nhân** (trang cá nhân + bảng tin; nút ⚙ **Cài đặt**: tên, giới thiệu, ảnh bìa, giao diện sáng/tối, thông báo, lưu trên máy, đổi mật khẩu) và **Quản trị** (chỉ admin thấy).
+- Thanh điều hướng dưới cùng: **Tin nhắn**, **Trò chơi** (Nông trại, Xếp Khối, Cờ vua, Cờ caro), **Cá nhân** (trang cá nhân + bảng tin; nút ⚙ **Cài đặt**: tên, giới thiệu, ảnh bìa, giao diện sáng/tối, thông báo, lưu trên máy, đổi mật khẩu) và **Quản trị** (chỉ admin thấy).
 - **Lưu trên máy người dùng**: tin nhắn và ảnh được giữ lại trên điện thoại, mở app là xem được ngay kể cả khi mất mạng hay máy chủ đang thức dậy. Tải lịch sử chat thành file, tải ảnh về máy.
 - **Bộ nhớ máy chủ**: thanh hiển thị dung lượng đã dùng, **tự dọn ảnh và tin nhắn cũ nhất khi sắp đầy**, dọn thủ công có xem trước.
 - **App Android có bong bóng chat** (Android 8 trở lên): tin nhắn mới hiện thành bong bóng nổi như Messenger, chạm vào để trả lời ngay; thông báo có ảnh từng người gửi, ô **Trả lời** và nút **Đã đọc**. Tải app ngay trên web (Cá nhân → Cài app lên máy).
 - **App Think Beta** (thư mục `native/`): app thật viết bằng React Native, không phải trang web trong khung. GitHub tự build file APK mỗi lần sửa code (mục 13).
-- **Trò chơi** (mục 16): tab riêng chứa **Cờ vua** và **Xếp Khối**, có bảng xếp hạng tuần của cả nhóm.
+- **Trò chơi** (mục 16): tab riêng chứa **Nông trại**, **Xếp Khối**, **Cờ vua**, **Cờ caro**, có bảng xếp hạng của cả nhóm.
+- **Nông trại** (mục 20, mới ở 2.2.0): trồng 15 loại cây theo thời gian thật, nuôi gà bò, **tự nấu mì cay, pha trà sữa trân châu**, nướng pizza, làm kem xoài… rồi **bán ở chợ** (giá đổi mỗi ngày, có món hot) hoặc **giao đơn cho khách** lấy xu; lên cấp mở thêm cây, món, ô đất; **ghé vườn bạn bè** bắt sâu giúp hoặc **hái trộm**, nuôi chó giữ vườn; bảng xếp hạng cấp độ và xu tuần này. Có trên web và App Think Beta.
 - **Cờ vua** (mục 14): thách đấu bạn bè, chọn thời gian (1+0 … 30+0 hoặc không giới hạn), đồng hồ do máy chủ giữ, **điểm ELO và bảng xếp hạng**, chơi với 8 máy cờ mã nguồn mở (có Stockfish), **xem lại ván**, **đánh giá ván kiểu Game Review**: mỗi nước được xếp loại **Thiên tài !!, Tuyệt vời !, Tốt nhất, Rất tốt, Tốt, Theo sách, Thiếu chính xác ?!, Sai lầm ?, Bỏ lỡ, Sai lầm nghiêm trọng ??**, có thanh đánh giá, nhận xét từng nước, tên khai cuộc. Âm thanh quân gỗ giòn kiểu các trang cờ lớn. Có trên cả web lẫn App Think Beta.
 - **Xếp Khối** (mục 16): game xếp khối 8×8 (kiểu Block Blast) có combo, hiệu ứng nổ, âm thanh, **chơi được khi mất mạng** (kể cả lúc máy chủ đang ngủ), điểm tự gửi lên **bảng xếp hạng** tuần này / mọi lúc khi có mạng.
 - **Cờ caro** (mục 17, mới ở 2.1.0): bàn 15×15, luật tự do hoặc chặn hai đầu, **chơi với máy** 3 mức (chạy trên máy, không cần mạng), **thách đấu bạn bè** có giờ mỗi nước, **điểm ELO** và bảng xếp hạng. Có trên web và App Think Beta.
@@ -411,7 +412,7 @@ Có trên bản web và App Think Beta (cùng dữ liệu).
 
 ## 16. Trò chơi và Xếp Khối
 
-Tab **Trò chơi** (thay cho tab Cờ vua cũ) có trên bản web và App Think Beta: thẻ **Xếp Khối** và **Cờ vua** (điểm ELO, việc cần làm), cùng **bảng xếp hạng tuần** của cả nhóm. Đường dẫn trên web: `#/games`, `#/chess`, `#/blocks`. Nhấn giữ biểu tượng app Think (bản cài từ web) có lối tắt **Xếp Khối** và **Cờ vua**.
+Tab **Trò chơi** (thay cho tab Cờ vua cũ) có trên bản web và App Think Beta: thẻ **Nông trại** (mục 20), **Xếp Khối**, **Cờ vua** (điểm ELO, việc cần làm), **Cờ caro** (mục 17), cùng **bảng xếp hạng** của cả nhóm. Đường dẫn trên web: `#/games`, `#/chess`, `#/blocks`. Nhấn giữ biểu tượng app Think (bản cài từ web) có lối tắt **Xếp Khối** và **Cờ vua**.
 
 **Xếp Khối** (kiểu Block Blast):
 
@@ -448,7 +449,20 @@ Có trên bản web và App Think Beta (cùng dữ liệu):
 ## 19. Báo lỗi app và Kiểm tra APK
 
 - **Báo lỗi tự động**: App Think Beta tự gửi về máy chủ khi bị tắt đột ngột (crash Java / Kotlin, lỗi JavaScript làm tắt app — ghi lại ngay, lần mở sau gửi), khi một màn hình bị lỗi (hiện "Có lỗi xảy ra" với nút Thử lại thay vì tắt app) và lỗi chạy ngầm. Bản web cũng gửi lỗi trang. Admin xem ở **Quản trị → Báo lỗi app**: loại lỗi, số lần, tên máy, Android / **HarmonyOS**, bản app, ai gặp, ở màn hình nào, chi tiết kỹ thuật; lỗi giống nhau được gộp. Có lỗi làm tắt app mới thì admin đang mở trang này thấy ngay.
-- **Kiểm tra APK** (`.github/workflows/apk-check.yml`): mỗi lần sửa `native/`, GitHub build một bản thử rồi **chạy trên máy ảo Android 10 và Android 14**, bấm qua các màn hình như người dùng thật (đăng nhập, nhắn tin, cờ vua, Xếp Khối, trang cá nhân, chạy nền, tắt màn hình, **bong bóng chat**, báo lỗi), chụp màn hình và đọc logcat để bắt crash **trước khi phát hành**. Kết quả: trang của lần chạy (Summary) và nhánh `apk-check-results`. Chạy tay: tab Actions → **Kiểm tra APK** → Run workflow. Bước "Kiểm tra code" còn so phiên bản các thư viện native với bản Expo (`npm run check:native`) — lỗi crash ở bản 0.1.4 / 0.1.5 là do một thư viện bị cài lệch phiên bản.
+- **Kiểm tra APK** (`.github/workflows/apk-check.yml`): mỗi lần sửa `native/`, GitHub build một bản thử rồi **chạy trên máy ảo Android 10 và Android 14**, bấm qua các màn hình như người dùng thật (đăng nhập, nhắn tin, nông trại, cờ vua, Xếp Khối, trang cá nhân, chạy nền, tắt màn hình, **bong bóng chat**, báo lỗi), chụp màn hình và đọc logcat để bắt crash **trước khi phát hành**. Kết quả: trang của lần chạy (Summary) và nhánh `apk-check-results`. Chạy tay: tab Actions → **Kiểm tra APK** → Run workflow. Bước "Kiểm tra code" còn so phiên bản các thư viện native với bản Expo (`npm run check:native`) — lỗi crash ở bản 0.1.4 / 0.1.5 là do một thư viện bị cài lệch phiên bản.
+
+## 20. Nông trại
+
+Thẻ **Nông trại** đứng đầu tab Trò chơi (web: `#/farm`, ghé vườn một người: `#/farm/u/<mã người>`), có trên bản web và App Think Beta, dùng chung một nông trại.
+
+- **Ruộng**: bấm ô trống để gieo hạt (hạt lúa mì miễn phí), 15 loại cây mở dần theo cấp: lúa mì, rau cải, bắp, mía, ớt, cà rốt, lá chè, khoai mì, cà chua, dâu tây, khoai tây, dưa hấu, bơ, cà phê, xoài. Cây lớn theo **thời gian thật**, kể cả khi tắt máy (3 phút tới 6 giờ); chín thì bấm để thu hoạch, hoặc **thu hoạch / gieo cả ruộng** một lần. Thỉnh thoảng **được mùa** thêm 1 sản phẩm; cây lâu ngày có thể bị **sâu** (bấm để bắt, không thì mất 1 sản phẩm). Mua thêm ô đất (6 → 24 ô).
+- **Chế biến**: máy xay thức ăn, chuồng gà, bếp nấu, xưởng chế biến, quầy nước, lò nướng, chuồng bò, máy làm kem. Gà ăn cám đẻ trứng, bò ăn cỏ khô cho sữa; xưởng làm đường, mì sợi, trà khô, trân châu; bếp nấu **mì cay, mì cay cấp 7, bánh bao, lẩu thái, gỏi rau, khoai tây chiên**; lò nướng **bánh mì, pizza, bánh kem dâu**; quầy nước pha **nước mía, trà sữa trân châu, nước ép dưa hấu, sinh tố bơ, cà phê sữa đá**; máy làm **kem xoài**. Mỗi nơi làm lần lượt theo hàng chờ (2 chỗ, nâng tối đa 6), món xong bấm để lấy về kho.
+- **Đơn hàng**: khách (Bà Tư, Ông Sáu, Bé Na, Chú Bảy… và Mèo Mun chỉ mua sữa với trứng) đặt mua; giao đủ hàng được nhiều xu hơn bán ở chợ, kèm kinh nghiệm. Đơn khó thì đổi, khách mới tới sau 3 phút.
+- **Kho và chợ**: giá mỗi món đổi theo ngày (có mũi tên tăng / giảm), mỗi ngày một **món hot** bán được giá gấp rưỡi; bán 1 hoặc bán hết (nhắc nếu đơn hàng đang cần món đó). Nâng kho (100 → 600 chỗ). **Cửa hàng**: chó giữ vườn và 9 món trang trí sân vườn (hướng dương … lâu đài), cộng điểm vườn đẹp.
+- **Lên cấp** (tối đa cấp 50): thu hoạch, làm món, giao đơn đều có kinh nghiệm; mỗi lần lên cấp được thưởng xu và mở thêm cây, món, công trình, ô đất. **Quà mỗi ngày** tăng dần khi ghé liên tục (15 → 80 xu).
+- **Bạn bè**: bảng xếp hạng theo **cấp** và theo **xu kiếm được tuần này**; ghé vườn nhau để **bắt sâu giúp** (+3 xu, 15 lần mỗi ngày) hoặc **hái trộm** 1 sản phẩm ở ô đã chín (6 lần mỗi ngày, 3 lần mỗi vườn, ô phải còn ít nhất 2 sản phẩm). Vườn có **chó giữ vườn** thì kẻ trộm có 35% bị đuổi và phải đền 15 xu cho chủ vườn. Chủ vườn nhận thông báo (tối đa 1 lần / 10 phút) và xem được **nhật ký vườn**; App Think Beta có khung **"Khi bạn vắng nhà"** kể lại ai đã ghé.
+- App Think Beta **báo khi cả ruộng đã chín** (thông báo hẹn giờ ngay trên máy, tắt được trong nút ⓘ Cách chơi); có âm thanh, chữ bay lên, sản phẩm bay về Kho.
+- Máy chủ giữ hết luật (`src/farm-logic.js`), web và app chỉ hiển thị, nên không ai gian xu được. Muốn thêm cây, món mới chỉ cần sửa `src/farm-data.js` (thêm hình bằng `scripts/farm-icons.py`). Hình biểu tượng dùng **Twemoji** (CC-BY 4.0) để máy nào cũng hiện giống nhau, kể cả Android cũ; âm thanh tự tổng hợp (`scripts/farm-sounds.py`).
 
 ## Cấu trúc thư mục
 
@@ -468,6 +482,8 @@ src/chess-openings.js Sách khai cuộc (dữ liệu src/chess-openings.tsv, lic
 src/games.js         Trò chơi trên máy (Xếp Khối): điểm, bảng xếp hạng tuần / mọi lúc (API /api/games)
 src/social.js        Trang cá nhân và bảng tin: bài đăng, thả tim, bình luận (API /api/posts)
 src/caro.js          Cờ caro: thách đấu, giờ mỗi nước, ELO, bảng xếp hạng (API /api/caro)
+src/farm.js          Nông trại: lưu nông trại, ghé vườn bạn bè, bảng xếp hạng (API /api/farm)
+src/farm-logic.js    Luật Nông trại (gieo, thu hoạch, chế biến, đơn hàng, chợ, hái trộm…); src/farm-data.js: cây, món, công trình
 src/chat-plus.js     Chat 2.1.0: sửa tin, ghim, tìm, chuyển tiếp, tắt thông báo, chủ đề, bình chọn, ảnh đã gửi
 src/reports.js       Báo lỗi app (API /api/app/errors, Quản trị → Báo lỗi app)
 src/engines/         GarboChess-JS (giữ nguyên giấy phép BSD ở đầu file)
@@ -477,12 +493,14 @@ scripts/chess-sounds.py Tạo lại âm thanh cờ vua (cần Python + numpy + s
 scripts/blocks-sounds.py Tạo lại âm thanh Xếp Khối (cần Python + numpy + scipy)
 scripts/build-openings.js Tạo lại sách khai cuộc từ bộ dữ liệu lichess
 scripts/caro-sounds.py Tạo lại âm thanh cờ caro
+scripts/farm-sounds.py Tạo lại âm thanh Nông trại; scripts/farm-icons.py chép hình Twemoji cho web và app
 scripts/apk-check/   Chạy thử APK trên máy ảo Android (run.py) và tạo dữ liệu thử (seed.py)
 public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu trên máy), sw.js (service worker),
                      games-ui.js (tab Trò chơi), chess-ui.js (Cờ vua), blocks-core.js + blocks.js + blocks.css (Xếp Khối),
                      blocks.html + blocks-page.js (trang Xếp Khối chơi offline), social-ui.js (trang cá nhân, bảng tin),
-                     caro-core.js + caro-ui.js + caro.css (Cờ caro),
-                     theme.js (nền sáng/tối), chess/pieces/ (hình quân cờ), chess/sounds/, blocks/sounds/ (âm thanh)
+                     caro-core.js + caro-ui.js + caro.css (Cờ caro), farm-ui.js + farm.css (Nông trại),
+                     theme.js (nền sáng/tối), chess/pieces/ (hình quân cờ), chess/sounds/, blocks/sounds/ (âm thanh),
+                     farm/emoji/ (hình Twemoji), farm/sounds/
 public/download/     File cài app Android (think.apk) và version.json
 android/             Mã app Android: mở web bằng Chrome, bong bóng chat, trả lời trong thông báo (build.sh để build)
 native/              App Think Beta (React Native / Expo), xem native/README.md
@@ -490,4 +508,4 @@ native/              App Think Beta (React Native / Expo), xem native/README.md
 deploy/              Mẫu cấu hình Caddy và Nginx
 ```
 
-Phông chữ Be Vietnam Pro dùng giấy phép SIL Open Font License (xem `public/fonts/OFL.txt`).
+Phông chữ Be Vietnam Pro dùng giấy phép SIL Open Font License (xem `public/fonts/OFL.txt`). Hình biểu tượng Nông trại là Twemoji của Twitter / X và cộng đồng, giấy phép CC-BY 4.0 (xem `public/farm/emoji/LICENSE.txt`).

@@ -62,7 +62,7 @@ export function setupNotifications() {
         });
         await Notifications.setNotificationChannelAsync(CHANNEL_OTHER, {
           name: "Cảm xúc và thông báo khác",
-          description: "Ai đó bày tỏ cảm xúc về tin nhắn của bạn, thông báo thử",
+          description: "Ai đó bày tỏ cảm xúc về tin nhắn của bạn, bạn bè ghé nông trại, cả ruộng đã chín, thông báo thử",
           importance: Notifications.AndroidImportance.DEFAULT,
           showBadge: false,
         });

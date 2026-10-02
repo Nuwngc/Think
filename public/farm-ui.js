@@ -498,18 +498,21 @@ window.ThinkFarm = (() => {
         kids.push(wrap);
         if (st === 'ripe') {
           kids.push(emo('✨', 'fplot-spark'));
-          let tag = 'Thu hoạch';
+          let tag = bug ? 'Bắt sâu' : 'Thu hoạch';
           let muted = false;
           if (visiting) {
             if (pl.st === 'me') { tag = 'Đã hái'; muted = true; } else if (pl.canSteal) tag = 'Hái trộm'; else { tag = 'Đã chín'; muted = true; }
           }
           kids.push(h('span', { class: `fplot-tag${muted ? ' is-muted' : ''}`, text: tag }));
-          label = `Ô ${i + 1}: ${crop.name} đã chín${visiting ? (pl.canSteal ? ', bấm để hái trộm' : '') : ', bấm để thu hoạch'}`;
+          label = visiting
+            ? `Ô ${i + 1}: ${crop.name} đã chín${pl.canSteal ? ', bấm để hái trộm' : ''}`
+            : `Ô ${i + 1}: ${crop.name} đã chín${pl.st ? ', bị hái trộm 1' : ''}, ${bug ? 'đang có sâu, bấm để bắt sâu' : 'bấm để thu hoạch'}`;
         } else {
           kids.push(h('span', { class: 'fplot-time', 'data-until': String(pl.r), text: clock(pl.r - t) }));
           label = `Ô ${i + 1}: ${crop.name}, còn ${longLeft(pl.r - t)}${bug ? ', đang có sâu' : ''}`;
         }
         if (bug) kids.push(emo('🐛', 'fplot-bug'));
+        else if (!visiting && pl.st) kids.push(emo('😤', 'fplot-bug is-stolen')); // bạn bè đã hái trộm 1 sản phẩm
       }
       return h('button', {
         class: `fplot is-${st}`, type: 'button', role: 'listitem', 'aria-label': label,

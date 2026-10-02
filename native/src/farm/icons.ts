@@ -1,5 +1,4 @@
 // Tạo bằng scripts/farm-icons.py — đừng sửa tay. Hình Twemoji (CC-BY 4.0).
-/* eslint-disable @typescript-eslint/no-require-imports */
 export const ICONS: Record<string, number> = {
   "1f33e": require("../../assets/farm/1f33e.png"),
   "1f96c": require("../../assets/farm/1f96c.png"),
