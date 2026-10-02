@@ -1,5 +1,5 @@
 /* Service worker: lưu giao diện để mở nhanh + hiện thông báo đẩy kể cả khi đã đóng app */
-const CACHE = 'think-v11';
+const CACHE = 'think-v12';
 // Ảnh trong tin nhắn và ảnh đại diện đã xem được giữ lại trên máy (tên file không bao giờ đổi),
 // nên vẫn hiện được khi mất mạng hoặc khi máy chủ đã dọn ảnh cũ. Tắt "Lưu trên máy" thì không giữ nữa.
 const MEDIA = 'think-media';
@@ -10,8 +10,12 @@ const SHELL = [
   '/app.js',
   '/localdb.js',
   '/chess-ui.js',
+  '/chess-anim.js',
   '/social-ui.js',
   '/games-ui.js',
+  // Chuỗi hằng ngày của mọi game
+  '/streaks.js',
+  '/streaks.css',
   // Cờ caro: chơi với máy được cả khi mất mạng
   '/caro.css',
   '/caro-core.js',
@@ -82,7 +86,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(networkFirst(req));
 });
 
-const OFFLINE_FIRST = /^\/(blocks(\.html|\.css|\.js|-core\.js|-page\.js|\/sounds\/[\w-]+\.wav)|fonts\/|farm\/(emoji|sounds)\/)/;
+const OFFLINE_FIRST = /^\/(blocks(\.html|\.css|\.js|-core\.js|-page\.js|\/sounds\/[\w-]+\.wav)|streaks\.js|fonts\/|farm\/(emoji|sounds)\/)/;
 
 async function cacheFirst(req, event) {
   const cached = await caches.match(req, { ignoreSearch: true }).catch(() => null);

@@ -78,7 +78,7 @@ function toData(p) {
     if (p.tag) out.tag = p.tag;
     if (p.type === 'reaction' || p.type === 'test') out.channelId = 'other';
     if (p.type === 'chess' || p.type === 'caro') out.channelId = 'chess'; // kênh "Cờ vua" có sẵn trong mọi bản app
-    if (p.type === 'post' || p.type === 'farm') out.channelId = 'other';
+    if (p.type === 'post' || p.type === 'farm' || p.type === 'streak') out.channelId = 'other';
   }
   if (p.badge != null) out.badge = String(p.badge);
   out.body = JSON.stringify(data);
@@ -96,7 +96,7 @@ async function sendToUser(userId, payload) {
   await Promise.all(
     rows.map(async ({ token }) => {
       try {
-        await messaging.send({ token, data, android: { priority: 'high', ttl: 24 * 60 * 60 * 1000 } });
+        await messaging.send({ token, data, android: { priority: 'high', ttl: Math.min(Number.isInteger(payload.ttl) && payload.ttl > 0 ? payload.ttl : 86400, 86400) * 1000 } });
         sent++;
       } catch (err) {
         const code = err && (err.code || (err.errorInfo && err.errorInfo.code));

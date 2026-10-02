@@ -145,6 +145,28 @@ def tap(pattern, timeout=20):
     return n
 
 
+def screen_size():
+    size = re.findall(r"(\d+)x(\d+)", sh("wm size"))
+    return tuple(map(int, size[-1])) if size else (1080, 2400)
+
+
+def tap_scrolled(pattern, swipes=6):
+    """Bấm một mục có thể nằm ngoài màn hình (máy nhỏ, chữ to): vuốt tới khi thấy rõ rồi bấm"""
+    w, h = screen_size()
+    for _ in range(swipes + 1):
+        n = find(pattern)
+        c = center(n) if n is not None else None
+        if c and h * 0.15 < c[1] < h * 0.7:
+            tap_xy(*c)
+            return n
+        if c and c[1] <= h * 0.15:
+            sh(f"input swipe {w // 2} {int(h * 0.35)} {w // 2} {int(h * 0.65)} 500")  # mục ở trên: kéo xuống
+        else:
+            sh(f"input swipe {w // 2} {int(h * 0.7)} {w // 2} {int(h * 0.35)} 500")  # chưa thấy / ở dưới: vuốt lên
+        time.sleep(1.2)
+    raise RuntimeError(f"Không thấy '{pattern}' trên màn hình (đã vuốt tìm)")
+
+
 def type_text(text):
     # input text không gõ được dấu tiếng Việt / khoảng trắng: thay khoảng trắng bằng %s
     sh("input text " + json.dumps(text.replace(" ", "%s")))
@@ -375,7 +397,7 @@ def s_games_hub():
 
 
 def s_chess_bot():
-    tap(r"^Cờ vua")
+    tap_scrolled(r"^Cờ vua")
     tap(r"^Chơi với máy", 20)
     tap(r"ELO", 15)
     tap(r"^Bắt đầu$", 10)
@@ -391,6 +413,9 @@ def s_chess_bot():
         raise RuntimeError("Đi e2-e4 nhưng quân không tới e4")
 
 
+HUB = r"Xếp Khối|^Cờ vua|^Cờ caro|^Nông trại|ngày liên tiếp chơi game"  # trang Trò chơi (cuộn tới đâu cũng thấy một mục)
+
+
 def s_chess_back():
     back()
     time.sleep(1)
@@ -398,15 +423,15 @@ def s_chess_back():
     if n is not None:
         tap(r"^(Rời ván|Thoát)")
     back()
-    if wait_for(r"Xếp Khối", 15) is None:
+    if wait_for(HUB, 15) is None or find(r"^Chơi với máy") is not None:
         # Có thể đang ở trang Cờ vua: bấm quay lại lần nữa
         back()
-        if wait_for(r"Xếp Khối", 10) is None:
+        if wait_for(HUB, 10) is None:
             raise RuntimeError("Không về được mục Trò chơi")
 
 
 def s_blocks():
-    tap(r"^Xếp Khối")
+    tap_scrolled(r"^Xếp Khối")
     if wait_for(r"^Điểm \d+", 20) is None:
         raise RuntimeError("Không mở được Xếp Khối")
     time.sleep(2)
@@ -425,7 +450,7 @@ def farm_now():
 
 
 def s_farm():
-    tap(r"^Nông trại")
+    tap_scrolled(r"^Nông trại")
     if wait_for(r"^Ô 1: Lúa mì đã chín", 40) is None:
         raise RuntimeError("Không mở được Nông trại (không thấy ô lúa mì chín sẵn)")
     # Nhớ chỗ các mục trước khi gieo: ruộng có đồng hồ đếm ngược đổi từng giây
@@ -469,8 +494,43 @@ def s_farm_visit():
     if wait_for(r"^Ruộng", 10) is None:
         raise RuntimeError("Bấm Quay lại không về vườn của mình")
     back()  # về trang Trò chơi
-    if wait_for(r"Xếp Khối", 15) is None:
+    if wait_for(HUB, 15) is None:
         raise RuntimeError("Không về được mục Trò chơi")
+
+
+def streaks_now():
+    token, _ = login_token(args.user, args.password)
+    return api_call("/api/streaks", token=token)
+
+
+def s_streaks():
+    # Chuỗi hằng ngày: vừa chơi Nông trại thì máy chủ ghi hôm nay, trang Trò chơi hiện khung chuỗi
+    data = streaks_now()
+    farm = next((g for g in data.get("games", []) if g.get("id") == "farm"), None)
+    if not farm or not farm.get("today"):
+        raise RuntimeError(f"Chơi Nông trại rồi mà chuỗi chưa ghi hôm nay ({farm})")
+    if wait_for(r"ngày liên tiếp chơi game", 15) is None:
+        raise RuntimeError("Trang Trò chơi không hiện khung chuỗi hằng ngày")
+    tap(r"ngày liên tiếp chơi game")
+    if wait_for(r"^Nhắc giữ chuỗi", 10) is None:
+        raise RuntimeError("Không mở được bảng chuỗi hằng ngày")
+    time.sleep(1)
+    back()
+    if wait_for(HUB, 10) is None:
+        raise RuntimeError("Không đóng được bảng chuỗi hằng ngày")
+    return f"Nông trại {farm.get('current')} ngày"
+
+
+def s_streaks_all():
+    # Cờ vua (máy chủ ghi) và Xếp Khối (app gửi ngày chơi lên) cũng có chuỗi hôm nay
+    today = set()
+    for _ in range(10):
+        data = streaks_now()
+        today = {g["id"] for g in data.get("games", []) if g.get("today")}
+        if {"farm", "chess", "blocks"} <= today:
+            return "hôm nay: " + ", ".join(sorted(today))
+        time.sleep(2)
+    raise RuntimeError(f"Chuỗi hôm nay chưa đủ Nông trại, Cờ vua, Xếp Khối (có: {sorted(today)})")
 
 
 def s_background():
@@ -708,10 +768,12 @@ def main():
         step("Mục Trò chơi", s_games_hub)
         step("Nông trại: thu hoạch, gieo hạt (có âm thanh)", s_farm)
         step("Nông trại: ghé vườn bạn rồi quay lại", s_farm_visit)
+        step("Chuỗi hằng ngày", s_streaks)
         step("Cờ vua với máy (có âm thanh)", s_chess_bot)
         step("Rời ván cờ", s_chess_back)
         step("Xếp Khối (có âm thanh)", s_blocks)
         step("Thoát Xếp Khối", s_blocks_back)
+        step("Chuỗi hằng ngày của các game", s_streaks_all)
         step("Chạy nền rồi mở lại", s_background)
         step("Trang cá nhân", s_profile)
         step("Cuộn bảng tin", s_feed_and_scroll)

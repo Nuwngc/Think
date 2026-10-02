@@ -277,7 +277,7 @@ window.ThinkFarm = (() => {
         ? h('div', { class: 'farm-level' },
           h('span', { class: 'farm-level-badge', text: `Cấp ${lvl}` }),
           meter,
-          !visiting && f && f.xpNext ? h('span', { text: `${fmt(f.xpCur)}/${fmt(f.xpNext)}` }) : null)
+          !visiting && f && f.xpNext ? h('span', { class: 'farm-xp-num', text: `${fmt(f.xpCur)}/${fmt(f.xpNext)}` }) : null)
         : null;
       const coins = f ? h('span', { class: 'farm-coins', 'aria-label': `${fmt(f.coins)} xu`, 'data-coins': '' }, emo('🪙'), fmt(f.coins)) : null;
       const sound = h('button', {
@@ -290,7 +290,9 @@ window.ThinkFarm = (() => {
         },
       }, icon(audio.on ? 'volume' : 'volume-off'));
       const help = visiting ? null : h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Cách chơi', onclick: openHelp }, icon('info'));
-      return h('header', { class: 'farm-head' }, back, h('div', { class: 'farm-title' }, h('h1', { text: title }), sub), coins, sound, help);
+      // Chuỗi hằng ngày (public/streaks.js)
+      const streak = !visiting && window.ThinkStreaks && window.ThinkStreaks.instance ? window.ThinkStreaks.instance.badge('farm') : null;
+      return h('header', { class: 'farm-head' }, back, h('div', { class: 'farm-title' }, h('h1', { text: title }), sub), streak, coins, sound, help);
     }
 
     function badges() {

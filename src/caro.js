@@ -3,6 +3,7 @@
 // Máy chủ giữ luật (public/caro-core.js, dùng chung với web và app) và đồng hồ; máy người chơi chỉ gửi nước đi.
 // Chơi với máy thì chạy hẳn trên điện thoại / trình duyệt (không cần mạng), máy chủ không tham gia.
 const { db, get, all, run, transaction } = require('./db');
+const streaks = require('./streaks');
 const Caro = require('../public/caro-core.js');
 const { eloDeltas } = require('./chess');
 
@@ -373,6 +374,7 @@ function setupCaro({ app, io, requireAuth, requireReady, isActive, notify, nameO
     const next = Caro.play(state, index);
     if (!next) throw new CaroError(400, 'Ô này đã có quân hoặc không hợp lệ.');
     run('UPDATE caro_games SET moves = ?, turn_started_at = ?, updated_at = ? WHERE id = ?', next.moves.join(','), now, now, g.id);
+    streaks.record(req.user.id, 'caro'); // chuỗi hằng ngày (src/streaks.js)
     let updated = loadGame(g.id);
     if (next.winner === 1 || next.winner === 2) {
       updated = finish(updated, next.winner === 1 ? 'x' : 'o', 'five', next.line, now);

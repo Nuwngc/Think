@@ -229,7 +229,7 @@ window.ThinkChess = (() => {
 
     /* ---------------- Tùy chọn bàn cờ (lưu trên máy này) ---------------- */
     const PREF_KEY = 'chess-prefs';
-    const DEFAULT_PREFS = { hints: true, lastMove: true, coords: true, arrows: true, sound: true };
+    const DEFAULT_PREFS = { hints: true, lastMove: true, coords: true, arrows: true, anim: true, sound: true };
     const P = { ...DEFAULT_PREFS };
     try {
       const saved = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
@@ -839,7 +839,8 @@ window.ThinkChess = (() => {
           h('div', { class: 'chess-hero-main' },
             h('span', { class: 'chess-hero-label', text: 'Điểm ELO của bạn' }),
             h('span', { class: 'chess-hero-rating' }, r ? String(r.rating) : '—', r && r.provisional ? h('small', { text: ' ?' }) : null)),
-          rank ? h('div', { class: 'chess-hero-rank' }, h('span', { class: 'chess-hero-label', text: 'Hạng' }), h('strong', { text: `#${rank}` })) : null),
+          rank ? h('div', { class: 'chess-hero-rank' }, h('span', { class: 'chess-hero-label', text: 'Hạng' }), h('strong', { text: `#${rank}` })) : null,
+          window.ThinkStreaks && window.ThinkStreaks.instance ? window.ThinkStreaks.instance.badge('chess') : null),
         h('p', {
           class: 'chess-hero-stats',
           text: r && r.games
@@ -1045,7 +1046,7 @@ window.ThinkChess = (() => {
         if (bestView) badge = { sq: beforePos.best.slice(2, 4), cls: 'best' };
         else if (reviewMove) badge = { sq: reviewMove.uci.slice(2, 4), cls: reviewMove.cls };
       }
-      const boardEl = renderBoard({ fen, orientation: bottom, movable, lastMove, arrow, badge });
+      const boardEl = renderBoard({ fen, orientation: bottom, movable, lastMove, arrow, badge, animKey: `${g.id}:${bottom}` });
       const board = review
         ? h('div', { class: 'chess-board-row' }, evalBar(bestView ? beforePos : review.positions[ply], bottom), boardEl)
         : boardEl;
@@ -1474,8 +1475,62 @@ window.ThinkChess = (() => {
     /* ---------------- Bàn cờ ---------------- */
     let dragging = null;
     let suppressClick = false;
+    // Thế cờ đang hiện trên bàn (để quân trượt từ chỗ cũ sang chỗ mới, như chess.com)
+    let shown = null; // { key, fen }
+    let dropped = null; // nước vừa kéo thả: quân đã ở ô đến rồi, không trượt nữa
 
-    function renderBoard({ fen, orientation, movable, lastMove, arrow, badge }) {
+    // Quân trượt từ ô cũ sang ô mới; quân bị ăn mờ dần (public/chess-anim.js)
+    let inflight = null; // chuyển động đang chạy (bàn cờ vẽ lại giữa chừng thì chạy tiếp, không bị giật)
+    const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+    function runAnim(board, a) {
+      const A = window.ThinkChessAnim;
+      const elapsed = Math.max(0, Date.now() - a.start);
+      const left = a.dur - elapsed;
+      if (left <= 16) return;
+      const remain = 1 - easeOut(Math.min(1, elapsed / a.dur)); // phần quãng đường còn lại
+      const at = (sq) => board.querySelector(`.sq[data-sq="${sq}"]`);
+      const moving = [];
+      for (const m of a.moves) {
+        const img = at(m.to) && at(m.to).querySelector('.pc');
+        if (!img) continue;
+        const { dx, dy } = A.offset(m.from, m.to, a.orientation);
+        img.classList.add('is-moving');
+        img.style.transition = 'none';
+        img.style.transform = `translate(${dx * remain * 100}%, ${dy * remain * 100}%)`;
+        moving.push(img);
+      }
+      for (const gq of a.gone) {
+        const sq = at(gq.sq);
+        if (!sq) continue;
+        const ghost = h('img', { class: 'pc is-gone', src: pieceSrc(gq.code), alt: '', draggable: 'false' });
+        ghost.style.animationDuration = `${a.dur}ms`;
+        ghost.style.animationDelay = `-${elapsed}ms`;
+        sq.prepend(ghost);
+        setTimeout(() => ghost.remove(), left + 40);
+      }
+      if (!moving.length) return;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        for (const img of moving) {
+          img.style.transition = `transform ${left}ms cubic-bezier(.25, .8, .35, 1)`;
+          img.style.transform = '';
+        }
+      }));
+      setTimeout(() => moving.forEach((img) => img.classList.remove('is-moving')), left + 60);
+    }
+    function animateBoard(board, key, prevFen, fen, lastMove, orientation) {
+      const A = window.ThinkChessAnim;
+      const skip = dropped;
+      dropped = null;
+      inflight = null;
+      if (!A || !P.anim || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const plan = A.plan(prevFen, fen, lastMove);
+      if (!plan.moves.length || plan.moves.length > 16) return;
+      const moves = plan.moves.filter((m) => !(skip && skip.from === m.from && skip.to === m.to));
+      inflight = { key, fen, orientation, moves, gone: plan.gone, start: Date.now(), dur: A.duration(plan.moves) };
+      runAnim(board, inflight);
+    }
+
+    function renderBoard({ fen, orientation, movable, lastMove, arrow, badge, animKey }) {
       const rows = parseFen(fen);
       let chess = null;
       let targets = new Map();
@@ -1523,6 +1578,14 @@ window.ThinkChess = (() => {
         });
       });
       if (arrow && /^[a-h][1-8][a-h][1-8]/.test(arrow)) board.append(arrowSvg(arrow, orientation));
+      const prev = shown;
+      shown = animKey ? { key: animKey, fen } : null;
+      if (prev && animKey && prev.key === animKey && prev.fen !== fen) animateBoard(board, animKey, prev.fen, fen, lastMove, orientation);
+      else if (inflight && inflight.key === animKey && inflight.fen === fen) runAnim(board, inflight); // vẽ lại giữa lúc đang trượt
+      else {
+        dropped = null;
+        inflight = null;
+      }
       // Huy hiệu loại nước ở góc ô vừa đi tới (khi xem lại ván đã phân tích)
       if (badge && badge.cls) {
         const sqEl = board.querySelector(`.sq[data-sq="${badge.sq}"]`);
@@ -1578,7 +1641,7 @@ window.ThinkChess = (() => {
         if (!el) return;
         const p = chess.get(el.dataset.sq);
         if (!p || p.color !== movable) return;
-        dragging = { from: el.dataset.sq, x: e.clientX, y: e.clientY, ghost: null, origin: el, size: el.getBoundingClientRect().width, moves: chess.moves({ square: el.dataset.sq, verbose: true }) };
+        dragging = { from: el.dataset.sq, x: e.clientX, y: e.clientY, ghost: null, origin: el, size: el.getBoundingClientRect().width, moves: chess.moves({ square: el.dataset.sq, verbose: true }), touch: e.pointerType !== 'mouse', hover: null };
       });
       return board;
     }
@@ -1625,13 +1688,23 @@ window.ThinkChess = (() => {
         img.classList.add('is-dragging');
         if (P.hints) for (const m of d.moves) document.querySelector(`#chess-pane .sq[data-sq="${m.to}"]`)?.classList.add(m.captured ? 'has-ring' : 'has-dot');
       }
-      d.ghost.style.transform = `translate(${e.clientX - d.size / 2}px, ${e.clientY - d.size / 2}px)`;
+      // Ngón tay che mất quân: trên điện thoại quân to hơn để vẫn thấy quanh ngón tay (như chess.com)
+      d.ghost.style.transform = `translate(${e.clientX - d.size / 2}px, ${e.clientY - d.size / 2}px)${d.touch ? ' scale(1.35)' : ''}`;
+      // Viền sáng ô đang trỏ tới
+      const over = document.elementFromPoint(e.clientX, e.clientY);
+      const sq = over && over.closest && over.closest('#chess-pane .sq');
+      if (sq !== d.hover) {
+        if (d.hover) d.hover.classList.remove('is-hover');
+        if (sq) sq.classList.add('is-hover');
+        d.hover = sq;
+      }
     });
     function endDrag(e) {
       const d = dragging;
       dragging = null;
       if (!d || !d.ghost) return;
       d.ghost.remove();
+      if (d.hover) d.hover.classList.remove('is-hover');
       suppressClick = true;
       setTimeout(() => { suppressClick = false; }, 0);
       const el = e && document.elementFromPoint(e.clientX, e.clientY)?.closest('#chess-pane .sq');
@@ -1644,6 +1717,7 @@ window.ThinkChess = (() => {
           renderGame();
         } else {
           V.selected = null;
+          dropped = { from: d.from, to };
           playMove(`${d.from}${to}`);
         }
       } else {
@@ -1915,6 +1989,7 @@ window.ThinkChess = (() => {
       ['lastMove', 'Tô màu nước vừa đi', 'Tô vàng ô đi và ô đến của nước gần nhất.'],
       ['coords', 'Tọa độ bàn cờ', 'Chữ a–h và số 1–8 ở mép bàn cờ.'],
       ['arrows', 'Mũi tên gợi ý khi phân tích', 'Khi xem lại ván đã phân tích, vẽ mũi tên nước tốt nhất của máy.'],
+      ['anim', 'Quân trượt khi đi', 'Quân cờ trượt mượt từ ô đi tới ô đến (nước của bạn, của đối thủ, khi xem lại ván), quân bị ăn mờ dần.'],
       ['sound', 'Âm thanh', 'Tiếng quân gỗ khi đi (nước của bạn và đối thủ khác nhau), ăn quân, nhập thành, chiếu tướng, phong cấp, sắp hết giờ, bắt đầu và kết thúc ván.'],
     ];
     function openPrefs() {

@@ -5,6 +5,10 @@
    Đường dẫn: #/games (chọn game) · #/chess (cờ vua) · #/chess/g/12 (một ván cờ) · #/caro (cờ caro) · #/blocks (Xếp Khối)
    · #/farm (nông trại) · #/farm/u/5 (ghé vườn một người) */
 window.ThinkGames = (() => {
+  // Mã các game trên trang chọn game. Game nào cũng có chuỗi hằng ngày: mã phải có trong GAMES của src/streaks.js
+  // (test/streaks.test.js kiểm tra). Thẻ game vẽ bằng card() bên dưới tự hiện huy hiệu chuỗi.
+  const GAME_IDS = ['farm', 'blocks', 'chess', 'caro'];
+
   function create(host) {
     const { h, icon, api, state, navigate, goBack, toast, chess, caro, nameOf, userOf, avatarEl, withBusy } = host;
     const $ = (sel) => document.querySelector(sel);
@@ -154,9 +158,11 @@ window.ThinkGames = (() => {
       if (!fs) farmChips.push(h('span', { class: 'game-chip is-alert', text: 'Mới' }));
       if (farmChips.length < 2) farmChips.push(h('span', { class: 'game-chip', text: 'Ghé vườn bạn bè, hái trộm' }));
 
+      const ST = window.ThinkStreaks && window.ThinkStreaks.instance;
       const card = (kind, hash, title, sub, chips, art, cta) => h('a', {
         class: `game-card is-${kind}`,
         href: hash,
+        dataset: { game: kind },
         onclick: (e) => {
           if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
           e.preventDefault();
@@ -168,12 +174,13 @@ window.ThinkGames = (() => {
       h('div', { class: 'game-card-main' },
         h('h2', { class: 'game-card-title', text: title }),
         h('p', { class: 'game-card-sub', text: sub }),
-        h('div', { class: 'game-chips' }, chips),
+        h('div', { class: 'game-chips' }, ST ? ST.chip(kind) : null, chips),
         h('span', { class: 'game-cta' }, icon('play'), cta)),
       art);
 
       const parts = [
         h('p', { class: 'games-intro', text: 'Chơi cùng cả nhóm: làm nông trại, thách đấu cờ vua, cờ caro, đua điểm Xếp Khối mỗi tuần.' }),
+        ST ? ST.hero() : null,
         farm ? card('farm', '#/farm', 'Nông trại', farmSub, farmChips, farmArt(), fs ? 'Ra đồng' : 'Bắt đầu trồng') : null,
         card('blocks', '#/blocks', 'Xếp Khối', blocksSub, blocksChips, blocksArt(), bs && bs.playing != null ? 'Chơi tiếp' : 'Chơi ngay'),
         card('chess', '#/chess', 'Cờ vua', chessSub, chessChips, chessArt(), cs && cs.todo ? 'Vào xem' : 'Vào chơi'),
@@ -235,9 +242,9 @@ window.ThinkGames = (() => {
       reset,
       sync: () => blocks && blocks.sync(),
       onScore: (data) => blocks && blocks.onScore(data),
-      refresh: () => { if (view === 'hub' || view === 'blocks') renderHub(); },
+      refresh: () => { if (view === 'hub' || view === 'blocks' || view === 'farm') renderHub(); },
       onFarmEvent: (data) => farm && farm.onEvent(data),
     };
   }
-  return { create };
+  return { create, GAME_IDS };
 })();

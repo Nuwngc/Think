@@ -197,6 +197,7 @@ window.ThinkBlocks = (() => {
             data = await host.api('/api/games/blocks');
           }
           S.board = { ...data, fetchedAt: Date.now(), uid: me };
+          if (window.ThinkStreaks) await window.ThinkStreaks.flush(host.api, me).catch(() => null);
           store.set(KEY_BOARD, S.board);
           if (data.me) setLocalBest(me, data.me.best);
           S.syncError = false;
@@ -278,6 +279,7 @@ window.ThinkBlocks = (() => {
       const top = el('header', { class: 'bb-top' },
         el('button', { class: 'bb-icon-btn', type: 'button', 'aria-label': host.standalone ? 'Về Think' : 'Quay lại', onclick: () => host.back && host.back() }, icon('back')),
         el('div', { class: 'bb-best', title: 'Kỷ lục của bạn' }, icon('crown'), E.best),
+        !host.standalone && window.ThinkStreaks && window.ThinkStreaks.instance ? window.ThinkStreaks.instance.badge('blocks') : null,
         el('div', { class: 'bb-spacer' }),
         E.sound,
         el('button', { class: 'bb-icon-btn', type: 'button', 'aria-label': 'Ván mới', onclick: askRestart }, icon('restart')),
@@ -718,6 +720,8 @@ window.ThinkBlocks = (() => {
       }
       S.game = res.state;
       saveGame();
+      // Chuỗi hằng ngày: hôm nay có chơi Xếp Khối (lưu trên máy, có mạng thì gửi)
+      if (window.ThinkStreaks) window.ThinkStreaks.mark('blocks', uid());
       play('place', 0.9);
       if (res.lines) {
         play(res.lines >= 3 ? 'clear3' : res.lines === 2 ? 'clear2' : 'clear1', 0.8);

@@ -46,7 +46,8 @@ export const useBlocks = create<State>(() => ({
 const get = useBlocks.getState;
 const set = useBlocks.setState;
 
-type Hooks = { meId: () => number | null; online: () => boolean; toast: (text: string) => void };
+/** played: hôm nay có chơi (chuỗi hằng ngày, src/streaks/store.ts) */
+type Hooks = { meId: () => number | null; online: () => boolean; toast: (text: string) => void; played?: () => void };
 let hooks: Hooks = { meId: () => null, online: () => false, toast: () => undefined };
 /** src/store.ts gắn vào: người đang đăng nhập, có mạng không, thông báo nhỏ */
 export function bindBlocks(h: Hooks) {
@@ -138,6 +139,7 @@ export function placePiece(slot: number, r: number, c: number): (PlaceResult & {
   const res = place(g, slot, r, c);
   if (!res) return null;
   set({ game: res.state });
+  hooks.played?.();
   if (res.over) return { ...res, record: recordGame() };
   save(KEY.game, res.state);
   return res;

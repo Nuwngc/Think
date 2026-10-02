@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 
-// Tùy chọn bàn cờ (lưu trên máy): chỉ dẫn nước đi, tô nước vừa đi, tọa độ, mũi tên gợi ý, âm thanh
+// Tùy chọn bàn cờ (lưu trên máy): chỉ dẫn nước đi, tô nước vừa đi, tọa độ, mũi tên gợi ý, quân trượt, âm thanh
 
 export type ChessPrefs = {
   /** Chấm tròn ở các ô đi được khi chọn quân */
@@ -12,11 +12,13 @@ export type ChessPrefs = {
   coords: boolean;
   /** Mũi tên nước tốt nhất khi xem phân tích */
   arrows: boolean;
+  /** Quân trượt từ ô đi tới ô đến (kiểu chess.com) */
+  anim: boolean;
   /** Tiếng quân cờ, tiếng bắt đầu / kết thúc ván */
   sound: boolean;
 };
 
-export const DEFAULT_PREFS: ChessPrefs = { hints: true, lastMove: true, coords: true, arrows: true, sound: true };
+export const DEFAULT_PREFS: ChessPrefs = { hints: true, lastMove: true, coords: true, arrows: true, anim: true, sound: true };
 
 const KEY = "think.chessPrefs";
 

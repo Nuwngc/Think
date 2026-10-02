@@ -11,6 +11,7 @@ import { ChessHome } from "../chess/ChessHome";
 import { GameScreen } from "../chess/GameScreen";
 import { chessBadge, useChess } from "../chess/store";
 import { SocialHost } from "../social/SocialHost";
+import { StreakHost } from "../streaks/ui";
 import { closeUser, useSocial } from "../social/store";
 import { FarmScreen } from "../farm/FarmScreen";
 import { openVisit as openFarmVisit, useFarm } from "../farm/store";
@@ -158,6 +159,8 @@ export function MainScreen() {
       )}
       {/* Bảng viết bài / bình luận / chia sẻ ván cờ dùng chung cho mọi màn */}
       <SocialHost />
+      {/* Bảng chuỗi hằng ngày, chúc mừng khi đạt mốc */}
+      <StreakHost />
     </View>
   );
 }

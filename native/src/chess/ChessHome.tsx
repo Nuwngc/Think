@@ -5,6 +5,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { shortTime } from "../format";
 import { showGamesHub, useStore } from "../store";
+import { StreakBadge } from "../streaks/ui";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Button, Icon, IconButton, Sheet, useStyles, type IconName } from "../ui";
 import { clockText, myColor, opponentColor, outcomeFor, reasonText, tcLabel } from "./format";
@@ -87,6 +88,7 @@ export function ChessHome() {
                 <Text style={s.heroRank}>#{myRank}</Text>
               </View>
             ) : null}
+            <StreakBadge game="chess" onDark />
           </View>
           <Text style={s.heroStats}>
             {rating && rating.games

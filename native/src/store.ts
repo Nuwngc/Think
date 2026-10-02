@@ -19,6 +19,7 @@ import {
 } from "./caro/store";
 import { bindChess, closeGame, loadChess, onAnalysisEvent, onChessEvent, openGame, resetChess, useChess } from "./chess/store";
 import { bindFarm, loadFarm, onFarmEvent, openVisit as openFarmVisit, resetFarm, setTab as setFarmTab, useFarm } from "./farm/store";
+import { bindStreaks, loadStreaks, markPlayed, onStreakEvent, resetStreaks } from "./streaks/store";
 import { API_URL } from "./config";
 import { convTitle, previewText, type Names } from "./format";
 import type { PreparedImage } from "./images";
@@ -320,6 +321,7 @@ async function enterApp() {
   loadChess();
   loadCaro();
   syncBlocks(); // gửi điểm Xếp Khối chơi lúc mất mạng
+  loadStreaks(); // chuỗi hằng ngày (gửi luôn ngày chơi lúc mất mạng)
   setupPush().catch(() => undefined);
 }
 
@@ -361,6 +363,7 @@ function resetAll(notice: string | null) {
   resetChess();
   resetCaro();
   resetFarm();
+  resetStreaks();
   resetSocial();
   resetBlocksBoard();
   set({ ...initial, phase: "login", notice, appActive: get().appActive, update: get().update });
@@ -427,6 +430,7 @@ async function resync() {
     if (useChess.getState().loaded) loadChess();
     if (useCaro.getState().loaded) loadCaro();
     if (useFarm.getState().farm) loadFarm();
+    loadStreaks();
     refreshSocial();
     syncBlocks();
     const current = get().currentId;
@@ -1209,6 +1213,7 @@ function connectSocket() {
   s.on("caro:game", (data) => onCaroEvent("caro:game", data));
   s.on("caro:challenge", (data) => onCaroEvent("caro:challenge", data));
   s.on("farm:event", onFarmEvent);
+  s.on("streak:update", onStreakEvent);
   for (const name of ["post:new", "post:likes", "post:comment", "post:comment-deleted", "post:deleted"]) {
     s.on(name, (data) => onSocialEvent(name, data));
   }
@@ -1420,6 +1425,7 @@ bindCaro({
     showToast(text, extra || {}, 4500);
   },
   onCaro: () => inCaro() && get().currentId == null && get().appActive,
+  played: () => markPlayed("caro"),
 });
 
 bindFarm({
@@ -1433,6 +1439,13 @@ bindBlocks({
   meId: () => (get().phase === "ready" ? (get().me?.id ?? null) : null),
   online: () => !get().offline,
   toast: (text) => showToast(text),
+  played: () => markPlayed("blocks"),
+});
+
+bindStreaks({
+  meId: () => (get().phase === "ready" ? (get().me?.id ?? 0) : 0),
+  toast: (text) => showToast(text, {}, 4000),
+  online: () => !get().offline,
 });
 
 bindSocial({

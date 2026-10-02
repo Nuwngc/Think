@@ -29,6 +29,7 @@ const { setupSocial, cleanText } = require('./src/social');
 const { setupGames } = require('./src/games');
 const { setupCaro } = require('./src/caro');
 const { setupFarm } = require('./src/farm');
+const { setupStreaks } = require('./src/streaks');
 const { setupReports } = require('./src/reports');
 const chatPlus = require('./src/chat-plus');
 
@@ -1324,6 +1325,17 @@ setupFarm({
   isActive,
   notify: (uid, payload) => push.sendToUser(uid, { icon: '/icons/icon-192.png', ...payload }),
   nameOf: (uid) => get('SELECT display_name FROM users WHERE id = ?', uid)?.display_name || 'Ai đó',
+});
+
+/* ---------------- Chuỗi hằng ngày của mọi game (src/streaks.js) ---------------- */
+
+setupStreaks({
+  app,
+  io,
+  requireAuth,
+  requireReady,
+  isActive,
+  notify: (uid, payload) => push.sendToUser(uid, { icon: '/icons/icon-192.png', ...payload }),
 });
 
 /* ---------------- Chat 2.1.0: sửa, ghim, tìm, chuyển tiếp, tắt thông báo, chủ đề, bình chọn — src/chat-plus.js ---------------- */

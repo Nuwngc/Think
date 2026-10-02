@@ -4,6 +4,7 @@
 const { db, get, all, run, transaction } = require('./db');
 const L = require('./farm-logic');
 const { weekStart } = require('./games');
+const streaks = require('./streaks');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS farms (
@@ -160,6 +161,7 @@ function setupFarm({ app, io, requireAuth, requireReady, isActive, notify, nameO
       L.tick(s, now);
       save(req.user.id, s, now);
     });
+    streaks.record(req.user.id, 'farm'); // chuỗi hằng ngày (src/streaks.js)
     res.json({ now, result, farm: ownView(s, now) });
   }));
 
@@ -208,6 +210,7 @@ function setupFarm({ app, io, requireAuth, requireReady, isActive, notify, nameO
       save(id, owner, now);
       save(me, visitor, now);
     });
+    streaks.record(me, 'farm');
     const type = action === 'help' ? 'help' : result.caught ? 'caught' : 'steal';
     const crop = L.CROP[owner.log[0] && owner.log[0].c] || null;
     io.to(`user:${id}`).emit('farm:event', { type, by: me, plot: Number(plot), item: crop && crop.id });
