@@ -183,11 +183,6 @@ function reminderText(summary) {
 }
 
 /**
- * Ngày chơi máy gửi lên. Bản mới gửi plays: [{ day, t }] (t = lúc chơi theo đồng hồ điện thoại) và now (đồng hồ
- * điện thoại lúc gửi): máy chủ tự trừ độ lệch đồng hồ rồi mới tính ngày theo giờ Việt Nam, nên điện thoại để sai
- * ngày giờ vẫn tính đúng. Bản cũ chỉ gửi days.
- */
-/**
  * Độ lệch đồng hồ điện thoại so với máy chủ (ms, cộng vào giờ điện thoại để ra giờ máy chủ).
  * `clientNow` = giờ điện thoại lúc gửi. Không gửi, hoặc lệch quá 30 ngày (không tin): null.
  */
@@ -196,6 +191,11 @@ function clockSkew(clientNow, serverNow = Date.now()) {
   return Number.isFinite(cn) && cn > 0 && Math.abs(serverNow - cn) < 30 * DAY ? serverNow - cn : null;
 }
 
+/**
+ * Ngày chơi máy gửi lên. Bản mới gửi plays: [{ day, t }] (t = lúc chơi theo đồng hồ điện thoại) và now (đồng hồ
+ * điện thoại lúc gửi): máy chủ tự trừ độ lệch đồng hồ rồi mới tính ngày theo giờ Việt Nam, nên điện thoại để sai
+ * ngày giờ vẫn tính đúng. Bản cũ chỉ gửi days.
+ */
 function playedDays(body, serverNow = Date.now()) {
   if (Array.isArray(body?.plays)) {
     // Đồng hồ điện thoại không tin được: dùng ngày máy gửi
