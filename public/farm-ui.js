@@ -10,6 +10,7 @@ window.ThinkFarm = (() => {
   const KEY_ALL = 'farm-plant-all';
   const KEY_TAB = 'farm-tab';
   const KEY_CAT = 'farm-catalog-v1';
+  const KEY_LOG = 'farm-log-seen'; // + mã người dùng: lần cuối xem nhật ký vườn
   const TABS = [
     { key: 'field', label: 'Ruộng', emoji: '🌱' },
     { key: 'build', label: 'Chế biến', emoji: '🏭' },
@@ -552,6 +553,48 @@ window.ThinkFarm = (() => {
       return h('div', { class: 'farm-dock' }, kids);
     }
 
+    /* ---------------- Khi bạn vắng nhà: ai đã ghé vườn ---------------- */
+    const logKey = () => `${KEY_LOG}-${meId()}`;
+    function unseenLog() {
+      const seen = Number(store.get(logKey(), 0)) || 0;
+      return ((S.farm && S.farm.log) || []).filter((e) => e.t > seen);
+    }
+    function markLogSeen() {
+      const log = (S.farm && S.farm.log) || [];
+      if (!log.length) return;
+      const latest = Math.max(...log.map((e) => e.t));
+      if (latest > (Number(store.get(logKey(), 0)) || 0)) store.set(logKey(), latest);
+    }
+    function logLine(e) {
+      const crop = e.c ? item(e.c) : null;
+      const who = nameOf(e.by);
+      if (e.type === 'help') return `${who} bắt sâu giúp ruộng ${crop ? crop.name.toLowerCase() : ''}`;
+      if (e.type === 'caught') return `Chó đuổi ${who} khỏi vườn, ${who} đền ${e.coins} xu`;
+      return `${who} hái trộm 1 ${crop ? crop.name.toLowerCase() : ''}`;
+    }
+    const logEmoji = (type) => (type === 'help' ? '🐛' : type === 'caught' ? '🐕' : '😤');
+    function awayBanner() {
+      const list = unseenLog();
+      if (!list.length) return null;
+      return h('div', { class: 'farm-gift farm-away' },
+        h('div', { class: 'farm-away-main' },
+          h('b', { text: 'Khi bạn vắng nhà' }),
+          h('ul', {}, list.slice(0, 3).map((e) => h('li', {}, emo(logEmoji(e.type)), h('span', { text: logLine(e) })))),
+          list.length > 3 ? h('p', { class: 'farm-note', text: `…và ${list.length - 3} lần khác` }) : null,
+          h('div', { class: 'farm-away-actions' },
+            h('button', {
+              class: 'fbtn is-soft is-small', type: 'button',
+              onclick: () => {
+                markLogSeen();
+                S.tab = 'friends';
+                store.set(KEY_TAB, 'friends');
+                loadSocial();
+                render();
+              },
+            }, 'Xem nhật ký'),
+            h('button', { class: 'fbtn is-ghost is-small', type: 'button', onclick: () => { markLogSeen(); render(); } }, 'Đã xem'))));
+    }
+
     function giftBanner() {
       const f = S.farm;
       if (!S.market || f.giftDay === S.market.day) return null;
@@ -584,6 +627,7 @@ window.ThinkFarm = (() => {
       const firstTime = f.stats.harvest === 0 && f.plots.some((p) => plotState(p, t) === 'ripe');
       return [
         giftBanner(),
+        awayBanner(),
         yard(f.decor, f.dog),
         h('div', { class: 'fgrid', role: 'list', 'aria-label': 'Ruộng' }, f.plots.map((pl, i) => plotEl(pl, i, t)), buyPlotTile()),
         firstTime ? h('p', { class: 'farm-note', text: 'Lúa mì đã chín sẵn: bấm vào ô có viền vàng để thu hoạch, rồi bấm ô trống để gieo hạt mới. Hạt lúa mì miễn phí.' }) : null,
@@ -884,6 +928,7 @@ window.ThinkFarm = (() => {
 
     function renderFriends() {
       const f = S.farm;
+      markLogSeen(); // đang xem nhật ký rồi thì thôi nhắc ở Ruộng
       if (!S.friends) {
         loadSocial();
         return h('div', { class: 'farm-loading' }, h('p', { text: 'Đang xem vườn của mọi người…' }));
@@ -1090,7 +1135,13 @@ window.ThinkFarm = (() => {
       else if (data.type === 'caught') toast(`Chó nhà bạn vừa đuổi ${who} khỏi vườn 🐕`);
       else if (data.type === 'help') toast(`${who} vừa bắt sâu giúp ruộng ${crop} của bạn 🐛`);
       if (isMounted() && data.type === 'caught') play('dog');
-      load();
+      load().then(() => {
+        // Đang mở nông trại thì vừa báo rồi, không cần nhắc lại ở khung "Khi bạn vắng nhà"
+        if (isMounted() && !document.hidden) {
+          markLogSeen();
+          render();
+        }
+      });
     }
 
     /** Cho thẻ ở trang Trò chơi */

@@ -91,6 +91,11 @@
 }
 .farm-gift .fe { width: 34px; height: 34px; animation: farm-wiggle 2.4s ease-in-out infinite; }
 .farm-gift p { flex: 1; font-size: 14px; line-height: 1.4; }
+.farm-away-main { flex: 1; display: grid; gap: 8px; font-size: 14px; }
+.farm-away ul { display: grid; gap: 6px; padding: 0; margin: 0; }
+.farm-away li { list-style: none; display: flex; align-items: center; gap: 8px; line-height: 1.4; color: var(--ink-2); }
+.farm-away li .fe { width: 22px; height: 22px; animation: none; }
+.farm-away-actions { display: flex; gap: 8px; }
 @keyframes farm-wiggle { 0%, 80%, 100% { transform: rotate(0); } 85% { transform: rotate(-10deg); } 90% { transform: rotate(10deg); } 95% { transform: rotate(-6deg); } }
 
 .fgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -129,6 +134,7 @@
   background: transparent; background-image: none; box-shadow: none; border: 2px dashed rgba(47, 90, 31, 0.45); color: var(--grass-ink);
   display: grid; place-content: center; gap: 4px; text-align: center; font-size: 12.5px; font-weight: 700; padding: 6px;
 }
+.fplot.is-buy { border-color: color-mix(in srgb, var(--grass-ink) 50%, transparent); }
 .fplot.is-buy .fe { width: 22px; height: 22px; justify-self: center; }
 .fplot.is-buy[disabled] { cursor: default; opacity: .7; }
 @media (prefers-reduced-motion: reduce) {
