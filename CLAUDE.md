@@ -24,6 +24,11 @@ Mọi game trên trang Trò chơi phải có chuỗi ngày chơi liên tiếp (R
 
 Dữ liệu ở `public/puzzles/<game>.json` và bản giống hệt `native/src/puzzles/data/<game>.json` (kiểm thử so khớp). Chỉ tạo bằng `scripts/puzzles/<game>.js`; thêm màn bằng `--add N` (chỉ thêm vào cuối, không sửa màn cũ — tiến độ người chơi tính theo số màn). Luật câu đố có hai bản giống hệt: `public/puzzles-core.js` và `native/src/puzzles/core.ts` — sửa một bên thì sửa cả bên kia.
 
+## Tin nhắn thoại, thành tựu
+
+- Tin nhắn thoại: phần dùng chung `public/voice-core.js` và bản app `native/src/voice/core.ts` phải giống hệt (kiểm thử so khớp). Mỗi lúc một trình phát dùng chung (`native/src/voice/player.ts`) — đừng tạo trình phát riêng cho từng tin (Android hết luồng âm thanh).
+- Thành tựu tính trên máy chủ (`src/achievements.js`); web và app chỉ vẽ. Game mới nên có thêm một huy hiệu.
+
 ## Kiểm tra trước khi push
 
 - Máy chủ + web: `npm test`.

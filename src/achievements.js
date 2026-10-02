@@ -3,17 +3,18 @@
 // câu đố, nông trại, bài đăng, tin nhắn). Máy chủ tự tính mỗi lần mở trang cá nhân, không cần lưu điểm riêng.
 // Chủ trang mở trang của mình thì huy hiệu vừa đạt được đánh dấu "Mới" một lần (bảng achievement_seen).
 // Thêm thành tựu: thêm một dòng vào DEFS và cách tính vào valuesOf.
+// Biểu tượng: chỉ dùng emoji cũ (Unicode 6 trở về trước) để Android 7–9 hiện được, không ra ô vuông.
 const { db, get, all, run } = require('./db');
 const streaks = require('./streaks');
 
 const DEFS = [
   { id: 'streak', icon: '🔥', name: 'Lửa bền bỉ', goals: [3, 7, 30], text: (n) => `Chơi game ${n} ngày liên tiếp` },
-  { id: 'chess-wins', icon: '♟️', name: 'Kỳ thủ', goals: [1, 10, 50], text: (n) => `Thắng ${n} ván cờ vua` },
+  { id: 'chess-wins', icon: '🏆', name: 'Kỳ thủ', goals: [1, 10, 50], text: (n) => `Thắng ${n} ván cờ vua` },
   { id: 'chess-elo', icon: '👑', name: 'Cao thủ cờ vua', goals: [1300, 1500, 1800], base: 1200, text: (n) => `Đạt ${n} điểm ELO cờ vua` },
   { id: 'caro-wins', icon: '🎯', name: 'Vua caro', goals: [1, 10, 50], text: (n) => `Thắng ${n} ván cờ caro với bạn bè` },
-  { id: 'blocks', icon: '🧱', name: 'Thợ xếp khối', goals: [1000, 5000, 20000], text: (n) => `Đạt ${n.toLocaleString('vi-VN')} điểm một ván Xếp Khối` },
+  { id: 'blocks', icon: '🎮', name: 'Thợ xếp khối', goals: [1000, 5000, 20000], text: (n) => `Đạt ${n.toLocaleString('vi-VN')} điểm một ván Xếp Khối` },
   { id: 'puzzle-stars', icon: '⭐', name: 'Nhà giải đố', goals: [30, 150, 450], text: (n) => `Gom ${n} sao Thử thách nhanh` },
-  { id: 'quiz', icon: '🧩', name: 'Quiz mỗi ngày', goals: [1, 10, 50], text: (n) => `Giải ${n} quiz hằng ngày` },
+  { id: 'quiz', icon: '📅', name: 'Quiz mỗi ngày', goals: [1, 10, 50], text: (n) => `Giải ${n} quiz hằng ngày` },
   { id: 'farm', icon: '🌾', name: 'Nhà nông', goals: [5, 15, 30], text: (n) => `Nông trại lên cấp ${n}` },
   { id: 'posts', icon: '✍️', name: 'Người kể chuyện', goals: [1, 10, 50], text: (n) => `Đăng ${n} bài lên trang cá nhân` },
   { id: 'likes', icon: '❤️', name: 'Được yêu mến', goals: [10, 50, 200], text: (n) => `Nhận ${n} lượt thích` },

@@ -90,7 +90,7 @@ const makeStyles = (c: Colors) =>
     item: { width: "25%", alignItems: "center", gap: 5, paddingVertical: 4, paddingHorizontal: 2, borderRadius: 14 },
     medal: { width: 54, height: 54, borderRadius: 27, borderWidth: 3, alignItems: "center", justifyContent: "center" },
     gold: { shadowColor: "#E0A100", shadowOpacity: 0.45, shadowRadius: 6, shadowOffset: { width: 0, height: 0 }, elevation: 3 },
-    icon: { fontSize: 25, lineHeight: 30 },
+    icon: { color: c.text, fontSize: 25, lineHeight: 30 },
     new: { position: "absolute", top: -7, right: -12, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999 },
     newText: { color: "#FFFFFF", fontSize: 10.5, fontWeight: "800" },
     name: { color: c.text, fontSize: 12, fontWeight: "700", textAlign: "center", lineHeight: 15, minHeight: 30 },

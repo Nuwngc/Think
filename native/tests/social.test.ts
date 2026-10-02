@@ -169,7 +169,7 @@ describe("bảng tin", () => {
   it("thành tựu mới: báo một câu cho chủ trang, người khác thì không", async () => {
     const ach = (isNew: boolean, name = "Kỳ thủ") => ({
       id: name,
-      icon: "♟️",
+      icon: "🏆",
       name,
       tier: 1,
       tierName: "Đồng",
