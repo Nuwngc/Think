@@ -3,7 +3,7 @@ import { AccessibilityInfo, Animated, Pressable, StyleSheet, View, type GestureR
 
 import { canPlace, fitsAnywhere, shapeOf, SIZE, type Piece } from "../blocks/engine";
 import { Appear, GAP, GOLD, GridCells, gridStyles, gridWidth, PAD, PieceView, previewOf, Shard, useTrayDrag, type Burst, type Preview } from "../blocks/parts";
-import { playBlock, preloadBlockSounds } from "../blocks/sound";
+import { holdBlockSounds, playBlock } from "../blocks/sound";
 import { loadBlocks } from "../blocks/store";
 import type { BlocksPuzzle, BlocksState } from "./core";
 import { puzzleBlocks, puzzleSolutionNext, usePuzzles } from "./store";
@@ -42,9 +42,10 @@ export function BlocksPuzzleBoard({ width, height, locked }: { width: number; he
 
   useEffect(() => {
     loadBlocks(); // bật / tắt âm thanh theo lựa chọn của game Xếp Khối
-    preloadBlockSounds();
+    const release = holdBlockSounds();
     const list = timers.current;
     return () => {
+      release();
       for (const t of list) clearTimeout(t);
       list.clear();
     };

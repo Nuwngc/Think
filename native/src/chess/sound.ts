@@ -34,6 +34,31 @@ export function preloadSounds() {
   }
 }
 
+let holders = 0;
+/** Mở một màn có tiếng cờ vua: tạo sẵn trình phát. Trả về hàm gọi khi rời màn (màn cuối cùng rời thì trả lại luồng âm thanh) */
+export function holdSounds() {
+  holders++;
+  preloadSounds();
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    holders = Math.max(0, holders - 1);
+    if (!holders) releaseSounds();
+  };
+}
+
+export function releaseSounds() {
+  for (const name of Object.keys(players) as SoundName[]) {
+    try {
+      players[name]?.remove();
+    } catch {
+      /* đã trả rồi */
+    }
+    delete players[name];
+  }
+}
+
 export function playSound(name: SoundName) {
   if (!usePrefs.getState().sound) return;
   try {

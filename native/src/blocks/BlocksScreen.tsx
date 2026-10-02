@@ -21,7 +21,7 @@ import { useStore } from "../store";
 import { StreakBadge } from "../streaks/ui";
 import { canPlace, fitsAnywhere, praise, shapeOf, SIZE, type Piece } from "./engine";
 import { Appear, GAP, GOLD, GridCells, gridStyles, gridWidth, PAD, PieceView, previewOf, Shard, useTrayDrag, type Burst, type Preview } from "./parts";
-import { preloadBlockSounds, playBlock } from "./sound";
+import { holdBlockSounds, playBlock } from "./sound";
 import { ensureGame, loadBlocks, localBest, pendingFor, placePiece, recordGame, setSound, startGame, sync, useBlocks } from "./store";
 
 // Game Xếp Khối (kiểu Block Blast): kéo khối từ khay vào bàn 8×8, đầy hàng / cột thì nổ và được điểm.
@@ -184,8 +184,9 @@ export function BlocksScreen({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     loadBlocks().then(() => ensureGame());
-    preloadBlockSounds();
+    const release = holdBlockSounds();
     sync();
+    return release; // rời màn: trả lại luồng âm thanh cho máy
   }, []);
 
   // Rời màn khi ván vừa hết mà chưa kịp hiện kết quả: vẫn ghi điểm

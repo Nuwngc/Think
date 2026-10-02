@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Board } from "../caro/Board";
 import { cellName, winLine } from "../caro/engine";
 import { makesThreat } from "../caro/format";
-import { playCaro, preloadCaroSounds } from "../caro/sound";
+import { holdCaroSounds, playCaro } from "../caro/sound";
 import { loadLocal as loadCaroLocal } from "../caro/store";
 import type { CaroState } from "./core";
 import { puzzleCaro, puzzleSolutionNext, usePuzzles } from "./store";
@@ -20,8 +20,9 @@ export function CaroPuzzleBoard({ width, height, locked, status }: { width: numb
 
   useEffect(() => {
     loadCaroLocal(); // bật / tắt âm thanh theo lựa chọn của game caro
-    preloadCaroSounds();
+    const release = holdCaroSounds();
     return () => {
+      release();
       if (timer.current) clearTimeout(timer.current);
     };
   }, []);

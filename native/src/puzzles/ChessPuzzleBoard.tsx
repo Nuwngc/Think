@@ -4,7 +4,7 @@ import { View } from "react-native";
 
 import { Board } from "../chess/Board";
 import { loadPrefs, usePrefs } from "../chess/prefs";
-import { playSound, preloadSounds, soundForSan, type SoundName } from "../chess/sound";
+import { holdSounds, playSound, soundForSan, type SoundName } from "../chess/sound";
 import { chessSide, type ChessPuzzle, type ChessState } from "./core";
 import { puzzleChess, puzzleSolutionNext, usePuzzles } from "./store";
 
@@ -29,8 +29,9 @@ export function ChessPuzzleBoard({ width, height, locked }: { width: number; hei
 
   useEffect(() => {
     loadPrefs();
-    preloadSounds();
+    const release = holdSounds();
     return () => {
+      release();
       if (timer.current) clearTimeout(timer.current);
     };
   }, []);

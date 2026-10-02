@@ -10,7 +10,7 @@ import { cellName, fromMoves } from "./engine";
 import { LEVEL_INFO, markName, otherSide, ruleLabel, sideNum } from "./format";
 import { ActionButton, BotAvatar, Header, PlayerCard, ResultCard, SoundButton, useEndEffects, useMoveSounds } from "./parts";
 import { BotSheet, RulesSheet } from "./Sheets";
-import { playCaro, preloadCaroSounds } from "./sound";
+import { holdCaroSounds, playCaro } from "./sound";
 import { botStatsOf, canUndo, isMyBotTurn, playBot, swapBot, undoBot, useCaro } from "./store";
 
 // Chơi cờ caro với máy: chạy hẳn trên điện thoại, không cần mạng. Ván được lưu, thoát ra vào lại chơi tiếp.
@@ -32,9 +32,7 @@ export function BotGame() {
   const [rulesOpen, setRulesOpen] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
 
-  useEffect(() => {
-    preloadCaroSounds();
-  }, []);
+  useEffect(() => holdCaroSounds(), []); // rời màn: trả lại luồng âm thanh cho máy
 
   const st = useMemo(() => (g ? fromMoves(g.moves, g.rule) : null), [g]);
   const n = g?.moves.length ?? 0;

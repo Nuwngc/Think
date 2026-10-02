@@ -45,6 +45,35 @@ export function preloadCaroSounds() {
   }
 }
 
+let holders = 0;
+/** Mở một màn có tiếng caro: tạo sẵn trình phát. Trả về hàm gọi khi rời màn (màn cuối cùng rời thì trả lại luồng âm thanh) */
+export function holdCaroSounds() {
+  holders++;
+  preloadCaroSounds();
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    holders = Math.max(0, holders - 1);
+    if (!holders) releaseCaroSounds();
+  };
+}
+
+export function releaseCaroSounds() {
+  for (const t of timers) clearTimeout(t);
+  timers.clear();
+  for (const name of Object.keys(players) as CaroSound[]) {
+    for (const p of players[name] || []) {
+      try {
+        p.remove();
+      } catch {
+        /* đã trả rồi */
+      }
+    }
+    delete players[name];
+  }
+}
+
 function playNow(name: CaroSound, volume: number) {
   try {
     const list = pool(name);

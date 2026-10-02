@@ -37,6 +37,36 @@ export function preloadBlockSounds() {
   }
 }
 
+let holders = 0;
+/**
+ * Mở một màn có tiếng Xếp Khối: tạo sẵn trình phát. Trả về hàm gọi khi rời màn — màn cuối cùng rời thì trả lại
+ * các luồng âm thanh cho máy (Android chỉ cho mỗi app một số luồng; giữ hết tiếng của mọi game thì tiếng sau không phát được).
+ */
+export function holdBlockSounds() {
+  holders++;
+  preloadBlockSounds();
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    holders = Math.max(0, holders - 1);
+    if (!holders) releaseBlockSounds();
+  };
+}
+
+export function releaseBlockSounds() {
+  for (const name of Object.keys(players) as BlockSound[]) {
+    for (const p of players[name] || []) {
+      try {
+        p.remove();
+      } catch {
+        /* đã trả rồi */
+      }
+    }
+    delete players[name];
+  }
+}
+
 export function playBlock(name: BlockSound, volume = 1) {
   if (!enabled) return;
   try {
