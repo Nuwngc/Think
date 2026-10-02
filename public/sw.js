@@ -1,5 +1,5 @@
 /* Service worker: lưu giao diện để mở nhanh + hiện thông báo đẩy kể cả khi đã đóng app */
-const CACHE = 'think-v13';
+const CACHE = 'think-v14';
 // Ảnh trong tin nhắn và ảnh đại diện đã xem được giữ lại trên máy (tên file không bao giờ đổi),
 // nên vẫn hiện được khi mất mạng hoặc khi máy chủ đã dọn ảnh cũ. Tắt "Lưu trên máy" thì không giữ nữa.
 const MEDIA = 'think-media';
@@ -12,6 +12,8 @@ const SHELL = [
   '/chess-ui.js',
   '/chess-anim.js',
   '/social-ui.js',
+  '/voice-core.js',
+  '/voice-ui.js',
   '/games-ui.js',
   // Chuỗi hằng ngày của mọi game
   '/streaks.js',
@@ -79,6 +81,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
+  // Tin nhắn thoại: để trình duyệt tự tải từng đoạn (tua được), không cất vào bộ nhớ đệm
+  if (url.pathname.startsWith('/uploads/audio/')) return;
   if (url.pathname.startsWith('/uploads/')) {
     event.respondWith(mediaFirst(req));
     return;

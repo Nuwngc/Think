@@ -12,4 +12,5 @@ module.exports = {
   UPLOAD_DIR,
   AVATAR_DIR: path.join(UPLOAD_DIR, 'avatars'),
   IMAGE_DIR: path.join(UPLOAD_DIR, 'img'),
+  AUDIO_DIR: path.join(UPLOAD_DIR, 'audio'), // tin nhắn thoại
 };

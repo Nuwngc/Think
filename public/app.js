@@ -361,6 +361,10 @@
     : null;
 
   // Trang cá nhân và bảng tin (public/social-ui.js)
+  // Tin nhắn thoại: ghi âm và nghe (public/voice-ui.js, public/voice-core.js)
+  const voice = window.ThinkVoice && window.VoiceCore ? window.ThinkVoice.create({ h, icon, toast }) : null;
+  const voiceLabel = (m) => `🎤 Tin nhắn thoại${m.audio && m.audio.ms && window.VoiceCore ? ` (${window.VoiceCore.clock(m.audio.ms)})` : ''}`;
+
   const social = window.ThinkSocial
     ? window.ThinkSocial.create({
         api, h, icon, avatarEl, userOf, nameOf, state, toast, navigate, goBack, withBusy, shortTime, fold,
@@ -640,6 +644,7 @@
     if (m.kind === 'system') return systemText(m);
     if (m.deleted) return 'Tin nhắn đã được thu hồi';
     if (m.kind === 'poll') return `📊 ${oneLine(m.text)}`;
+    if (m.kind === 'voice') return voiceLabel(m);
     const hasImage = Boolean(m.image || m.localUrl);
     if (hasImage && !m.text) return 'Đã gửi một ảnh';
     const shared = !hasImage && m.text ? chessShareOf(m.text) : null;
@@ -767,6 +772,10 @@
       if ((location.hash || '#/') !== `#/c/${id}`) return; // người dùng đã chuyển đi chỗ khác
     }
     const changed = state.currentId !== id;
+    if (changed && voice) {
+      voice.cancel(); // đang ghi âm dở cho cuộc trò chuyện khác: bỏ
+      voice.stop();
+    }
     state.currentId = id;
     document.body.classList.add('in-chat');
     $('#chat-empty').hidden = true;
@@ -816,6 +825,10 @@
 
   function closeConversation() {
     if (state.currentId == null) return;
+    if (voice) {
+      voice.cancel();
+      voice.stop();
+    }
     state.currentId = null;
     closeChatSearch();
     hideMentions();
@@ -998,6 +1011,12 @@
 
   function bubbleEl(m) {
     if (m.deleted) return h('div', { class: 'bubble is-deleted', text: 'Tin nhắn đã được thu hồi' });
+    if (m.kind === 'voice') {
+      const vb = h('div', { class: 'bubble is-voice' });
+      if (m.replyTo) vb.append(quoteEl(m.replyTo));
+      vb.append(voice ? voice.player(m) : h('span', { class: 'bubble-text', text: voiceLabel(m) }));
+      return vb;
+    }
     const hasImage = Boolean(m.image || m.localUrl);
     const purged = !hasImage && Boolean(m.imagePurged); // ảnh đã bị dọn khỏi máy chủ, máy này cũng không có
     const showsImage = hasImage || purged;
@@ -1028,7 +1047,7 @@
         : { ...r, text: 'Tin nhắn cũ đã được dọn khỏi máy chủ', gone: true };
     }
     const who = r.senderId == null ? 'Tin nhắn cũ' : r.senderId === state.me.id ? 'Bạn' : nameOf(r.senderId);
-    const text = r.deleted ? 'Tin nhắn đã được thu hồi' : r.text || (r.image ? '📷 Ảnh' : '');
+    const text = r.deleted ? 'Tin nhắn đã được thu hồi' : r.text || (r.audio ? '🎤 Tin nhắn thoại' : r.image ? '📷 Ảnh' : '');
     return h('button', { class: `quote${r.deleted || r.gone ? ' is-gone' : ''}`, type: 'button', dataset: { reply: r.id }, 'aria-label': `Xem tin nhắn gốc của ${who}` },
       h('span', { class: 'quote-name', text: who }),
       h('span', { class: 'quote-text', text }));
@@ -1312,7 +1331,10 @@
   }
 
   // Trả lời tin nhắn
-  const quoteOf = (m) => ({ id: m.id, senderId: m.senderId, deleted: false, text: m.text ? oneLine(m.text).slice(0, 140) : null, image: Boolean(m.image || m.localUrl) });
+  const quoteOf = (m) => ({
+    id: m.id, senderId: m.senderId, deleted: false, text: m.text ? oneLine(m.text).slice(0, 140) : null,
+    image: m.kind !== 'voice' && Boolean(m.image || m.localUrl), audio: m.kind === 'voice',
+  });
   function startReply(m) {
     if (!m || !m.id || m.deleted || m.kind === 'system') return;
     state.replying.set(m.conversationId, m);
@@ -1345,7 +1367,7 @@
     bar.replaceChildren(
       h('div', { class: 'reply-bar-main' },
         h('span', { class: 'reply-bar-title' }, 'Đang trả lời ', h('strong', { text: who })),
-        h('span', { class: 'reply-bar-text', text: m.text ? oneLine(m.text) : m.image || m.localUrl ? '📷 Ảnh' : '' })),
+        h('span', { class: 'reply-bar-text', text: m.kind === 'voice' ? voiceLabel(m) : m.text ? oneLine(m.text) : m.image || m.localUrl ? '📷 Ảnh' : '' })),
       h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Hủy trả lời', onclick: cancelReply }, icon('close')));
     bar.hidden = false;
   }
@@ -2255,6 +2277,20 @@
     m.pending = true;
     m.failed = false;
     try {
+      if (m.audioBlob && !m.uploadedAudio) {
+        const up = await api('/api/upload/audio', { method: 'POST', raw: m.audioBlob });
+        m.uploadedAudio = up.url;
+      }
+      if (m.audioBlob) {
+        const { message } = await api(`/api/conversations/${m.conversationId}/messages`, {
+          method: 'POST',
+          body: { audio: m.uploadedAudio, audioMs: m.audio.ms, audioWave: m.audio.wave, replyTo: m.replyTo ? m.replyTo.id : undefined, clientId: m.clientId },
+        });
+        receive(message);
+        if (state.currentId === m.conversationId) renderMessages();
+        renderConvList();
+        return;
+      }
       if (m.blob && !m.uploadedUrl) {
         const up = await api(`/api/upload?w=${m.w}&h=${m.h}`, { method: 'POST', raw: m.blob });
         m.uploadedUrl = up.url;
@@ -2279,6 +2315,7 @@
     const m = state.msgs.get(state.currentId)?.list.find((item) => !item.id && item.clientId === clientId);
     if (!m || m.pending) return;
     m.uploadedUrl = null;
+    m.uploadedAudio = null;
     deliver(m);
     renderMessages();
   }
@@ -2369,6 +2406,39 @@
       addLocal(m);
       await deliver(m);
     }
+  }
+
+  // Tin nhắn thoại: giữ nút micro để nói, thả tay để gửi (public/voice-ui.js)
+  function sendVoice({ blob, ms, wave }) {
+    const convId = state.currentId;
+    if (convId == null) return;
+    const target = state.replying.get(convId);
+    state.replying.delete(convId);
+    renderReplyBar();
+    const m = {
+      id: null, clientId: newClientId(), conversationId: convId, senderId: state.me.id, kind: 'voice', text: null, image: null,
+      audio: { url: URL.createObjectURL(blob), ms, wave }, audioBlob: blob,
+      replyTo: target ? quoteOf(target) : null, reactions: [], createdAt: Date.now(), pending: true,
+    };
+    addLocal(m);
+    deliver(m);
+  }
+  if (voice) {
+    voice.attach({
+      button: $('#mic-btn'),
+      bar: $('#voice-bar'),
+      onSend: sendVoice,
+      canRecord: () => {
+        if (state.currentId == null) return false;
+        if (state.editing.has(state.currentId)) {
+          toast('Đang sửa tin nhắn: lưu hoặc hủy trước khi ghi âm.');
+          return false;
+        }
+        return true;
+      },
+    });
+  } else {
+    $('#mic-btn').hidden = true;
   }
 
   $('#composer').addEventListener('submit', (e) => {

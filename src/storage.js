@@ -16,7 +16,7 @@ const MB = 1024 * 1024;
 const DAY = 24 * 60 * 60 * 1000;
 const FIREBASE_LIMIT_MB = 900; // Firestore miễn phí 1 GiB, chừa lại một ít cho an toàn
 const DEFAULTS = { autoClean: true, cleanAt: 90, cleanTo: 75, limitMb: null };
-const UPLOAD_RE = /^\/uploads\/(avatars|img)\/([\w.-]+)$/;
+const UPLOAD_RE = /^\/uploads\/(avatars|img|audio)\/([\w.-]+)$/;
 const KEEP_LAST = 'id NOT IN (SELECT last_message_id FROM conversations WHERE last_message_id IS NOT NULL)';
 
 let onChange = () => {};
@@ -135,8 +135,9 @@ function usage() {
   };
   const images = pick('img');
   const avatars = pick('avatar');
+  const audio = pick('audio'); // tin nhắn thoại
   const messages = get('SELECT COUNT(*) AS n FROM messages').n;
-  const total = dbBytes + images.bytes + avatars.bytes;
+  const total = dbBytes + images.bytes + avatars.bytes + audio.bytes;
   const limit = limitFor(total);
   return {
     total,
@@ -147,18 +148,19 @@ function usage() {
     db: { bytes: dbBytes, messages },
     images,
     avatars,
+    audio,
     cloud: cloud.enabled(),
   };
 }
 
 /* ---------------- Xóa dữ liệu ---------------- */
 
-// Ảnh: tin nhắn vẫn còn, chỉ ảnh bị xóa khỏi máy chủ
+// Ảnh (và file tin nhắn thoại): tin nhắn vẫn còn, chỉ file bị xóa khỏi máy chủ
 function purgeImages(rows) {
   if (!rows.length) return 0;
   const now = Date.now();
   transaction(() => {
-    for (const r of rows) run('UPDATE messages SET image = NULL, image_purged = 1, updated_at = ? WHERE id = ?', now, r.id);
+    for (const r of rows) run('UPDATE messages SET image = NULL, audio = NULL, image_purged = 1, updated_at = ? WHERE id = ?', now, r.id);
   });
   let bytes = 0;
   for (const r of rows) {
@@ -176,7 +178,7 @@ function purgeMessages(ids) {
     for (let i = 0; i < ids.length; i += 500) {
       const part = ids.slice(i, i + 500);
       const marks = part.map(() => '?').join(',');
-      images.push(...db.prepare(`SELECT image FROM messages WHERE image IS NOT NULL AND id IN (${marks})`).all(...part));
+      images.push(...db.prepare(`SELECT COALESCE(image, audio) AS image FROM messages WHERE COALESCE(image, audio) IS NOT NULL AND id IN (${marks})`).all(...part));
       db.prepare(`DELETE FROM messages WHERE id IN (${marks})`).run(...part);
     }
   });
@@ -192,8 +194,8 @@ function compact() {
 }
 
 const imageBatch = (cutoff, limit) => all(
-  `SELECT m.id, m.image, COALESCE(u.size, 0) AS size FROM messages m LEFT JOIN uploads u ON u.path = m.image
-    WHERE m.image IS NOT NULL AND m.created_at < ? ORDER BY m.id LIMIT ?`, cutoff, limit);
+  `SELECT m.id, COALESCE(m.image, m.audio) AS image, COALESCE(u.size, 0) AS size FROM messages m LEFT JOIN uploads u ON u.path = COALESCE(m.image, m.audio)
+    WHERE COALESCE(m.image, m.audio) IS NOT NULL AND m.created_at < ? ORDER BY m.id LIMIT ?`, cutoff, limit);
 const messageBatch = (cutoff, limit) => all(
   `SELECT id FROM messages WHERE created_at < ? AND ${KEEP_LAST} ORDER BY id LIMIT ?`, cutoff, limit
 ).map((r) => r.id);
@@ -206,13 +208,13 @@ function avgMessageBytes(u) {
 function preview(kind, cutoff) {
   if (kind === 'images') {
     const r = get(
-      `SELECT COUNT(*) AS n, COALESCE(SUM(u.size), 0) AS bytes FROM messages m LEFT JOIN uploads u ON u.path = m.image
-        WHERE m.image IS NOT NULL AND m.created_at < ?`, cutoff);
+      `SELECT COUNT(*) AS n, COALESCE(SUM(u.size), 0) AS bytes FROM messages m LEFT JOIN uploads u ON u.path = COALESCE(m.image, m.audio)
+        WHERE COALESCE(m.image, m.audio) IS NOT NULL AND m.created_at < ?`, cutoff);
     return { count: r.n, bytes: r.bytes };
   }
   const r = get(`SELECT COUNT(*) AS n FROM messages WHERE created_at < ? AND ${KEEP_LAST}`, cutoff);
   const img = get(
-    `SELECT COALESCE(SUM(u.size), 0) AS bytes FROM messages m JOIN uploads u ON u.path = m.image
+    `SELECT COALESCE(SUM(u.size), 0) AS bytes FROM messages m JOIN uploads u ON u.path = COALESCE(m.image, m.audio)
       WHERE m.created_at < ? AND m.${KEEP_LAST}`, cutoff);
   return { count: r.n, bytes: Math.round(r.n * avgMessageBytes(usage())) + img.bytes };
 }
