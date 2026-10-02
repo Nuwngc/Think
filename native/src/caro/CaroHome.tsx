@@ -6,6 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { shortTime } from "../format";
 import { openCaro, showGamesHub, useStore } from "../store";
+import { PuzzleEntry } from "../puzzles/ui";
 import { StreakBadge } from "../streaks/ui";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Button, Icon, IconButton, useStyles, type IconName } from "../ui";
@@ -17,7 +18,7 @@ import { BotSheet, ChallengeSheet, LeaderboardSheet, RankRow, RulesSheet } from 
 import { answerChallenge, botStatsOf, isMyBotTurn, loadCaro, loadLocal, openGame, useCaro } from "./store";
 import type { BotGame, CaroGame } from "./types";
 
-// Trang Cờ caro: điểm ELO, chơi với máy, thách đấu, lời thách đấu, ván đang chơi, bảng xếp hạng, ván gần đây.
+// Trang Cờ caro: điểm ELO, chơi với máy, thách đấu, câu đố (quiz hôm nay, thử thách nhanh), lời thách đấu, ván đang chơi, bảng xếp hạng, ván gần đây.
 
 const CHALLENGE_TTL = 15 * 60 * 1000;
 
@@ -109,6 +110,9 @@ export function CaroHome() {
         </View>
 
         {resume ? <ResumeCard g={resume} /> : null}
+
+        {/* Câu đố caro: quiz hôm nay + thử thách nhanh (chơi được khi mất mạng) */}
+        <PuzzleEntry game="caro" />
 
         {error && !loaded ? (
           <View style={[s.banner, { backgroundColor: c.dangerWash }]}>

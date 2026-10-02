@@ -352,8 +352,12 @@
   const streaks = window.ThinkStreaks
     ? window.ThinkStreaks.create({ h, icon, api, state, toast, onChange: () => games && games.refresh() })
     : null;
+  // Câu đố của Cờ vua, Xếp Khối, Cờ caro: Quiz hôm nay + Thử thách nhanh (public/puzzles-ui.js, máy chủ src/puzzles.js)
+  const puzzles = window.ThinkPuzzles && window.PuzzlesCore
+    ? window.ThinkPuzzles.create({ h, icon, api, state, toast, navigate, goBack, nameOf, userOf, avatarEl, chess, caro, onChange: () => games && games.refresh() })
+    : null;
   games = window.ThinkGames
-    ? window.ThinkGames.create({ h, icon, api, state, navigate, goBack, toast, chess, caro, nameOf, userOf, avatarEl, withBusy })
+    ? window.ThinkGames.create({ h, icon, api, state, navigate, goBack, toast, chess, caro, puzzles, nameOf, userOf, avatarEl, withBusy })
     : null;
 
   // Trang cá nhân và bảng tin (public/social-ui.js)
@@ -417,6 +421,7 @@
     if (caro) caro.reset();
     if (games) games.reset();
     if (streaks) streaks.reset();
+    if (puzzles) puzzles.reset();
     if (social) social.reset();
     $('#conv-list').replaceChildren();
     $('#messages').replaceChildren();
@@ -460,13 +465,19 @@
     const postPage = /^#\/p\/(\d+)$/.exec(hash);
     // Nông trại: #/farm (vườn của mình), #/farm/u/5 (ghé vườn một người)
     const farmPage = /^#\/farm(?:\/u\/(\d+))?$/.exec(hash);
-    const gamesView = hash === '#/chess' || chessGame ? 'chess' : caroPage ? 'caro' : hash === '#/blocks' ? 'blocks' : farmPage ? 'farm' : hash === '#/games' ? 'hub' : null;
+    // Câu đố: #/quiz/chess (quiz hôm nay), #/levels/chess (bản đồ màn), #/levels/chess/12 (màn 12)
+    const quizPage = /^#\/quiz\/(chess|blocks|caro)$/.exec(hash);
+    const levelsPage = /^#\/levels\/(chess|blocks|caro)(?:\/(\d+))?$/.exec(hash);
+    const puzzleTarget = quizPage ? { kind: 'quiz', game: quizPage[1] }
+      : levelsPage ? (levelsPage[2] ? { kind: 'level', game: levelsPage[1], level: Number(levelsPage[2]) } : { kind: 'map', game: levelsPage[1] })
+        : null;
+    const gamesView = hash === '#/chess' || chessGame ? 'chess' : caroPage ? 'caro' : hash === '#/blocks' ? 'blocks' : farmPage ? 'farm' : puzzleTarget ? 'puzzle' : hash === '#/games' ? 'hub' : null;
     const tab = hash === '#/me' || hash === '#/settings' || postPage ? 'me'
       : hash === '#/admin' ? 'admin'
         : gamesView ? 'games'
           : userPage ? (state.tab || 'chats')
             : 'chats';
-    if (tab === 'games' && (!games || (gamesView === 'chess' && !chess) || (gamesView === 'caro' && !caro))) {
+    if (tab === 'games' && (!games || (gamesView === 'chess' && !chess) || (gamesView === 'caro' && !caro) || (gamesView === 'puzzle' && !puzzles))) {
       navigate('#/', { replace: true });
       return;
     }
@@ -507,6 +518,8 @@
     }
     // Cờ caro chạy sau cùng: mở / đóng cột phải của caro sau khi các phần khác đã ẩn hiện xong
     if (caro) caro.route(tab === 'games' && gamesView === 'caro', !caroPage ? null : caroPage[1] ? 'bot' : caroPage[2] ? Number(caroPage[2]) : null);
+    // Câu đố mở sau cùng (cột phải): các phần khác đã đóng cột của mình xong
+    if (puzzles) puzzles.route(tab === 'games' && gamesView === 'puzzle' ? puzzleTarget : null);
     showSheet(sheet);
     if (sheet === 'conv') renderConvSheet();
     if (sheet === 'forward') renderForward();
@@ -2855,6 +2868,7 @@ ${sections}
         if (chess) chess.reload();
         if (caro) caro.reload();
         if (streaks) streaks.load();
+        if (puzzles) puzzles.load(); // gửi kết quả câu đố giải lúc mất mạng
       }
       state.everConnected = true;
     });
@@ -2894,6 +2908,7 @@ ${sections}
     if (games) socket.on('games:score', (data) => games.onScore(data));
     if (games) socket.on('farm:event', (data) => games.onFarmEvent(data));
     if (streaks) socket.on('streak:update', (data) => streaks.onUpdate(data));
+    if (puzzles) socket.on('puzzle:daily', (data) => puzzles.onDaily(data));
     socket.on('admin:errors', () => {
       if (state.tab === 'admin' && state.adminSeg === 'errors') loadErrors();
       else $('#errors-badge').hidden = false;
@@ -4478,6 +4493,7 @@ ${sections}
     if (caro) caro.load();
     if (games) games.sync(); // gửi điểm Xếp Khối chơi lúc offline
     if (streaks) streaks.load(); // chuỗi hằng ngày (gửi luôn ngày chơi lúc mất mạng)
+    if (puzzles) puzzles.load(); // câu đố: tiến độ trên máy chủ (gửi luôn kết quả giải lúc mất mạng)
     syncPush();
     if (LocalDB.ready()) {
       cacheMe(state.me);

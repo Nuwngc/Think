@@ -533,6 +533,109 @@ def s_streaks_all():
     raise RuntimeError(f"Chuỗi hôm nay chưa đủ Nông trại, Cờ vua, Xếp Khối (có: {sorted(today)})")
 
 
+# ---------- Quiz hằng ngày + Thử thách nhanh (câu đố) ----------
+
+PUZZLE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "public", "puzzles")
+PROMO = {"q": "Hậu", "r": "Xe", "b": "Tượng", "n": "Mã"}
+
+
+def puzzle_data(game):
+    with open(os.path.join(PUZZLE_DIR, f"{game}.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def today_daily(game):
+    # Giống public/puzzles-core.js: ngày giờ Việt Nam, đếm từ 2026-01-01, xoay vòng danh sách quiz
+    import datetime
+    today = (datetime.datetime.utcnow() + datetime.timedelta(hours=7)).date()
+    daily = puzzle_data(game)["daily"]
+    return daily[(today - datetime.date(2026, 1, 1)).days % len(daily)]
+
+
+def play_chess_puzzle(p):
+    """Đi các nước của người chơi trong lời giải (máy tự đáp): chạm ô đi rồi ô đến"""
+    for k in range(0, len(p["moves"]), 2):
+        m = p["moves"][k]
+        tap(rf"^{m[0:2]}(,|$)", 15)
+        time.sleep(0.8)
+        tap(rf"^{m[2:4]}(,|$)", 10)
+        if len(m) == 5:
+            tap(rf"^{PROMO[m[4]]}$", 10)
+        time.sleep(3)  # máy đáp (quân trượt)
+
+
+def puzzles_now():
+    token, _ = login_token(args.user, args.password)
+    return api_call("/api/puzzles", token=token)
+
+
+def back_to_hub():
+    for _ in range(4):
+        if wait_for(HUB, 4) is not None and find(r"^Gợi ý|^Chơi với máy|^Màn \d+,") is None:
+            return
+        back()
+        time.sleep(1)
+    raise RuntimeError("Không về được mục Trò chơi")
+
+
+def s_quiz_chess():
+    tap_scrolled(r"^Quiz hôm nay Cờ vua")
+    if wait_for(r"chiếu hết|thắng quân", 20) is None:
+        raise RuntimeError("Không mở được quiz cờ vua hôm nay")
+    p = today_daily("chess")
+    time.sleep(1.5)
+    play_chess_puzzle(p)
+    for _ in range(10):
+        mine = puzzles_now()["games"]["chess"]["daily"]["mine"]
+        if mine:
+            break
+        time.sleep(2)
+    else:
+        raise RuntimeError("Giải quiz cờ vua nhưng máy chủ chưa nhận kết quả")
+    if wait_for(r"^Xong$", 10) is not None:
+        tap(r"^Xong$")
+    back_to_hub()
+    return f"giải {len(p['moves']) // 2 + 1} nước, {mine.get('stars')} sao"
+
+
+def s_levels_chess():
+    tap_scrolled(r"^Thử thách nhanh Cờ vua")
+    if wait_for(r"^Màn 1,", 20) is None:
+        raise RuntimeError("Không mở được bản đồ Thử thách nhanh cờ vua")
+    tap(r"^Màn 1,")
+    if wait_for(r"chiếu hết|thắng quân", 20) is None:
+        raise RuntimeError("Không mở được màn 1")
+    time.sleep(1.5)
+    play_chess_puzzle(puzzle_data("chess")["levels"][0])
+    for _ in range(10):
+        stars = puzzles_now()["games"]["chess"]["stars"]
+        if stars[:1] not in ("", "0"):
+            break
+        time.sleep(2)
+    else:
+        raise RuntimeError("Giải màn 1 nhưng máy chủ chưa nhận kết quả")
+    if wait_for(r"^Về bản đồ", 10) is not None:
+        tap(r"^Về bản đồ")
+        if wait_for(r"^Màn 2,", 10) is None or find(r"^Màn 2, chưa mở") is not None:
+            raise RuntimeError("Giải màn 1 mà màn 2 chưa mở")
+    back_to_hub()
+    return f"màn 1: {stars[0]} sao"
+
+
+def s_quiz_others():
+    seen = []
+    for game, title, goal in (("caro", "Cờ caro", r"Bạn cầm X"), ("blocks", "Xếp Khối", r"^Đặt hết \d+ khối")):
+        tap_scrolled(rf"^Quiz hôm nay {title}")
+        if wait_for(goal, 20) is None:
+            raise RuntimeError(f"Không mở được quiz {title} hôm nay")
+        time.sleep(1.5)
+        if not alive():
+            raise RuntimeError(f"Mở quiz {title} thì app bị tắt")
+        seen.append(title)
+        back_to_hub()
+    return "mở được quiz " + ", ".join(seen)
+
+
 def s_background():
     sh("input keyevent 3")  # nút Home
     time.sleep(4)
@@ -769,6 +872,9 @@ def main():
         step("Nông trại: thu hoạch, gieo hạt (có âm thanh)", s_farm)
         step("Nông trại: ghé vườn bạn rồi quay lại", s_farm_visit)
         step("Chuỗi hằng ngày", s_streaks)
+        step("Quiz hôm nay: cờ vua (giải trên màn hình)", s_quiz_chess)
+        step("Thử thách nhanh: cờ vua màn 1", s_levels_chess)
+        step("Quiz hôm nay: cờ caro, Xếp Khối", s_quiz_others)
         step("Cờ vua với máy (có âm thanh)", s_chess_bot)
         step("Rời ván cờ", s_chess_back)
         step("Xếp Khối (có âm thanh)", s_blocks)

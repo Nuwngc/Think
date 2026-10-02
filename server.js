@@ -30,6 +30,7 @@ const { setupGames } = require('./src/games');
 const { setupCaro } = require('./src/caro');
 const { setupFarm } = require('./src/farm');
 const { setupStreaks } = require('./src/streaks');
+const { setupPuzzles } = require('./src/puzzles');
 const { setupReports } = require('./src/reports');
 const chatPlus = require('./src/chat-plus');
 
@@ -1337,6 +1338,10 @@ setupStreaks({
   isActive,
   notify: (uid, payload) => push.sendToUser(uid, { icon: '/icons/icon-192.png', ...payload }),
 });
+
+/* ---------------- Quiz hằng ngày + Thử thách nhanh của Cờ vua, Xếp Khối, Cờ caro (src/puzzles.js) ---------------- */
+
+setupPuzzles({ app, io, requireAuth, requireReady });
 
 /* ---------------- Chat 2.1.0: sửa, ghim, tìm, chuyển tiếp, tắt thông báo, chủ đề, bình chọn — src/chat-plus.js ---------------- */
 
