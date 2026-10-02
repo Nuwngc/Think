@@ -252,9 +252,12 @@ def play_one_block():
     slots = [n for n in nodes(root) if (n.get("content-desc") or "").startswith("Khối ")]
     if not slots:
         raise RuntimeError("Không thấy khối nào ở khay")
+    # Ván dở từ bước trước có thể đã có khối ở giữa bàn: thử giữa bàn trước, rồi lan dần ra bốn phía
+    spots = [(0, 0), (-120, -120), (120, 120), (-120, 120), (120, -120)]
+    spots += [(dx, dy) for dx in (-240, 0, 240) for dy in (-240, 0, 240) if (dx, dy) != (0, 0)]
     for n in slots:
         sx, sy = center(n)
-        for dx, dy in [(0, 0), (-120, -120), (120, 120), (-120, 120), (120, -120)]:
+        for dx, dy in spots:
             sh(f"input swipe {sx} {sy} {bx + dx} {by + dy + 150} 900")
             time.sleep(1.5)
             after = score_of()
