@@ -67,6 +67,21 @@ window.ThinkStreaks = (() => {
     return summary;
   }
 
+  /** Bông tuyết của "đóng băng chuỗi" (vẽ bằng nét, máy Android cũ không có emoji 🧊) */
+  function ice(cls = '') {
+    const svg = document.createElementNS(SVG, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('class', `streak-ice${cls ? ` ${cls}` : ''}`);
+    svg.setAttribute('aria-hidden', 'true');
+    for (const deg of [0, 60, 120]) {
+      const g = document.createElementNS(SVG, 'path');
+      g.setAttribute('d', 'M12 2.5v19M9.2 4.6 12 7.2l2.8-2.6M9.2 19.4 12 16.8l2.8 2.6');
+      g.setAttribute('transform', `rotate(${deg} 12 12)`);
+      svg.append(g);
+    }
+    return svg;
+  }
+
   /** Hình ngọn lửa (lit = đang cháy) */
   function flame(lit = true, cls = '') {
     const svg = document.createElementNS(SVG, 'svg');
@@ -85,6 +100,7 @@ window.ThinkStreaks = (() => {
 
   function create(host) {
     const { h, api, state, toast } = host;
+    const KEY_ICE = 'streak-freeze-seen-v1';
     // gen tăng mỗi lần đăng xuất: phản hồi của người cũ về muộn thì bỏ
     const S = { data: null, loading: null, flushTimer: null, gen: 0 };
     const me = () => (state.me ? state.me.id : null);
@@ -99,6 +115,7 @@ window.ThinkStreaks = (() => {
           const data = await api('/api/streaks');
           if (g0 !== S.gen) return;
           S.data = data;
+          announceFreeze(uid);
           const fresh = await flush(api, uid, () => g0 === S.gen && me() === uid);
           if (fresh && g0 === S.gen) S.data = fresh;
         } catch { /* thôi, lần sau tải lại */ } finally {
@@ -122,6 +139,21 @@ window.ThinkStreaks = (() => {
         }
       }, 1500);
     }
+    /** Máy chủ vừa dùng lượt đóng băng cho ngày quên chơi: báo một lần (mỗi ngày, mỗi người) */
+    function announceFreeze(uid) {
+      const used = (S.data && S.data.freeze && S.data.freeze.used) || [];
+      if (!used.length || !toast) return;
+      let seen = {};
+      try { seen = JSON.parse(localStorage.getItem(KEY_ICE) || '{}') || {}; } catch { seen = {}; }
+      const mine = Array.isArray(seen[uid]) ? seen[uid] : [];
+      const fresh = used.filter((d) => !mine.includes(d));
+      if (!fresh.length) return;
+      seen[uid] = [...mine, ...fresh].slice(-14);
+      try { localStorage.setItem(KEY_ICE, JSON.stringify(seen)); } catch { /* thôi */ }
+      const o = S.data.overall;
+      toast(`❄️ Hôm ${fresh.length > 1 ? 'trước' : 'qua'} bạn quên chơi — đã dùng ${fresh.length} lượt đóng băng để giữ chuỗi${o && o.current ? ` ${o.current} ngày` : ''}.`);
+    }
+
     /** Hôm nay `who` đã chơi `game` (máy chủ đã ghi) */
     const playedToday = (game, day, who) => who === me() && S.data && S.data.today === day && Boolean(gameOf(game) && gameOf(game).today);
 
@@ -151,11 +183,25 @@ window.ThinkStreaks = (() => {
     }
 
     /* ---------------- Mảnh giao diện ---------------- */
-    function week(list, cls = '') {
-      return h('ol', { class: `streak-week ${cls}`.trim(), 'aria-label': `7 ngày gần nhất: ${list.filter(Boolean).length} ngày có chơi` },
-        list.map((on, i) => h('li', { class: `${on ? 'is-on' : ''}${i === 6 ? ' is-today' : ''}`.trim() },
-          h('span', { class: 'streak-dot' }, on ? flame(true) : null),
-          h('small', { text: i === 6 ? 'Nay' : labelFor(i) }))));
+    /** showIce: hiện ngày đóng băng (thẻ từng game: chỉ khi chuỗi game đó còn) */
+    function week(list, cls = '', showIce = true) {
+      const frozen = (showIce && S.data && S.data.freeze && S.data.freeze.week) || [];
+      const nFrozen = list.filter((on, i) => !on && frozen[i]).length;
+      return h('ol', { class: `streak-week ${cls}`.trim(), 'aria-label': `7 ngày gần nhất: ${list.filter(Boolean).length} ngày có chơi${nFrozen ? `, ${nFrozen} ngày đóng băng` : ''}` },
+        list.map((on, i) => {
+          const iced = !on && Boolean(frozen[i]);
+          return h('li', { class: `${on ? 'is-on' : ''}${iced ? ' is-frozen' : ''}${i === 6 ? ' is-today' : ''}`.trim() },
+            h('span', { class: 'streak-dot' }, on ? flame(true) : iced ? ice() : null),
+            h('small', { text: i === 6 ? 'Nay' : labelFor(i) }));
+        }));
+    }
+
+    /** Số lượt đóng băng còn lại (null = máy chủ cũ chưa có) */
+    function freezePill(cls = '') {
+      const f = S.data && S.data.freeze;
+      if (!f) return null;
+      return h('span', { class: `streak-freeze-pill${f.count ? '' : ' is-empty'}${cls ? ` ${cls}` : ''}`, title: `Còn ${f.count} lượt đóng băng chuỗi`, 'aria-label': `Còn ${f.count} lượt đóng băng chuỗi` },
+        ice(), String(f.count));
     }
 
     /** Nhãn chuỗi trên thẻ game ở trang Trò chơi (null = chưa có chuỗi) */
@@ -207,7 +253,7 @@ window.ThinkStreaks = (() => {
       },
       h('div', { class: 'streak-hero-flame' }, flame(o.today || o.current > 0), h('strong', { text: String(o.current) })),
       h('div', { class: 'streak-hero-main' },
-        h('h3', { text: title }),
+        h('div', { class: 'streak-hero-head' }, h('h3', { text: title }), freezePill()),
         h('p', { text: line }),
         week(o.week)),
       h('span', { class: 'streak-hero-more', 'aria-hidden': 'true', text: '›' }));
@@ -263,7 +309,7 @@ window.ThinkStreaks = (() => {
         h('div', { class: 'streak-row-main' },
           h('strong', { text: g.name }),
           h('small', { text: g.atRisk ? 'Chơi hôm nay để giữ chuỗi' : g.today ? 'Hôm nay đã chơi' : g.best ? `Kỷ lục ${g.best} ngày` : 'Chưa có chuỗi' }),
-          week(g.week, 'is-small')),
+          week(g.week, 'is-small', g.current > 0)),
         h('div', { class: `streak-row-count${g.today ? ' is-lit' : ''}`, 'aria-label': `${g.current} ngày, kỷ lục ${g.best} ngày` },
           flame(g.today), h('span', { text: String(g.current) }))));
       const reached = Math.max(o.best, ...d.games.map((g) => g.best));
@@ -288,6 +334,12 @@ window.ThinkStreaks = (() => {
             h('p', { class: 'streak-note', text: o.best ? `Kỷ lục: ${o.best} ngày` : 'Chơi game bất kỳ hôm nay để bắt đầu.' }),
             week(o.week))),
         h('ul', { class: 'streak-rows' }, rows),
+        d.freeze ? h('div', { class: 'streak-freeze' },
+          h('div', { class: 'streak-freeze-icons', 'aria-hidden': 'true' },
+            Array.from({ length: d.freeze.max }, (_, i) => h('span', { class: i < d.freeze.count ? 'is-have' : '' }, ice()))),
+          h('div', {},
+            h('b', { text: `Đóng băng chuỗi: còn ${d.freeze.count}/${d.freeze.max} lượt` }),
+            h('p', { class: 'streak-note', text: 'Ngày nào lỡ quên không chơi game nào, 1 lượt tự được dùng để giữ mọi chuỗi (ngày đó không cộng thêm). Mỗi thứ Hai được thêm 1 lượt, giữ tối đa 2.' }))) : null,
         h('div', { class: 'streak-miles', 'aria-label': 'Các mốc chuỗi' },
           d.milestones.slice(0, 8).map((m) => h('span', { class: m <= reached ? 'is-done' : '', text: `${m}` }))),
         h('label', { class: 'streak-remind' }, toggle, h('span', {}, h('b', { text: 'Nhắc giữ chuỗi' }), h('br'), 'Khoảng 20 giờ, nếu chuỗi (từ 2 ngày) sắp mất mà hôm nay bạn chưa chơi.')),

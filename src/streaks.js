@@ -8,6 +8,10 @@
 //      Game chạy trên máy (chơi được khi mất mạng): đặt client: true, phía web gọi ThinkStreaks.mark('<mã>', uid),
 //      phía app gọi markPlayed('<mã>') — ngày chơi tự gửi lên POST /api/streaks/played khi có mạng.
 //   3. Thẻ game ở trang Trò chơi tự hiện huy hiệu chuỗi (test/streaks.test.js kiểm tra đủ cả web và app).
+//
+// Đóng băng chuỗi: mỗi tuần (thứ Hai, giờ VN) được 1 lượt, giữ tối đa FREEZE_MAX. Ngày nào không chơi game nào
+// mà chuỗi hôm trước còn, máy chủ tự dùng 1 lượt cho ngày đó (bảng streak_frozen): mọi chuỗi được nối qua ngày đó
+// nhưng không cộng thêm. Ngày đó sau này mới gửi lên (chơi lúc mất mạng) thì trả lại lượt đã dùng.
 const { db, get, all, run } = require('./db');
 
 const GAMES = [
@@ -24,6 +28,8 @@ const DAY = 86400000;
 const BACKFILL_DAYS = 7; // ngày chơi lúc mất mạng gửi lên muộn: nhận trong vòng 7 ngày
 const REMIND_FROM = 20; // nhắc giữ chuỗi từ 20 giờ…
 const REMIND_TO = 23; // …tới 23 giờ (giờ Việt Nam)
+const FREEZE_MAX = 2; // giữ tối đa 2 lượt đóng băng
+const FREEZE_LOOKBACK = 30; // lâu không mở app: chỉ xét 30 ngày gần nhất
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS streak_days (
@@ -39,6 +45,18 @@ db.exec(`
     remind INTEGER NOT NULL DEFAULT 1,
     reminded_day TEXT
   );
+  CREATE TABLE IF NOT EXISTS streak_freeze (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    count INTEGER NOT NULL DEFAULT 0,
+    granted_week TEXT NOT NULL,
+    checked_day TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS streak_frozen (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, day)
+  );
 `);
 
 /* ---------------- Ngày (giờ Việt Nam), dạng 2026-10-02 ---------------- */
@@ -53,26 +71,35 @@ const isDay = (s) => {
 const addDays = (day, n) => new Date(Date.parse(`${day}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
 /** Thứ trong tuần của một ngày: 0 = thứ Hai … 6 = Chủ nhật */
 const weekday = (day) => (new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7;
+/** Thứ Hai của tuần chứa `day` */
+const mondayOf = (day) => addDays(day, -weekday(day));
 
 /**
- * Chuỗi từ tập ngày đã chơi.
+ * Chuỗi từ tập ngày đã chơi (và tập ngày được đóng băng: nối chuỗi qua ngày đó nhưng không cộng thêm).
  * current: số ngày liên tiếp tính tới hôm nay (hôm nay chưa chơi thì tính tới hôm qua — chuỗi vẫn còn, chơi hôm nay để giữ)
  * week: 7 ngày gần nhất (cũ → mới, ngày cuối là hôm nay)
  */
-function streakOf(days, today) {
+function streakOf(days, today, frozen = new Set()) {
   const set = days instanceof Set ? days : new Set(days);
   const playedToday = set.has(today);
   let current = 0;
   let d = playedToday ? today : addDays(today, -1);
-  while (set.has(d)) {
-    current++;
+  while (set.has(d) || frozen.has(d)) {
+    if (set.has(d)) current++;
     d = addDays(d, -1);
   }
   let best = 0;
   let run = 0;
   let prev = null;
-  for (const day of [...set].filter(isDay).sort()) {
-    run = prev && addDays(prev, 1) === day ? run + 1 : 1;
+  let last = null;
+  for (const day of [...new Set([...set, ...frozen])].filter(isDay).sort()) {
+    const next = prev && addDays(prev, 1) === day;
+    if (set.has(day)) {
+      run = next ? run + 1 : 1;
+      last = day;
+    } else if (!next) {
+      run = 0; // ngày đóng băng không nối với gì
+    }
     if (run > best) best = run;
     prev = day;
   }
@@ -84,8 +111,59 @@ function streakOf(days, today) {
     today: playedToday,
     atRisk: !playedToday && current > 0,
     week,
-    last: prev,
+    last,
   };
+}
+
+/* ---------------- Đóng băng chuỗi ---------------- */
+
+/**
+ * Cộng lượt đóng băng mỗi thứ Hai và tự dùng cho các ngày đã qua mà không chơi gì (chuỗi hôm trước còn).
+ * Xét lần lượt từng ngày từ lần xét trước tới hôm qua, nên lâu không mở app vẫn tính đúng thứ tự.
+ */
+function applyFreezes(uid, today, now = Date.now()) {
+  const yesterday = addDays(today, -1);
+  let st = get('SELECT count, granted_week, checked_day FROM streak_freeze WHERE user_id = ?', uid);
+  if (!st) {
+    // Lần đầu: tặng 1 lượt, xét từ hôm qua (hôm qua lỡ quên thì được cứu luôn)
+    st = { count: 1, granted_week: mondayOf(today), checked_day: addDays(today, -2) };
+    run('INSERT OR IGNORE INTO streak_freeze (user_id, count, granted_week, checked_day) VALUES (?, ?, ?, ?)', uid, st.count, st.granted_week, st.checked_day);
+  }
+  let count = st.count;
+  let granted = st.granted_week;
+  if (st.checked_day >= yesterday && granted >= mondayOf(today)) return;
+  const floor = addDays(today, -FREEZE_LOOKBACK);
+  const start = st.checked_day < floor ? floor : addDays(st.checked_day, 1);
+  const from = addDays(start, -1);
+  const played = new Set(all('SELECT DISTINCT day FROM streak_days WHERE user_id = ? AND day >= ?', uid, from).map((r) => r.day));
+  const frozen = new Set(all('SELECT day FROM streak_frozen WHERE user_id = ? AND day >= ?', uid, from).map((r) => r.day));
+  const grant = (d) => {
+    if (mondayOf(d) > granted) {
+      count = Math.min(FREEZE_MAX, count + 1);
+      granted = mondayOf(d);
+    }
+  };
+  for (let d = start; d <= yesterday; d = addDays(d, 1)) {
+    grant(d);
+    const prev = addDays(d, -1);
+    if (count > 0 && !played.has(d) && !frozen.has(d) && (played.has(prev) || frozen.has(prev))) {
+      run('INSERT OR IGNORE INTO streak_frozen (user_id, day, created_at) VALUES (?, ?, ?)', uid, d, now);
+      frozen.add(d);
+      count--;
+    }
+  }
+  grant(today);
+  run('UPDATE streak_freeze SET count = ?, granted_week = ?, checked_day = ? WHERE user_id = ?', count, granted, yesterday > st.checked_day ? yesterday : st.checked_day, uid);
+}
+
+/** Ngày `day` vừa được ghi là có chơi (gửi muộn): lỡ dùng lượt đóng băng cho ngày đó thì trả lại, và xét lại từ ngày đó */
+function refundFreeze(uid, day) {
+  const st = get('SELECT checked_day FROM streak_freeze WHERE user_id = ?', uid);
+  if (!st) return;
+  const r = run('DELETE FROM streak_frozen WHERE user_id = ? AND day = ?', uid, day);
+  if (r.changes) run('UPDATE streak_freeze SET count = MIN(?, count + 1) WHERE user_id = ?', FREEZE_MAX, uid);
+  // Ngày sau đó có thể được đóng băng (chuỗi hóa ra vẫn còn): xét lại
+  if (day <= st.checked_day) run('UPDATE streak_freeze SET checked_day = ? WHERE user_id = ?', day, uid);
 }
 
 /** Mốc vừa đạt được khi chuỗi lên `current` (null nếu không phải mốc) */
@@ -94,6 +172,13 @@ const milestoneOf = (current) => (MILESTONES.includes(current) ? current : null)
 /** Tổng hợp chuỗi của một người: từng game + chuỗi chung */
 function summaryOf(uid, now = Date.now()) {
   const today = dayKey(now);
+  try {
+    applyFreezes(uid, today, now);
+  } catch (err) {
+    console.warn('[streaks] freeze', err.message); // đóng băng hỏng cũng không làm hỏng bảng chuỗi
+  }
+  const frozen = new Set(all('SELECT day FROM streak_frozen WHERE user_id = ?', uid).map((r) => r.day));
+  const fz = get('SELECT count FROM streak_freeze WHERE user_id = ?', uid);
   const rows = all('SELECT game, day FROM streak_days WHERE user_id = ?', uid);
   const byGame = new Map(GAMES.map((g) => [g.id, new Set()]));
   const any = new Set();
@@ -105,10 +190,17 @@ function summaryOf(uid, now = Date.now()) {
   return {
     today,
     weekStartDay: weekday(addDays(today, -6)),
-    games: GAMES.map((g) => ({ id: g.id, name: g.name, ...streakOf(byGame.get(g.id), today) })),
-    overall: streakOf(any, today),
+    games: GAMES.map((g) => ({ id: g.id, name: g.name, ...streakOf(byGame.get(g.id), today, frozen) })),
+    overall: streakOf(any, today, frozen),
     remind: pref ? Boolean(pref.remind) : true,
     milestones: MILESTONES,
+    // Đóng băng chuỗi: số lượt còn, các ngày đã dùng trong 7 ngày gần nhất, 7 ngày (giống week) ngày nào được đóng băng
+    freeze: {
+      count: fz ? fz.count : 0,
+      max: FREEZE_MAX,
+      used: [...frozen].filter((d) => d >= addDays(today, -6)).sort(),
+      week: Array.from({ length: 7 }, (_, i) => frozen.has(addDays(today, i - 6))),
+    },
   };
 }
 
@@ -147,7 +239,10 @@ function recordDaysUnsafe(uid, game, days, now) {
     const day = isDay(raw) && raw > today ? today : raw;
     if (!isDay(day) || day > today || day < oldest || fresh.includes(day)) continue;
     const r = run('INSERT OR IGNORE INTO streak_days (user_id, game, day, created_at) VALUES (?, ?, ?, ?)', uid, game, day, now);
-    if (r.changes) fresh.push(day);
+    if (r.changes) {
+      fresh.push(day);
+      if (day < today) refundFreeze(uid, day);
+    }
   }
   if (!fresh.length) return { added: false };
   const summary = summaryOf(uid, now);
@@ -253,8 +348,8 @@ function setupStreaks({ app, io, requireAuth, requireReady, isActive, notify }) 
       const users = all(
         `SELECT DISTINCT d.user_id FROM streak_days d JOIN users u ON u.id = d.user_id
           LEFT JOIN streak_prefs p ON p.user_id = d.user_id
-          WHERE d.day = ? AND u.disabled = 0 AND COALESCE(p.remind, 1) = 1 AND COALESCE(p.reminded_day, '') != ?`,
-        addDays(today, -1), today
+          WHERE d.day >= ? AND d.day < ? AND u.disabled = 0 AND COALESCE(p.remind, 1) = 1 AND COALESCE(p.reminded_day, '') != ?`,
+        addDays(today, -(FREEZE_MAX + 1)), today, today
       );
       let sent = 0;
       for (const { user_id: uid } of users) {
@@ -287,7 +382,9 @@ function setupStreaks({ app, io, requireAuth, requireReady, isActive, notify }) 
 module.exports = {
   GAMES,
   MILESTONES,
+  FREEZE_MAX,
   setupStreaks,
+  applyFreezes,
   record,
   recordDays,
   playedDays,

@@ -123,3 +123,42 @@
 @media (prefers-reduced-motion: reduce) {
   .streak-hero.is-lit .streak-hero-flame .streak-flame, .streak-cheer-flame, .streak-cheer-flame .streak-flame { animation: none; }
 }
+
+/* Đóng băng chuỗi */
+.streak-ice { width: 1em; height: 1em; flex: none; fill: none; stroke: #3A9BDC; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.streak-week li.is-frozen .streak-dot { background: #DDF1FF; }
+.streak-dot .streak-ice { width: 14px; height: 14px; }
+.streak-week.is-small .streak-dot .streak-ice { width: 11px; height: 11px; }
+.streak-hero-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.streak-hero-head h3 { flex: 1; min-width: 0; }
+.streak-freeze-pill {
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px 2px 6px; border-radius: 999px; flex: none;
+  background: #DDF1FF; color: #1D5F8C; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.streak-freeze-pill .streak-ice { width: 14px; height: 14px; }
+.streak-freeze-pill.is-empty { background: var(--field); color: var(--muted); }
+.streak-freeze-pill.is-empty .streak-ice { stroke: var(--muted); }
+.streak-freeze { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 16px; background: #EEF8FF; }
+.streak-freeze b { font-size: 15px; color: #164C70; }
+.streak-freeze .streak-note { margin-top: 2px; }
+.streak-freeze-icons { display: flex; gap: 4px; flex: none; padding-top: 2px; }
+.streak-freeze-icons span { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: rgba(58, 155, 220, .12); }
+.streak-freeze-icons span .streak-ice { width: 20px; height: 20px; stroke: #9DB5C6; }
+.streak-freeze-icons span.is-have { background: #CDEBFF; }
+.streak-freeze-icons span.is-have .streak-ice { stroke: #2286CC; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .streak-week li.is-frozen .streak-dot { background: #16344A; }
+  :root:not([data-theme="light"]) .streak-freeze-pill:not(.is-empty) { background: #16344A; color: #9FD6FF; }
+  :root:not([data-theme="light"]) .streak-freeze { background: #10273A; }
+  :root:not([data-theme="light"]) .streak-freeze b { color: #BFE3FF; }
+  :root:not([data-theme="light"]) .streak-freeze-icons span.is-have { background: #1C4766; }
+  :root:not([data-theme="light"]) .streak-dot .streak-ice, :root:not([data-theme="light"]) .streak-freeze-pill:not(.is-empty) .streak-ice, :root:not([data-theme="light"]) .streak-freeze-icons .is-have .streak-ice { stroke: #6CC0FF; }
+  :root:not([data-theme="light"]) .streak-freeze-icons span:not(.is-have) .streak-ice { stroke: #4E6576; }
+}
+:root[data-theme="dark"] .streak-week li.is-frozen .streak-dot { background: #16344A; }
+:root[data-theme="dark"] .streak-freeze-pill:not(.is-empty) { background: #16344A; color: #9FD6FF; }
+:root[data-theme="dark"] .streak-freeze { background: #10273A; }
+:root[data-theme="dark"] .streak-freeze b { color: #BFE3FF; }
+:root[data-theme="dark"] .streak-freeze-icons span.is-have { background: #1C4766; }
+:root[data-theme="dark"] .streak-dot .streak-ice, :root[data-theme="dark"] .streak-freeze-pill:not(.is-empty) .streak-ice, :root[data-theme="dark"] .streak-freeze-icons .is-have .streak-ice { stroke: #6CC0FF; }
+:root[data-theme="dark"] .streak-freeze-icons span:not(.is-have) .streak-ice { stroke: #4E6576; }
