@@ -1133,6 +1133,44 @@ a.chess-row-main:hover { background: var(--field); }
 .profile-bio.is-empty { margin-top: 4px; }
 .profile-stats { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; color: var(--ink-2); font-size: 14px; }
 .profile-stats strong { color: var(--ink); font-weight: 800; }
+
+/* Thành tựu (public/social-ui.js): Đồng / Bạc / Vàng */
+.ach { margin-top: 14px; }
+.ach-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.ach-head h3 { font-size: 16px; font-weight: 800; }
+.ach-head h3 span { color: var(--muted); font-weight: 700; font-size: 14px; margin-left: 2px; }
+.ach-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 6px; padding: 0; margin: 0; list-style: none; }
+.ach-item { width: 100%; display: grid; justify-items: center; gap: 5px; padding: 4px 2px; border-radius: 14px; color: var(--ink); text-align: center; }
+.ach-item:focus-visible, .ach-item.is-picked { background: var(--field); outline: none; }
+.ach-medal {
+  --ring: #D3DAD7; --fill: var(--field);
+  position: relative; display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%;
+  background: var(--fill); box-shadow: inset 0 0 0 3px var(--ring);
+}
+.ach-ic { font-size: 26px; line-height: 1; filter: grayscale(1); opacity: .45; }
+.tier-1 .ach-medal { --ring: #C2783A; --fill: #F8E6D6; }
+.tier-2 .ach-medal { --ring: #8E9DA8; --fill: #E9EEF2; }
+.tier-3 .ach-medal { --ring: #E0A100; --fill: #FFF1C2; box-shadow: inset 0 0 0 3px var(--ring), 0 0 0 3px rgba(224, 161, 0, .18); }
+.tier-1 .ach-ic, .tier-2 .ach-ic, .tier-3 .ach-ic { filter: none; opacity: 1; }
+.ach-new { position: absolute; top: -6px; right: -10px; padding: 1px 6px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 10.5px; font-weight: 800; }
+.ach-name { font-size: 12px; font-weight: 700; line-height: 1.25; min-height: 2.5em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ach-bar { width: 70%; height: 4px; border-radius: 2px; background: var(--field); overflow: hidden; }
+.ach-bar i { display: block; height: 100%; border-radius: 2px; background: var(--jade); }
+.ach-tier { font-size: 11px; font-weight: 800; color: #9A6B00; }
+.ach-detail { min-height: 1.4em; margin-top: 8px; font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
+.ach-detail:empty::before { content: 'Chạm vào huy hiệu để xem cách đạt được.'; color: var(--muted); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ach-medal { --ring: #3A4743; }
+  :root:not([data-theme="light"]) .tier-1 .ach-medal { --ring: #C2783A; --fill: #3B2618; }
+  :root:not([data-theme="light"]) .tier-2 .ach-medal { --ring: #A9B6BF; --fill: #2A3238; }
+  :root:not([data-theme="light"]) .tier-3 .ach-medal { --ring: #F2B81C; --fill: #3A2F0E; }
+  :root:not([data-theme="light"]) .ach-tier { color: #F2C04E; }
+}
+:root[data-theme="dark"] .ach-medal { --ring: #3A4743; }
+:root[data-theme="dark"] .tier-1 .ach-medal { --ring: #C2783A; --fill: #3B2618; }
+:root[data-theme="dark"] .tier-2 .ach-medal { --ring: #A9B6BF; --fill: #2A3238; }
+:root[data-theme="dark"] .tier-3 .ach-medal { --ring: #F2B81C; --fill: #3A2F0E; }
+:root[data-theme="dark"] .ach-tier { color: #F2C04E; }
 .link-plain { color: var(--jade-ink); font-weight: 700; font-size: 14px; padding: 0; }
 .link-plain:hover { text-decoration: underline; }
 

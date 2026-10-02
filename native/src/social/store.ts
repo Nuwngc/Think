@@ -123,6 +123,11 @@ export async function loadProfile(userId: number) {
   try {
     const { stats } = await api.profile(userId);
     set((s) => ({ profiles: { ...s.profiles, [userId]: stats } }));
+    // Thành tựu vừa đạt (chỉ chủ trang thấy, mỗi huy hiệu một lần)
+    const fresh = userId === bridge.meId() ? (stats.achievements?.list || []).filter((a) => a.isNew) : [];
+    if (fresh.length) {
+      bridge.toast(fresh.length === 1 ? `🏆 Thành tựu mới: ${fresh[0].name} (${fresh[0].tierName})` : `🏆 ${fresh.length} thành tựu mới — xem ở trang cá nhân`);
+    }
   } catch {
     /* thiếu số liệu thì thôi */
   }

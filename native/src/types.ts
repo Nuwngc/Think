@@ -175,6 +175,27 @@ export type ProfileStats = {
   chess: { rating: number; games: number; wins: number } | null;
   blocks?: { best: number; games: number } | null;
   caro?: { rating: number; games: number; wins: number } | null;
+  /** Thành tựu (máy chủ cũ không có) */
+  achievements?: { list: Achievement[]; earned: number; total: number };
+};
+
+/** Một thành tựu trên trang cá nhân (src/achievements.js): bậc 0 = chưa đạt, 1 Đồng, 2 Bạc, 3 Vàng */
+export type Achievement = {
+  id: string;
+  icon: string;
+  name: string;
+  tier: number;
+  tierName: string;
+  value: number;
+  goals: number[];
+  next: number | null;
+  /** Việc cần làm tiếp (hoặc bậc cao nhất) */
+  text: string;
+  /** Việc đã làm được ở bậc hiện tại */
+  done: string | null;
+  progress: number;
+  /** Chủ trang vừa đạt (hiện "Mới" một lần) */
+  isNew: boolean;
 };
 
 /** Báo lỗi app (Quản trị → Báo lỗi app) */

@@ -204,6 +204,13 @@ function summaryOf(uid, now = Date.now()) {
   };
 }
 
+/** Kỷ lục chuỗi chơi game chung của một người (trang cá nhân: thành tựu) */
+function bestOverall(uid, now = Date.now()) {
+  const days = new Set(all('SELECT DISTINCT day FROM streak_days WHERE user_id = ?', uid).map((r) => r.day));
+  const frozen = new Set(all('SELECT day FROM streak_frozen WHERE user_id = ?', uid).map((r) => r.day));
+  return streakOf(days, dayKey(now), frozen).best;
+}
+
 /* ---------------- Ghi nhận ngày chơi ---------------- */
 
 let ioRef = null;
@@ -391,6 +398,7 @@ module.exports = {
   clockSkew,
   summaryOf,
   streakOf,
+  bestOverall,
   dayKey,
   addDays,
   weekday,

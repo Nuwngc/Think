@@ -12,6 +12,7 @@ import { applyMe, openDm, openSettings, showToast, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import type { User } from "../types";
 import { Avatar, Button, Icon, useStyles } from "../ui";
+import { Achievements } from "./Achievements";
 import { PostCard } from "./PostCard";
 import { listKey, loadPosts, loadProfile, openComposer, setSeg, useSocial, type ListKey } from "./store";
 
@@ -213,6 +214,7 @@ function Hero({ user, own, width }: { user: User; own: boolean; width: number })
             ) : null}
           </View>
         ) : null}
+        {stats?.achievements ? <Achievements data={stats.achievements} /> : null}
       </View>
       {!own ? <ChallengeSheet visible={challenge} onClose={() => setChallenge(false)} opponentId={user.id} /> : null}
     </View>

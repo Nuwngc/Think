@@ -51,6 +51,11 @@ window.ThinkSocial = (() => {
         const data = await api(`/api/users/${userId}/profile`);
         S.profiles.set(userId, data.stats);
         redrawHeaders(userId);
+        // Thành tựu vừa đạt (chỉ chủ trang thấy, mỗi huy hiệu một lần)
+        const fresh = userId === me() && data.stats && data.stats.achievements ? data.stats.achievements.list.filter((a) => a.isNew) : [];
+        if (fresh.length && toast) {
+          toast(fresh.length === 1 ? `🏆 Thành tựu mới: ${fresh[0].name} (${fresh[0].tierName})` : `🏆 ${fresh.length} thành tựu mới — xem ở trang cá nhân`);
+        }
       } catch { /* thống kê không quan trọng */ }
     }
 
@@ -252,7 +257,53 @@ window.ThinkSocial = (() => {
           h('h2', { class: 'profile-name' }, u.displayName, u.role === 'admin' ? h('span', { class: 'tag tag-admin', text: 'Admin' }) : null),
           h('p', { class: 'profile-handle', text: `@${u.username}${joined ? ` · Tham gia tháng ${joined.getMonth() + 1}/${joined.getFullYear()}` : ''}` }),
           u.bio ? h('p', { class: 'profile-bio', text: u.bio }) : mine ? h('p', { class: 'profile-bio is-empty' }, h('button', { class: 'link-plain', type: 'button', 'data-action': 'settings', text: '+ Thêm lời giới thiệu' })) : null,
-          bits.length ? h('p', { class: 'profile-stats' }, bits) : null));
+          bits.length ? h('p', { class: 'profile-stats' }, bits) : null,
+          stats ? achievementsEl(u, stats.achievements) : null));
+    }
+
+    /* ---------------- Thành tựu (máy chủ tính: src/achievements.js) ---------------- */
+    const achOpen = new Set(); // trang cá nhân đang mở hết danh sách
+    function achievementsEl(u, ach) {
+      if (!ach || !Array.isArray(ach.list) || !ach.list.length) return null;
+      const SHOW = 8;
+      const all = achOpen.has(u.id);
+      const detail = h('p', { class: 'ach-detail', role: 'status', 'aria-live': 'polite' });
+      const say = (a) => {
+        detail.textContent = a.tier
+          ? `${a.icon} ${a.name} · ${a.tierName}: ${a.done}.${a.next ? ` Tiếp theo: ${a.text} (${a.value.toLocaleString('vi-VN')}/${a.next.toLocaleString('vi-VN')}).` : ' Đã đạt bậc cao nhất!'}`
+          : `${a.icon} ${a.name}: ${a.text} (${a.value.toLocaleString('vi-VN')}/${a.next.toLocaleString('vi-VN')}).`;
+      };
+      const items = (all ? ach.list : ach.list.slice(0, SHOW)).map((a) => h('li', {},
+        h('button', {
+          class: `ach-item tier-${a.tier}${a.isNew ? ' is-new' : ''}`,
+          type: 'button',
+          'aria-label': `${a.name}${a.tier ? `, bậc ${a.tierName}` : ', chưa đạt'}. ${a.tier ? a.done : a.text}`,
+          onclick: (e) => {
+            for (const b of e.currentTarget.closest('.ach-grid').querySelectorAll('.ach-item')) b.classList.remove('is-picked');
+            e.currentTarget.classList.add('is-picked');
+            say(a);
+          },
+        },
+        h('span', { class: 'ach-medal' }, h('span', { class: 'ach-ic', text: a.icon }), a.isNew ? h('span', { class: 'ach-new', text: 'Mới' }) : null),
+        h('span', { class: 'ach-name', text: a.name }),
+        a.next
+          ? h('span', { class: 'ach-bar', 'aria-hidden': 'true' }, h('i', { style: `width:${Math.round(a.progress * 100)}%` }))
+          : h('span', { class: 'ach-tier', text: a.tierName }))));
+      return h('section', { class: 'ach', 'aria-label': 'Thành tựu' },
+        h('header', { class: 'ach-head' },
+          h('h3', {}, 'Thành tựu ', h('span', { text: `${ach.earned}/${ach.total}` })),
+          ach.list.length > SHOW
+            ? h('button', {
+              class: 'link-plain', type: 'button', text: all ? 'Thu gọn' : 'Xem tất cả',
+              onclick: () => {
+                if (all) achOpen.delete(u.id);
+                else achOpen.add(u.id);
+                redrawHeaders(u.id);
+              },
+            })
+            : null),
+        h('ul', { class: 'ach-grid' }, items),
+        detail);
     }
 
     function composerCard() {
