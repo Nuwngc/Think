@@ -1,13 +1,23 @@
 'use strict';
-/* Mục "Trò chơi" của bản web: trang chọn game (Cờ vua, Cờ caro, Xếp Khối) + mở game Xếp Khối ở cột phải
-   (toàn màn hình trên điện thoại). Cờ vua do public/chess-ui.js lo; Cờ caro do public/caro-ui.js; Xếp Khối do public/blocks.js.
-   Đường dẫn: #/games (chọn game) · #/chess (cờ vua) · #/chess/g/12 (một ván cờ) · #/caro (cờ caro) · #/blocks (Xếp Khối) */
+/* Mục "Trò chơi" của bản web: trang chọn game (Nông trại, Cờ vua, Cờ caro, Xếp Khối) + mở Xếp Khối / Nông trại ở cột phải
+   (toàn màn hình trên điện thoại). Cờ vua do public/chess-ui.js lo; Cờ caro do public/caro-ui.js; Xếp Khối do public/blocks.js;
+   Nông trại do public/farm-ui.js.
+   Đường dẫn: #/games (chọn game) · #/chess (cờ vua) · #/chess/g/12 (một ván cờ) · #/caro (cờ caro) · #/blocks (Xếp Khối)
+   · #/farm (nông trại) · #/farm/u/5 (ghé vườn một người) */
 window.ThinkGames = (() => {
   function create(host) {
-    const { h, icon, api, state, navigate, goBack, toast, chess, caro, nameOf, userOf, avatarEl } = host;
+    const { h, icon, api, state, navigate, goBack, toast, chess, caro, nameOf, userOf, avatarEl, withBusy } = host;
     const $ = (sel) => document.querySelector(sel);
     const fmt = (n) => Number(n || 0).toLocaleString('vi-VN');
-    let view = null; // 'hub' | 'chess' | 'caro' | 'blocks' | null (đang ở tab khác)
+    let view = null; // 'hub' | 'chess' | 'caro' | 'blocks' | 'farm' | null (đang ở tab khác)
+
+    const farm = window.ThinkFarm
+      ? window.ThinkFarm.create({
+          api, h, icon, avatarEl, userOf, nameOf, state, toast, navigate, goBack, withBusy,
+          // Máy tính: trang chọn game vẫn hiện ở cột trái khi đang mở nông trại
+          onChange: () => { if (view === 'hub' || view === 'farm') renderHub(); },
+        })
+      : null;
 
     const blocks = window.ThinkBlocks
       ? window.ThinkBlocks.create({
@@ -26,8 +36,12 @@ window.ThinkGames = (() => {
         })
       : null;
 
-    // app.js gọi mỗi khi đổi đường dẫn
-    function route(next) {
+    // Cột phải đang có thứ khác mở (chat, ván cờ, trang cá nhân…)
+    const othersOpen = () => state.currentId != null || ['#chess-pane', '#profile-pane', '#caro-pane', '#blocks-pane', '#farm-pane']
+      .some((sel) => { const el = $(sel); return el && !el.hidden; });
+
+    // app.js gọi mỗi khi đổi đường dẫn; farmUser = người đang được ghé vườn (#/farm/u/5)
+    function route(next, farmUser = null) {
       const was = view;
       view = next;
       $('#games-hub').hidden = next === 'chess' || next === 'caro';
@@ -52,8 +66,26 @@ window.ThinkGames = (() => {
           $('#chat-empty').hidden = false;
         }
       }
-      if ((next === 'hub' || next === 'blocks') && was !== next) renderHub();
+      const farmPane = $('#farm-pane');
+      if (next === 'farm' && farm && farmPane) {
+        document.body.classList.add('in-chat');
+        $('#chat-empty').hidden = true;
+        $('#chat-pane').hidden = true;
+        $('#chess-pane').hidden = true;
+        farmPane.hidden = false;
+        if (!farm.isMounted()) farm.mount(farmPane);
+        farm.open(farmUser);
+      } else if (farmPane && !farmPane.hidden) {
+        farm.unmount();
+        farmPane.hidden = true;
+        if (!othersOpen()) {
+          document.body.classList.remove('in-chat');
+          $('#chat-empty').hidden = false;
+        }
+      }
+      if ((next === 'hub' || next === 'blocks' || next === 'farm') && was !== next) renderHub();
       if (next === 'hub' && was !== 'hub' && blocks) blocks.sync();
+      if (next === 'hub' && was !== 'hub' && farm) farm.load({ peek: true });
     }
 
     /* ---------------- Trang chọn game ---------------- */
@@ -66,6 +98,13 @@ window.ThinkGames = (() => {
     }
     function caroArt() {
       return h('div', { class: 'game-art-caro', 'aria-hidden': 'true' }, window.ThinkCaro && window.ThinkCaro.art ? window.ThinkCaro.art() : null);
+    }
+    function farmArt() {
+      // Hình minh họa: ba luống đất có cây đang lớn
+      const E = window.ThinkFarm;
+      const art = h('div', { class: 'game-art-farm', 'aria-hidden': 'true' });
+      for (const ch of ['🌽', '🌱', '🥕', '🍓', '🌶️', '🌱']) art.append(h('span', { class: 'game-art-plot' }, E ? E.emo(ch) : ch));
+      return art;
     }
     function chessArt() {
       const board = window.ThinkChess && window.ThinkChess.miniBoard
@@ -106,6 +145,15 @@ window.ThinkGames = (() => {
       if (ks && ks.botPlaying) caroChips.push(h('span', { class: 'game-chip', text: `Ván dở với máy ${ks.botPlaying.level.toLowerCase()}` }));
       if (caroChips.length < 2) caroChips.push(h('span', { class: 'game-chip' }, icon('bot'), 'Chơi với máy · Thách bạn bè'));
 
+      const fs = farm ? farm.summary() : null;
+      const farmSub = fs ? `Cấp ${fs.level} · ${fmt(fs.coins)} xu` : 'Trồng rau, nấu mì cay, bán trà sữa';
+      const farmChips = [];
+      if (fs && fs.ripe) farmChips.push(h('span', { class: 'game-chip is-alert', text: `${fs.ripe} ô đã chín` }));
+      if (fs && fs.done) farmChips.push(h('span', { class: 'game-chip is-alert', text: `${fs.done} món đã xong` }));
+      if (fs && fs.orders) farmChips.push(h('span', { class: 'game-chip is-alert', text: `${fs.orders} đơn giao được` }));
+      if (!fs) farmChips.push(h('span', { class: 'game-chip is-alert', text: 'Mới' }));
+      if (farmChips.length < 2) farmChips.push(h('span', { class: 'game-chip', text: 'Ghé vườn bạn bè, hái trộm' }));
+
       const card = (kind, hash, title, sub, chips, art, cta) => h('a', {
         class: `game-card is-${kind}`,
         href: hash,
@@ -125,7 +173,8 @@ window.ThinkGames = (() => {
       art);
 
       const parts = [
-        h('p', { class: 'games-intro', text: 'Chơi cùng cả nhóm: thách đấu cờ vua, cờ caro, đua điểm Xếp Khối mỗi tuần.' }),
+        h('p', { class: 'games-intro', text: 'Chơi cùng cả nhóm: làm nông trại, thách đấu cờ vua, cờ caro, đua điểm Xếp Khối mỗi tuần.' }),
+        farm ? card('farm', '#/farm', 'Nông trại', farmSub, farmChips, farmArt(), fs ? 'Ra đồng' : 'Bắt đầu trồng') : null,
         card('blocks', '#/blocks', 'Xếp Khối', blocksSub, blocksChips, blocksArt(), bs && bs.playing != null ? 'Chơi tiếp' : 'Chơi ngay'),
         card('chess', '#/chess', 'Cờ vua', chessSub, chessChips, chessArt(), cs && cs.todo ? 'Vào xem' : 'Vào chơi'),
       ];
@@ -168,6 +217,9 @@ window.ThinkGames = (() => {
     }
 
     function reset() {
+      if (farm) farm.reset();
+      const farmPane = $('#farm-pane');
+      if (farmPane) farmPane.hidden = true;
       if (blocks && blocks.isMounted()) blocks.unmount();
       const pane = $('#blocks-pane');
       if (pane) {
@@ -184,6 +236,7 @@ window.ThinkGames = (() => {
       sync: () => blocks && blocks.sync(),
       onScore: (data) => blocks && blocks.onScore(data),
       refresh: () => { if (view === 'hub' || view === 'blocks') renderHub(); },
+      onFarmEvent: (data) => farm && farm.onEvent(data),
     };
   }
   return { create };

@@ -184,7 +184,8 @@ window.ThinkSocial = (() => {
         pane.hidden = true;
         pane.replaceChildren();
         const chessOpen = $('#chess-pane') && !$('#chess-pane').hidden;
-        if (state.currentId == null && !chessOpen) {
+        const farmOpen = $('#farm-pane') && !$('#farm-pane').hidden;
+        if (state.currentId == null && !chessOpen && !farmOpen) {
           document.body.classList.remove('in-chat');
           $('#chat-empty').hidden = false;
         }

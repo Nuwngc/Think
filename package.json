@@ -1,11 +1,12 @@
 {
   "name": "think-chat",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "description": "Web chat PWA cho hội bạn: tài khoản do admin cấp, thông báo đẩy, đổi tên / mật khẩu / ảnh đại diện",
   "main": "server.js",
   "scripts": {
     "start": "node start.js",
+    "test": "node --test test/*.test.js",
     "share": "node scripts/tunnel.js --with-server",
     "tunnel": "node scripts/tunnel.js",
     "admin": "node scripts/admin.js"

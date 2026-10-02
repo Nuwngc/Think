@@ -78,7 +78,7 @@ function toData(p) {
     if (p.tag) out.tag = p.tag;
     if (p.type === 'reaction' || p.type === 'test') out.channelId = 'other';
     if (p.type === 'chess' || p.type === 'caro') out.channelId = 'chess'; // kênh "Cờ vua" có sẵn trong mọi bản app
-    if (p.type === 'post') out.channelId = 'other';
+    if (p.type === 'post' || p.type === 'farm') out.channelId = 'other';
   }
   if (p.badge != null) out.badge = String(p.badge);
   out.body = JSON.stringify(data);

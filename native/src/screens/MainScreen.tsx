@@ -12,6 +12,8 @@ import { GameScreen } from "../chess/GameScreen";
 import { chessBadge, useChess } from "../chess/store";
 import { SocialHost } from "../social/SocialHost";
 import { closeUser, useSocial } from "../social/store";
+import { FarmScreen } from "../farm/FarmScreen";
+import { openVisit as openFarmVisit, useFarm } from "../farm/store";
 import { GamesHome } from "../games/GamesHome";
 import {
   closeConversation,
@@ -50,7 +52,7 @@ export function MainScreen() {
   const viewUser = useSocial((s) => s.viewUser);
   const settingsOpen = useStore((s) => s.settingsOpen);
 
-  // Nút Quay lại của Android: đóng khung chat / ván cờ / ván caro / trang cá nhân người khác / Cài đặt, rồi về tab Tin nhắn,
+  // Nút Quay lại của Android: đóng khung chat / ván cờ / ván caro / vườn bạn bè / trang cá nhân người khác / Cài đặt, rồi về tab Tin nhắn,
   // rồi mới thoát app (game Xếp Khối tự xử lý nút Quay lại khi đang mở)
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -69,6 +71,10 @@ export function MainScreen() {
       }
       if (s.tab === "games" && s.gamesView === "caro" && useCaro.getState().botOpen) {
         leaveCaroBot();
+        return true;
+      }
+      if (s.tab === "games" && s.gamesView === "farm" && useFarm.getState().visit != null) {
+        openFarmVisit(null);
         return true;
       }
       if (s.tab === "games" && s.gamesView !== "hub") {
@@ -103,6 +109,8 @@ export function MainScreen() {
       <BotGame />
     ) : tab === "games" && gamesView === "blocks" ? (
       <BlocksScreen onBack={showGamesHub} />
+    ) : tab === "games" && gamesView === "farm" ? (
+      <FarmScreen onBack={showGamesHub} />
     ) : viewUser != null ? (
       <UserProfileScreen key={viewUser} userId={viewUser} />
     ) : null;

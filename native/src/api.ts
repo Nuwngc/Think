@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import type { BlocksBoard, PendingScore } from "./blocks/types";
 import type { CaroGame, CaroOptions, CaroRating } from "./caro/types";
 import type { ChessAnalysis, ChessBot, ChessGame, ChessRating } from "./chess/types";
+import type { ActResult, Catalog, Farm, FriendSummary, Leaderboard, Market, PublicFarm } from "./farm/types";
 import { API_URL } from "./config";
 import { getToken } from "./session";
 import type {
@@ -319,6 +320,26 @@ export const api = {
 
   /** Đấu lại: gửi lời thách đấu mới, đổi bên */
   caroRematch: (id: number) => request<{ game: CaroGame }>(`/api/caro/games/${id}/rematch`, { method: "POST", body: {} }),
+
+  /* ---------------- Nông trại (máy chủ giữ luật: src/farm.js) ---------------- */
+
+  /** cv = phiên bản danh mục đang có (khác thì máy chủ gửi kèm danh mục mới); peek = chưa có nông trại thì đừng tạo */
+  farm: (cv: string, peek = false) =>
+    request<{ now: number; catalogVersion: string; farm: Farm | null; market?: Market; catalog?: Catalog }>(
+      `/api/farm?cv=${encodeURIComponent(cv)}${peek ? "&peek=1" : ""}`,
+    ),
+
+  farmAct: (body: Record<string, unknown>) => request<{ now: number; result: ActResult; farm: Farm }>("/api/farm/act", { method: "POST", body }),
+
+  farmFriends: () => request<{ now: number; friends: FriendSummary[] }>("/api/farm/friends"),
+
+  farmLeaderboard: () => request<Leaderboard & { now: number }>("/api/farm/leaderboard"),
+
+  farmOf: (userId: number) => request<{ now: number; userId: number; farm: PublicFarm }>(`/api/farm/u/${userId}`),
+
+  /** Ghé vườn bạn: bắt sâu giúp (help) hoặc hái trộm (steal) */
+  farmVisitAct: (userId: number, action: "help" | "steal", plot: number) =>
+    request<{ now: number; result: ActResult; farm: PublicFarm; me: Farm }>(`/api/farm/u/${userId}/act`, { method: "POST", body: { action, plot } }),
 
   /* ---------------- Trang cá nhân, bảng tin ---------------- */
 
