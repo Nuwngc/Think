@@ -1,0 +1,4 @@
+Hình biểu tượng trong thư mục này lấy từ Twemoji (https://github.com/jdecked/twemoji, gói npm @twemoji/svg 15.0.0).
+Copyright 2019 Twitter, Inc and other contributors; Copyright 2024 jdecked/twemoji contributors.
+Graphics licensed under CC-BY 4.0: https://creativecommons.org/licenses/by/4.0/
+Dùng cho game Nông trại của Think (public/farm-ui.js, native/src/farm/), không chỉnh sửa hình.

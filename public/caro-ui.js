@@ -427,7 +427,7 @@ window.ThinkCaro = (() => {
     }
 
     function otherPaneOpen() {
-      return ['#chat-pane', '#chess-pane', '#blocks-pane', '#profile-pane'].some((sel) => {
+      return ['#chat-pane', '#chess-pane', '#blocks-pane', '#farm-pane', '#profile-pane'].some((sel) => {
         const el = $(sel);
         return el && !el.hidden;
       });

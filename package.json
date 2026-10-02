@@ -6,6 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node start.js",
+    "test": "node --test test/*.test.js",
     "share": "node scripts/tunnel.js --with-server",
     "tunnel": "node scripts/tunnel.js",
     "admin": "node scripts/admin.js"

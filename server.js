@@ -28,6 +28,7 @@ const { setupChess } = require('./src/chess');
 const { setupSocial, cleanText } = require('./src/social');
 const { setupGames } = require('./src/games');
 const { setupCaro } = require('./src/caro');
+const { setupFarm } = require('./src/farm');
 const { setupReports } = require('./src/reports');
 const chatPlus = require('./src/chat-plus');
 
@@ -1304,6 +1305,18 @@ setupGames({
 /* ---------------- API: cờ caro với bạn bè (src/caro.js) ---------------- */
 
 setupCaro({
+  app,
+  io,
+  requireAuth,
+  requireReady,
+  isActive,
+  notify: (uid, payload) => push.sendToUser(uid, { icon: '/icons/icon-192.png', ...payload }),
+  nameOf: (uid) => get('SELECT display_name FROM users WHERE id = ?', uid)?.display_name || 'Ai đó',
+});
+
+/* ---------------- API: game Nông trại (src/farm.js, luật ở src/farm-logic.js) ---------------- */
+
+setupFarm({
   app,
   io,
   requireAuth,

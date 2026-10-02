@@ -349,7 +349,7 @@
       })
     : null;
   games = window.ThinkGames
-    ? window.ThinkGames.create({ h, icon, api, state, navigate, goBack, toast, chess, caro, nameOf, userOf, avatarEl })
+    ? window.ThinkGames.create({ h, icon, api, state, navigate, goBack, toast, chess, caro, nameOf, userOf, avatarEl, withBusy })
     : null;
 
   // Trang cá nhân và bảng tin (public/social-ui.js)
@@ -453,7 +453,9 @@
     // Trang cá nhân của một người (#/u/5) mở ở cột phải; bài đăng (#/p/9, từ thông báo) mở bình luận
     const userPage = /^#\/u\/(\d+)$/.exec(hash);
     const postPage = /^#\/p\/(\d+)$/.exec(hash);
-    const gamesView = hash === '#/chess' || chessGame ? 'chess' : caroPage ? 'caro' : hash === '#/blocks' ? 'blocks' : hash === '#/games' ? 'hub' : null;
+    // Nông trại: #/farm (vườn của mình), #/farm/u/5 (ghé vườn một người)
+    const farmPage = /^#\/farm(?:\/u\/(\d+))?$/.exec(hash);
+    const gamesView = hash === '#/chess' || chessGame ? 'chess' : caroPage ? 'caro' : hash === '#/blocks' ? 'blocks' : farmPage ? 'farm' : hash === '#/games' ? 'hub' : null;
     const tab = hash === '#/me' || hash === '#/settings' || postPage ? 'me'
       : hash === '#/admin' ? 'admin'
         : gamesView ? 'games'
@@ -489,7 +491,7 @@
     showTab(tab);
     showMeView(hash === '#/settings' ? 'settings' : 'profile');
     if (chess) chess.route(tab === 'games' && gamesView === 'chess', chessGame ? Number(chessGame[1]) : null);
-    if (games) games.route(tab === 'games' ? gamesView : null);
+    if (games) games.route(tab === 'games' ? gamesView : null, farmPage && farmPage[1] ? Number(farmPage[1]) : null);
     if (social) {
       social.route(userPage ? Number(userPage[1]) : null);
       if (postPage) {
@@ -2884,6 +2886,7 @@ ${sections}
       socket.on('caro:challenge', (data) => caro.onEvent('caro:challenge', data));
     }
     if (games) socket.on('games:score', (data) => games.onScore(data));
+    if (games) socket.on('farm:event', (data) => games.onFarmEvent(data));
     socket.on('admin:errors', () => {
       if (state.tab === 'admin' && state.adminSeg === 'errors') loadErrors();
       else $('#errors-badge').hidden = false;
