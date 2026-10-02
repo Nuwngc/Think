@@ -72,7 +72,19 @@ jobs:
 
       - name: Build APK
         working-directory: native/android
-        run: ./gradlew assembleRelease --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease --no-daemon 2>&1 | tee ../../gradle-build.log
+
+      # Build lỗi: đưa đoạn lỗi thành một ghi chú (annotation) để đọc được ngay trên trang Actions / qua API
+      - name: Báo lỗi build
+        if: failure()
+        working-directory: .
+        run: |
+          [ -f gradle-build.log ] || exit 0
+          msg=$(grep -nE "What went wrong|Error|error:|FAILURE|Exception|failed|Caused by" gradle-build.log | tail -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", substr($0, 1, 400)}')
+          tail=$(tail -25 gradle-build.log | sed 's/%/%25/g' | awk '{printf "%s%%0A", substr($0, 1, 300)}')
+          echo "::error title=Gradle build lỗi::${msg}%0A----- cuối log -----%0A${tail}"
 
       - uses: actions/upload-artifact@v4
         with:
