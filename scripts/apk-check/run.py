@@ -538,7 +538,8 @@ def s_streaks():
     if wait_for(r"ngày liên tiếp chơi game", 15) is None:
         raise RuntimeError("Trang Trò chơi không hiện khung chuỗi hằng ngày")
     tap(r"ngày liên tiếp chơi game")
-    if wait_for(r"^Nhắc giữ chuỗi", 10) is None:
+    # Bảng chuỗi dài (có mục Đóng băng chuỗi): mục Nhắc giữ chuỗi có thể nằm dưới màn hình
+    if wait_for(r"^(Nhắc giữ chuỗi|Đóng băng chuỗi)", 10) is None:
         raise RuntimeError("Không mở được bảng chuỗi hằng ngày")
     time.sleep(1)
     back()

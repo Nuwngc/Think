@@ -77,11 +77,12 @@ const config: ExpoConfig = {
       {
         photosPermission: "Think cần quyền xem ảnh để bạn gửi ảnh vào cuộc trò chuyện.",
         cameraPermission: "Think cần quyền dùng máy ảnh để bạn chụp và gửi ảnh.",
-        microphonePermission: false,
+        // Không đặt false: false làm Expo gỡ quyền RECORD_AUDIO khỏi app (tin nhắn thoại cần quyền này)
+        microphonePermission: "Think cần micro để ghi tin nhắn thoại.",
       },
     ],
     "expo-secure-store",
-    // Chỉ phát tiếng quân cờ, không ghi âm
+    // Tiếng trong game + ghi / nghe tin nhắn thoại
     ["expo-audio", { microphonePermission: "Think cần micro để ghi tin nhắn thoại.", recordAudioAndroid: true }],
     [
       "expo-build-properties",

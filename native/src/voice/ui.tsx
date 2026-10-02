@@ -131,7 +131,7 @@ export function VoiceRecorder({ convId, accent, disabled, onActive }: { convId: 
   const [locked, setLocked] = useState(false);
   const [cancelZone, setCancelZone] = useState(false);
   const [levels, setLevels] = useState<number[]>([]);
-  const r = useRef({ state: "idle" as RecState, held: false, downAt: 0, startedAt: 0, levels: [] as number[], cancelZone: false, gen: 0 });
+  const r = useRef({ state: "idle" as RecState, held: false, downAt: 0, startedAt: 0, levels: [] as number[], cancelZone: false, gen: 0, asking: false });
 
   const move = (next: RecState) => {
     r.current.state = next;
@@ -160,9 +160,15 @@ export function VoiceRecorder({ convId, accent, disabled, onActive }: { convId: 
     try {
       let perm = await getRecordingPermissionsAsync();
       if (!perm.granted) {
-        perm = await requestRecordingPermissionsAsync();
-        r.current.held = false; // hộp hỏi quyền đã cắt ngang thao tác giữ nút: ghi rảnh tay
+        // Hộp hỏi quyền cắt ngang thao tác giữ nút: cho phép xong thì ghi rảnh tay (bấm Gửi / Hủy)
+        r.current.asking = true;
         setLocked(true);
+        try {
+          perm = await requestRecordingPermissionsAsync();
+        } finally {
+          r.current.asking = false;
+        }
+        r.current.held = false;
       }
       if (gen !== r.current.gen) return;
       if (!perm.granted) {
@@ -284,6 +290,7 @@ export function VoiceRecorder({ convId, accent, disabled, onActive }: { convId: 
         onPanResponderTerminate: () => {
           if (!r.current.held) return;
           r.current.held = false;
+          if (r.current.asking) return; // hộp hỏi quyền micro vừa hiện: không hủy, ghi rảnh tay sau khi cho phép
           fns.current.cancel();
         },
       }),
