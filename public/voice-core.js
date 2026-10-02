@@ -15,7 +15,7 @@
   /** Gom các mức âm lượng (0–1, lấy mẫu đều trong lúc ghi) thành BARS cột, mã hóa thành chuỗi */
   function encodeWave(levels) {
     const list = Array.isArray(levels) ? levels.filter((v) => Number.isFinite(v)) : [];
-    if (!list.length) return '';
+    if (!list.some((v) => v > 0)) return ''; // máy không đo được âm lượng: bên nghe vẽ sóng mặc định
     const out = [];
     for (let i = 0; i < BARS; i++) {
       const a = Math.floor((i * list.length) / BARS);

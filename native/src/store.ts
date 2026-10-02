@@ -871,9 +871,49 @@ export async function sendImages(convId: number, images: PreparedImage[]) {
   }
 }
 
+/** Tin nhắn thoại vừa ghi xong (uri = file ghi âm trên máy) */
+export async function sendVoice(convId: number, rec: { uri: string; ms: number; wave: string; mime?: string }) {
+  const me = get().me;
+  if (!me) return;
+  const m: PendingMessage = {
+    id: null,
+    clientId: newClientId(),
+    conversationId: convId,
+    senderId: me.id,
+    kind: "voice",
+    text: null,
+    image: null,
+    deleted: false,
+    createdAt: Date.now(),
+    replyTo: takeReply(convId),
+    reactions: [],
+    audio: { url: rec.uri, ms: rec.ms, wave: rec.wave },
+    mime: rec.mime || "audio/mp4",
+    status: "sending",
+  };
+  addLocal(m);
+  await deliver(m);
+}
+
 async function deliver(m: PendingMessage) {
   patchPending(m.conversationId, m.clientId, { status: "sending", error: undefined });
   try {
+    if (m.kind === "voice" && m.audio) {
+      let url = m.uploadedAudio;
+      if (!url) {
+        url = (await api.uploadAudio(m.audio.url, m.mime || "audio/mp4")).url;
+        patchPending(m.conversationId, m.clientId, { uploadedAudio: url });
+      }
+      const { message } = await api.send(m.conversationId, {
+        audio: url,
+        audioMs: m.audio.ms,
+        audioWave: m.audio.wave,
+        replyTo: m.replyTo?.id || undefined,
+        clientId: m.clientId,
+      });
+      receive(message);
+      return;
+    }
     let image: string | undefined;
     if (m.localUri) {
       const up = await api.uploadImage(m.localUri, m.mime || "image/jpeg", m.width || 0, m.height || 0);
@@ -897,7 +937,9 @@ async function deliver(m: PendingMessage) {
 export function retry(convId: number, clientId: string) {
   const m = get().msgs[convId]?.list.find((x) => isPending(x) && x.clientId === clientId) as PendingMessage | undefined;
   if (!m || m.status === "sending") return;
-  deliver(m);
+  // Gửi lại tin thoại: tải lại file ghi âm (bản tải lên cũ có thể đã hết hạn trên máy chủ)
+  if (m.uploadedAudio) patchPending(convId, clientId, { uploadedAudio: undefined });
+  deliver({ ...m, uploadedAudio: undefined });
 }
 
 export function discard(convId: number, clientId: string) {

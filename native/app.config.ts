@@ -46,8 +46,8 @@ const config: ExpoConfig = {
     softwareKeyboardLayoutMode: "resize",
     allowBackup: false,
     // SYSTEM_ALERT_WINDOW: bong bóng chat nổi trên màn hình (chỉ dùng khi người dùng bật trong Cài đặt)
-    permissions: ["POST_NOTIFICATIONS", "SYSTEM_ALERT_WINDOW"],
-    blockedPermissions: ["android.permission.RECORD_AUDIO"],
+    // RECORD_AUDIO: tin nhắn thoại (app chỉ hỏi quyền khi người dùng bấm nút micro lần đầu)
+    permissions: ["POST_NOTIFICATIONS", "SYSTEM_ALERT_WINDOW", "RECORD_AUDIO"],
     ...(hasGoogleServices ? { googleServicesFile: "./google-services.json" } : {}),
   },
   ios: {
@@ -82,7 +82,7 @@ const config: ExpoConfig = {
     ],
     "expo-secure-store",
     // Chỉ phát tiếng quân cờ, không ghi âm
-    ["expo-audio", { microphonePermission: false, recordAudioAndroid: false }],
+    ["expo-audio", { microphonePermission: "Think cần micro để ghi tin nhắn thoại.", recordAudioAndroid: true }],
     [
       "expo-build-properties",
       {

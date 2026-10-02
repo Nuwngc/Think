@@ -53,7 +53,8 @@ export function quoteOf(m: ChatItem): ReplyRef {
     deleted: false,
     missing: false,
     text: m.text ? String(m.text).replace(/\s+/g, " ").trim().slice(0, 140) : null,
-    image: Boolean(m.image || (isPending(m) && m.localUri)),
+    image: m.kind !== "voice" && Boolean(m.image || (isPending(m) && m.localUri)),
+    audio: m.kind === "voice",
   };
 }
 

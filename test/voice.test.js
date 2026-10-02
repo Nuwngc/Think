@@ -16,7 +16,7 @@ test('dạng sóng: 40 cột, mã hóa rồi giải mã giữ được độ to'
   assert.match(wave, /^[0-9a-v]+$/);
   assert.equal(V.encodeWave([]), '');
   assert.equal(V.encodeWave([1, 1]), 'v'.repeat(V.BARS)); // ít mẫu hơn số cột vẫn đủ cột
-  assert.equal(V.encodeWave(Array(80).fill(0)), '0'.repeat(V.BARS));
+  assert.equal(V.encodeWave(Array(80).fill(0)), ''); // không đo được âm lượng: để trống, bên nghe vẽ sóng mặc định
   const bars = V.decodeWave('0'.repeat(20) + 'v'.repeat(20));
   assert.equal(bars.length, V.BARS);
   assert.equal(bars[0], 0.08); // im lặng vẫn có vạch nhỏ
