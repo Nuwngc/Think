@@ -26,7 +26,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 
 import { ApiError } from "../src/api";
 import { GAME_IDS } from "../src/games/registry";
-import { addPending, cheerText, dayKey, pendingByGame, removeSent, weekLabels } from "../src/streaks/logic";
+import { addPending, cheerText, dayKey, pendingByGame, playsFor, removeSent, weekLabels } from "../src/streaks/logic";
 import { bindStreaks, flushStreaks, loadStreaks, markPlayed, onStreakEvent, openStreaks, resetStreaks, useStreaks } from "../src/streaks/store";
 import type { StreakSummary } from "../src/streaks/types";
 
@@ -68,7 +68,12 @@ describe("chuỗi hằng ngày: hàm thuần", () => {
     list = addPending(list, "caro", "2026-10-02", 6);
     expect(list).toHaveLength(3);
     expect(pendingByGame(list, 5)).toEqual({ blocks: ["2026-10-01", "2026-10-02"] });
-    expect(removeSent(list, "blocks", ["2026-10-01", "2026-10-02"], 5)).toEqual([{ game: "caro", day: "2026-10-02", uid: 6 }]);
+    expect(removeSent(list, "blocks", ["2026-10-01", "2026-10-02"], 5)).toEqual([{ game: "caro", day: "2026-10-02", uid: 6, t: expect.any(Number) }]);
+    // Gửi kèm lúc chơi để máy chủ trừ độ lệch đồng hồ điện thoại
+    expect(playsFor(list, 5, "blocks")).toEqual([
+      { day: "2026-10-01", t: expect.any(Number) },
+      { day: "2026-10-02", t: expect.any(Number) },
+    ]);
   });
 
   it("lời chúc", () => {
@@ -107,7 +112,7 @@ describe("chuỗi hằng ngày: dữ liệu trong app", () => {
     online = true;
     api.streaksPlayed.mockResolvedValueOnce(summary());
     await flushStreaks();
-    expect(api.streaksPlayed).toHaveBeenCalledWith("blocks", [dayKey()]);
+    expect(api.streaksPlayed).toHaveBeenCalledWith("blocks", [dayKey()], [{ day: dayKey(), t: expect.any(Number) }]);
     expect(JSON.parse(storage.get("think.streak.days") || "[]")).toHaveLength(0);
     expect(useStreaks.getState().data).not.toBeNull();
   });

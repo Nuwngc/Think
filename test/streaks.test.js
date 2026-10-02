@@ -61,7 +61,7 @@ test('ghi ngày chơi, chuỗi từng game, chuỗi chung, mốc chúc mừng', 
   assert.equal(sum.overall.current, 7);
   assert.equal(sum.today, '2026-10-10');
   // Không nhận ngày tương lai, ngày quá cũ, game lạ
-  assert.equal(S.recordDays(uid, 'blocks', ['2026-10-11', '2026-09-01', 'xx'], now).added, false);
+  assert.equal(S.recordDays(uid, 'blocks', ['2026-09-01', 'xx'], now).added, false); // (ngày tương lai tính là hôm nay: xem bài sau)
   assert.equal(S.record(uid, 'tetris', now, now).added, false);
   assert.equal(S.recordDays(uid, 'tetris', ['2026-10-10'], now).added, false); // game lạ: không ghi, không ném lỗi
   assert.equal(S.recordDays(uid, 'blocks', ['2026-02-30', '2026-10-32'], now).added, false); // ngày không có thật
@@ -73,14 +73,40 @@ test('ghi ngày chơi, chuỗi từng game, chuỗi chung, mốc chúc mừng', 
   assert.equal(S.reminderText({ games: [{ name: 'Nông trại', current: 1, atRisk: true }] }), null);
 });
 
-test('đồng hồ máy chạy nhanh lúc gần nửa đêm: ngày mai của máy tính là hôm nay', () => {
+test('điện thoại để sai ngày giờ: vẫn tính đúng ngày theo đồng hồ máy chủ', () => {
   run("INSERT INTO users (id, username, display_name, password_hash, created_at) VALUES (902, 'stk2', 'Streak 2', 'x', 0)");
   const late = T('2026-10-10T16:50:00Z'); // 23:50 giờ VN
   const r = S.recordDays(902, 'blocks', ['2026-10-11'], late);
   assert.equal(r.added, true);
-  assert.deepEqual(r.event.days, ['2026-10-10']);
-  // Còn xa nửa đêm thì ngày mai vẫn bị loại
-  assert.equal(S.recordDays(902, 'caro', ['2026-10-11'], T('2026-10-10T12:00:00Z')).added, false);
+  assert.deepEqual(r.event.days, ['2026-10-10']); // ngày "tương lai" = đang chơi lúc này = hôm nay
+  const H = 3600000;
+  const now = T('2026-10-12T05:00:00Z'); // 12:00 trưa 12/10 giờ VN (máy chủ)
+  // Điện thoại nhanh 1 ngày, chơi lúc 5 phút trước (theo đồng hồ điện thoại)
+  const ahead = now + 24 * H;
+  assert.deepEqual(S.playedDays({ plays: [{ day: '2026-10-13', t: ahead - 300000 }], now: ahead }, now), ['2026-10-12']);
+  // Điện thoại chậm 1 ngày: vẫn là hôm nay, không phải hôm qua
+  const behind = now - 24 * H;
+  assert.deepEqual(S.playedDays({ plays: [{ day: '2026-10-11', t: behind - 60000 }], now: behind }, now), ['2026-10-12']);
+  // Chơi lúc mất mạng hôm qua (đồng hồ đúng), gửi hôm nay: vẫn là hôm qua
+  assert.deepEqual(S.playedDays({ plays: [{ day: '2026-10-11', t: now - 20 * H }], now }, now), ['2026-10-11']);
+  // Bản app cũ: chỉ gửi days
+  assert.deepEqual(S.playedDays({ days: ['2026-10-12'] }, now), ['2026-10-12']);
+  assert.deepEqual(S.playedDays({}, now), ['2026-10-12']);
+  // Đồng hồ lệch quá xa (hơn 30 ngày) thì không tin, dùng ngày máy gửi
+  assert.deepEqual(S.playedDays({ plays: [{ day: '2026-10-12', t: 1 }], now: 1 }, now), ['2026-10-12']);
+  const rr = S.recordDays(902, 'caro', S.playedDays({ plays: [{ day: '2026-10-13', t: ahead }], now: ahead }, now), now);
+  assert.deepEqual(rr.event.days, ['2026-10-12']);
+  // Độ lệch đồng hồ
+  assert.equal(S.clockSkew(ahead, now), -24 * H);
+  assert.equal(S.clockSkew(behind, now), 24 * H);
+  assert.equal(S.clockSkew(undefined, now), null);
+  assert.equal(S.clockSkew(1, now), null);
+  // Điểm Xếp Khối: điện thoại nhanh 1 ngày vẫn được nhận, giờ chơi đổi về giờ máy chủ
+  const { cleanScore } = require('../src/games');
+  const sc = { id: 'abcdefgh1', score: 10, moves: 5, lines: 0, durationMs: 1000, playedAt: ahead - 60000 };
+  assert.match(cleanScore('blocks', sc, now).error, /không hợp lệ/); // không biết lệch: từ chối như cũ
+  assert.equal(cleanScore('blocks', sc, now, S.clockSkew(ahead, now)).playedAt, now - 60000);
+  assert.equal(S.dayKey(cleanScore('blocks', { ...sc, playedAt: behind - 60000 }, now, S.clockSkew(behind, now)).playedAt), '2026-10-12');
 });
 
 test('nhắc giữ chuỗi: mỗi người một lần mỗi ngày, bỏ người đã tắt nhắc', async () => {

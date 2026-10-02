@@ -74,7 +74,7 @@ function weekStart(t = Date.now()) {
 const int = (v) => (Number.isSafeInteger(v) ? v : Number.isFinite(v) ? Math.round(v) : NaN);
 
 /** Kiểm tra một ván gửi lên; trả về bản đã làm sạch hoặc lý do bỏ qua */
-function cleanScore(game, s, now = Date.now()) {
+function cleanScore(game, s, now = Date.now(), skew = 0) {
   if (!s || typeof s !== 'object') return { error: 'Dữ liệu ván không hợp lệ.' };
   const id = String(s.id || '');
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(id)) return { error: 'Mã ván không hợp lệ.' };
@@ -82,7 +82,8 @@ function cleanScore(game, s, now = Date.now()) {
   const moves = int(Number(s.moves));
   const lines = int(Number(s.lines || 0));
   const durationMs = int(Number(s.durationMs || 0));
-  const playedAt = int(Number(s.playedAt));
+  // Giờ chơi theo đồng hồ điện thoại, đổi sang giờ máy chủ (điện thoại để sai giờ / sai ngày vẫn tính đúng)
+  const playedAt = int(Number(s.playedAt) + (skew || 0));
   if (!(score >= 0 && score <= 10_000_000)) return { error: 'Điểm không hợp lệ.' };
   if (!(moves >= 0 && moves <= 100_000) || !(lines >= 0 && lines <= 100_000)) return { error: 'Số nước không hợp lệ.' };
   if (score > Math.max(1, moves) * GAMES[game].maxPerMove) return { error: 'Điểm cao bất thường so với số nước đi.' };
@@ -156,6 +157,7 @@ function setupGames({ app, io, requireAuth, requireReady, nameOf }) {
     if (!submitLimit(req.user.id)) throw new GameError(429, 'Gửi điểm nhiều quá. Thử lại sau ít phút nhé.');
     const uid = req.user.id;
     const now = Date.now();
+    const skew = streaks.clockSkew(req.body && req.body.now, now);
     const before = get('SELECT best FROM game_bests WHERE user_id = ? AND game = ?', uid, game);
     const prevBest = before ? before.best : 0;
     const leaderOf = () => get(
@@ -169,7 +171,7 @@ function setupGames({ app, io, requireAuth, requireReady, nameOf }) {
     const playedDays = new Set();
     transaction(() => {
       for (const raw of list) {
-        const s = cleanScore(game, raw, now);
+        const s = cleanScore(game, raw, now, skew);
         if (s.error) {
           rejected.push({ id: raw && raw.id, error: s.error });
           continue;
