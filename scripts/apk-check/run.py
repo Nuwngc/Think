@@ -397,7 +397,7 @@ def s_games_hub():
 
 
 def s_chess_bot():
-    tap_scrolled(r"^Cờ vua")
+    tap_scrolled(r"^Cờ vua\.")  # thẻ game (nhãn "Cờ vua. … Chạm để vào"), không phải dòng Cờ vua trong khung Quiz hôm nay
     tap(r"^Chơi với máy", 20)
     tap(r"ELO", 15)
     tap(r"^Bắt đầu$", 10)
@@ -431,7 +431,7 @@ def s_chess_back():
 
 
 def s_blocks():
-    tap_scrolled(r"^Xếp Khối")
+    tap_scrolled(r"^Xếp Khối\.")  # thẻ game, không phải dòng trong khung Quiz hôm nay
     if wait_for(r"^Điểm \d+", 20) is None:
         raise RuntimeError("Không mở được Xếp Khối")
     time.sleep(2)
@@ -450,7 +450,7 @@ def farm_now():
 
 
 def s_farm():
-    tap_scrolled(r"^Nông trại")
+    tap_scrolled(r"^Nông trại\.")
     if wait_for(r"^Ô 1: Lúa mì đã chín", 40) is None:
         raise RuntimeError("Không mở được Nông trại (không thấy ô lúa mì chín sẵn)")
     # Nhớ chỗ các mục trước khi gieo: ruộng có đồng hồ đếm ngược đổi từng giây
