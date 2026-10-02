@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 
 import { api, ApiError } from "../api";
-import { addPending, cheerText, dayKey, pendingByGame, removeSent, type PendingDay } from "./logic";
+import { addPending, cheerText, dayKey, pendingByGame, playsFor, removeSent, type PendingDay } from "./logic";
 import type { StreakEvent, StreakSummary } from "./types";
 
 // Chuỗi hằng ngày của mọi game trong app (máy chủ: src/streaks.js).
@@ -78,11 +78,8 @@ const sent = new Set<string>();
 export function markPlayed(game: string) {
   const uid = bridge.meId() || null;
   const day = dayKey();
-  if (uid) {
-    const d = get().data;
-    const g = d?.games.find((x) => x.id === game);
-    if (sent.has(`${uid}|${game}|${day}`) || (d?.today === day && g?.today)) return; // máy chủ đã ghi hôm nay
-  }
+  // Đã gửi ngày này lần mở app này thì thôi. (Không so với "hôm nay" của máy chủ: đồng hồ điện thoại có thể lệch)
+  if (uid && sent.has(`${uid}|${game}|${day}`)) return;
   readPending().then(() => {
     const list = pending || []; // bản mới nhất (nhiều lần gọi liền nhau không ghi đè nhau)
     const next = addPending(list, game, day, uid);
@@ -115,7 +112,7 @@ export function flushStreaks() {
     for (const [game, days] of Object.entries(groups)) {
       if (g0 !== gen || bridge.meId() !== uid) break; // vừa đăng xuất / đổi người: để dành cho đúng người
       try {
-        const data = await api.streaksPlayed(game, days);
+        const data = await api.streaksPlayed(game, days, playsFor(list, uid, game));
         for (const d of days) sent.add(`${uid}|${game}|${d}`);
         if (data && g0 === gen) set({ data });
       } catch (err) {

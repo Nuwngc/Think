@@ -11,12 +11,18 @@ export function weekLabels(weekStartDay: number) {
   return Array.from({ length: 7 }, (_, i) => (i === 6 ? "Nay" : WD[(weekStartDay + i) % 7]));
 }
 
-export type PendingDay = { game: string; day: string; uid: number | null };
+/** t: lúc chơi theo đồng hồ điện thoại (máy chủ tự trừ độ lệch đồng hồ, điện thoại để sai ngày giờ vẫn tính đúng) */
+export type PendingDay = { game: string; day: string; uid: number | null; t?: number };
 
 /** Thêm ngày chơi vào hàng chờ gửi (không trùng, giữ tối đa 120 dòng) */
-export function addPending(list: PendingDay[], game: string, day: string, uid: number | null): PendingDay[] {
+export function addPending(list: PendingDay[], game: string, day: string, uid: number | null, t = Date.now()): PendingDay[] {
   if (list.some((x) => x.game === game && x.day === day && x.uid === uid)) return list;
-  return [...list, { game, day, uid }].slice(-120);
+  return [...list, { game, day, uid, t }].slice(-120);
+}
+
+/** Các lần chơi (ngày + lúc chơi) của một game, để gửi lên máy chủ */
+export function playsFor(list: PendingDay[], uid: number, game: string) {
+  return list.filter((x) => x.game === game && (x.uid == null || x.uid === uid)).map((x) => ({ day: x.day, t: x.t }));
 }
 
 /** Ngày chơi cần gửi cho người đang đăng nhập (ngày chơi lúc chưa đăng nhập cũng tính cho người này), theo game */

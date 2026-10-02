@@ -263,7 +263,7 @@ window.ThinkPuzzles = (() => {
         for (const item of pendingFor(uid)) {
           if (g0 !== S.gen || me() !== uid) break; // vừa đăng xuất / đổi người: để dành cho đúng người
           try {
-            const res = await api(`/api/puzzles/${item.game}/${item.kind === 'daily' ? 'daily' : 'level'}`, { method: 'POST', body: item.body });
+            const res = await api(`/api/puzzles/${item.game}/${item.kind === 'daily' ? 'daily' : 'level'}`, { method: 'POST', body: { ...item.body, now: Date.now() } }); // now: máy chủ đổi giờ điện thoại sang giờ máy chủ
             if (g0 !== S.gen) break;
             dropPending(item.qid);
             setGameSummary(item.game, res && res.summary);

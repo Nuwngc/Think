@@ -141,9 +141,12 @@ function solveLevel(uid, game, body, now = Date.now()) {
   return gameSummary(uid, game);
 }
 
-/** Lúc người chơi giải (giải lúc mất mạng thì gửi muộn, tối đa 2 ngày trước); không cho ở tương lai */
+/**
+ * Lúc người chơi giải (giải lúc mất mạng thì gửi muộn, tối đa 2 ngày trước); không cho ở tương lai.
+ * Máy gửi kèm `now` (giờ điện thoại lúc gửi) thì đổi sang giờ máy chủ: điện thoại để sai giờ / sai ngày vẫn tính đúng ngày.
+ */
 function playedAt(body, now) {
-  const t = Number(body?.playedAt);
+  const t = Number(body?.playedAt) + (streaks.clockSkew(body?.now, now) || 0);
   return Number.isFinite(t) && t >= now - SYNC_DAYS * 86400000 && t <= now ? t : now;
 }
 
@@ -164,7 +167,9 @@ function solveDaily(uid, game, body, now = Date.now()) {
     `INSERT OR IGNORE INTO puzzle_daily (user_id, game, day, ms, mistakes, hints, stars, solved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     uid, game, day, ms, mistakes, hints, P.stars(mistakes, hints), now
   );
-  streaks.record(uid, game, day === today ? playedAt(body, now) : Date.parse(`${day}T05:00:00Z`), now);
+  // Chuỗi: tính theo lúc giải thật (giờ máy chủ); máy cũ không gửi giờ điện thoại thì theo ngày của quiz
+  const known = streaks.clockSkew(body?.now, now) != null;
+  streaks.record(uid, game, known || day === today ? playedAt(body, now) : Date.parse(`${day}T05:00:00Z`), now);
   return { first: r.changes > 0, day, summary: gameSummary(uid, game, today) };
 }
 

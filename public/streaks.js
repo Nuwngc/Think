@@ -32,10 +32,11 @@ window.ThinkStreaks = (() => {
   function mark(game, uid = null) {
     const day = dayKey();
     const who = uid == null ? null : uid;
-    if (who != null && (sent.has(`${who}|${game}|${day}`) || (inst && inst.playedToday(game, day, who)))) return;
+    // Đã gửi ngày này trong lần mở trang này thì thôi. (Không so với "hôm nay" của máy chủ: đồng hồ điện thoại có thể lệch)
+    if (who != null && sent.has(`${who}|${game}|${day}`)) return;
     const list = read();
     if (!list.some((x) => x.game === game && x.day === day && x.uid === who)) {
-      list.push({ game, day, uid: who });
+      list.push({ game, day, uid: who, t: Date.now() }); // t: lúc chơi (máy chủ tự trừ độ lệch đồng hồ điện thoại)
       write(list);
     }
     if (inst) inst.flushSoon();
@@ -50,9 +51,11 @@ window.ThinkStreaks = (() => {
     const games = [...new Set(mine.map((x) => x.game))];
     for (const game of games) {
       if (!stillMe()) break; // vừa đăng xuất / đổi người: để dành cho đúng người
-      const days = [...new Set(mine.filter((x) => x.game === game).map((x) => x.day))];
+      const rows = mine.filter((x) => x.game === game);
+      const days = [...new Set(rows.map((x) => x.day))];
+      const plays = rows.map((x) => ({ day: x.day, t: x.t }));
       try {
-        summary = await api('/api/streaks/played', { method: 'POST', body: { game, days } });
+        summary = await api('/api/streaks/played', { method: 'POST', body: { game, days, plays, now: Date.now() } });
         for (const d of days) sent.add(`${uid}|${game}|${d}`);
       } catch (err) {
         // Mất mạng, máy chủ lỗi, hết phiên đăng nhập, phải đổi mật khẩu: để lần sau gửi lại

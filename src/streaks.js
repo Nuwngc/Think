@@ -24,7 +24,6 @@ const DAY = 86400000;
 const BACKFILL_DAYS = 7; // ngày chơi lúc mất mạng gửi lên muộn: nhận trong vòng 7 ngày
 const REMIND_FROM = 20; // nhắc giữ chuỗi từ 20 giờ…
 const REMIND_TO = 23; // …tới 23 giờ (giờ Việt Nam)
-const SKEW_MS = 15 * 60 * 1000; // đồng hồ máy người chơi lệch tối đa 15 phút quanh nửa đêm
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS streak_days (
@@ -142,12 +141,10 @@ function recordDaysUnsafe(uid, game, days, now) {
   if (!GAME[game] || !Number.isInteger(uid)) return { added: false };
   const today = dayKey(now);
   const oldest = addDays(today, -BACKFILL_DAYS);
-  // Đồng hồ máy chạy nhanh vài phút lúc gần nửa đêm: ngày "mai" của máy vẫn tính là hôm nay
-  const tomorrow = addDays(today, 1);
-  const nearMidnight = Date.parse(`${tomorrow}T00:00:00Z`) - (now + TZ) <= SKEW_MS;
   const fresh = [];
   for (const raw of new Set(days)) {
-    const day = raw === tomorrow && nearMidnight ? today : raw;
+    // Ngày "tương lai" (đồng hồ điện thoại chạy nhanh / để sai ngày): đang chơi lúc này, tính là hôm nay
+    const day = isDay(raw) && raw > today ? today : raw;
     if (!isDay(day) || day > today || day < oldest || fresh.includes(day)) continue;
     const r = run('INSERT OR IGNORE INTO streak_days (user_id, game, day, created_at) VALUES (?, ?, ?, ?)', uid, game, day, now);
     if (r.changes) fresh.push(day);
@@ -185,6 +182,32 @@ function reminderText(summary) {
   return `Chuỗi ${top.current} ngày ${top.name}${more} sẽ mất nếu hôm nay bạn không chơi. Vào chơi một chút nhé!`;
 }
 
+/**
+ * Độ lệch đồng hồ điện thoại so với máy chủ (ms, cộng vào giờ điện thoại để ra giờ máy chủ).
+ * `clientNow` = giờ điện thoại lúc gửi. Không gửi, hoặc lệch quá 30 ngày (không tin): null.
+ */
+function clockSkew(clientNow, serverNow = Date.now()) {
+  const cn = Number(clientNow);
+  return Number.isFinite(cn) && cn > 0 && Math.abs(serverNow - cn) < 30 * DAY ? serverNow - cn : null;
+}
+
+/**
+ * Ngày chơi máy gửi lên. Bản mới gửi plays: [{ day, t }] (t = lúc chơi theo đồng hồ điện thoại) và now (đồng hồ
+ * điện thoại lúc gửi): máy chủ tự trừ độ lệch đồng hồ rồi mới tính ngày theo giờ Việt Nam, nên điện thoại để sai
+ * ngày giờ vẫn tính đúng. Bản cũ chỉ gửi days.
+ */
+function playedDays(body, serverNow = Date.now()) {
+  if (Array.isArray(body?.plays)) {
+    // Đồng hồ điện thoại không tin được: dùng ngày máy gửi
+    const skew = clockSkew(body.now, serverNow);
+    return body.plays.slice(0, 20).map((x) => {
+      const t = Number(x?.t);
+      return skew != null && Number.isFinite(t) && t > 0 ? dayKey(Math.min(t + skew, serverNow)) : String(x?.day ?? '');
+    });
+  }
+  return Array.isArray(body?.days) ? body.days.slice(0, 20).map(String) : [dayKey(serverNow)];
+}
+
 function setupStreaks({ app, io, requireAuth, requireReady, isActive, notify }) {
   ioRef = io;
   const auth = [requireAuth, requireReady];
@@ -203,8 +226,7 @@ function setupStreaks({ app, io, requireAuth, requireReady, isActive, notify }) 
   app.post('/api/streaks/played', ...auth, handle((req, res) => {
     const game = String(req.body?.game || '');
     if (!GAME[game] || !GAME[game].client) return res.status(400).json({ error: 'Game này không gửi ngày chơi từ máy.' });
-    const days = Array.isArray(req.body?.days) ? req.body.days.slice(0, 20).map(String) : [dayKey()];
-    const out = recordDays(req.user.id, game, days);
+    const out = recordDays(req.user.id, game, playedDays(req.body));
     res.json(out.summary || summaryOf(req.user.id));
   }));
 
@@ -268,6 +290,8 @@ module.exports = {
   setupStreaks,
   record,
   recordDays,
+  playedDays,
+  clockSkew,
   summaryOf,
   streakOf,
   dayKey,

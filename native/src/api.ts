@@ -328,7 +328,8 @@ export const api = {
   streaks: () => request<StreakSummary>("/api/streaks"),
 
   /** Game chạy trên máy (Xếp Khối, cờ caro với máy): gửi các ngày đã chơi */
-  streaksPlayed: (game: string, days: string[]) => request<StreakSummary>("/api/streaks/played", { method: "POST", body: { game, days } }),
+  streaksPlayed: (game: string, days: string[], plays?: { day: string; t?: number }[]) =>
+    request<StreakSummary>("/api/streaks/played", { method: "POST", body: { game, days, plays, now: Date.now() } }),
 
   streaksPrefs: (remind: boolean) => request<StreakSummary>("/api/streaks/prefs", { method: "POST", body: { remind } }),
 
@@ -340,11 +341,11 @@ export const api = {
 
   /** Giải xong màn `level` (tính từ 1). 400 = lời giải sai (bỏ), 409 = màn chưa mở (giữ, gửi sau) */
   puzzleLevel: (game: string, body: { level: number; moves: unknown[]; mistakes: number; hints: number; ms: number; playedAt: number }) =>
-    request<{ game: string; summary: GameSummary }>(`/api/puzzles/${game}/level`, { method: "POST", body }),
+    request<{ game: string; summary: GameSummary }>(`/api/puzzles/${game}/level`, { method: "POST", body: { ...body, now: Date.now() } }),
 
   /** Giải xong quiz của ngày `day` (hôm nay, hoặc hôm qua nếu giải lúc mất mạng). 400 / 409 = bỏ */
   puzzleDaily: (game: string, body: { day: string; id: string; moves: unknown[]; mistakes: number; hints: number; ms: number; playedAt: number }) =>
-    request<{ game: string; first: boolean; summary: GameSummary }>(`/api/puzzles/${game}/daily`, { method: "POST", body }),
+    request<{ game: string; first: boolean; summary: GameSummary }>(`/api/puzzles/${game}/daily`, { method: "POST", body: { ...body, now: Date.now() } }),
 
   /* ---------------- Nông trại (máy chủ giữ luật: src/farm.js) ---------------- */
 
@@ -376,7 +377,7 @@ export const api = {
   blocksSubmit: (scores: Omit<PendingScore, "uid">[]) =>
     request<BlocksBoard & { accepted: string[]; rejected: { id: string; error: string }[]; newBest: boolean }>("/api/games/blocks/scores", {
       method: "POST",
-      body: { scores },
+      body: { scores, now: Date.now() }, // now: máy chủ đổi giờ điện thoại sang giờ máy chủ
     }),
 
   /** Bảng tin (userId = null) hoặc bài của một người; before = mã bài cũ nhất đã có */

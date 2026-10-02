@@ -475,6 +475,7 @@ Mỗi game có **chuỗi riêng**: ngày nào có chơi (đi một nước cờ,
 - Chơi lần đầu trong ngày có thông báo nhỏ ("🔥 Chuỗi Cờ vua: 5 ngày liên tiếp!"); đạt **mốc** 3, 7, 14, 30, 50, 100, 150, 200, 365, 500, 1000 ngày thì có bảng chúc mừng.
 - **Nhắc giữ chuỗi**: khoảng 20–23 giờ, ai có chuỗi từ 2 ngày mà hôm nay chưa chơi thì nhận một thông báo (mỗi ngày tối đa một lần). Tắt trong bảng chuỗi.
 - Xếp Khối và cờ caro với máy chơi được khi mất mạng: ngày chơi lưu trên máy, có mạng thì gửi lên (nhận ngày chơi trễ tới 7 ngày), nên chuỗi không bị mất oan.
+- Ngày chơi tính theo **đồng hồ máy chủ**, không theo đồng hồ điện thoại: điện thoại để sai giờ hay sai ngày vẫn tích chuỗi đúng ngày (máy gửi kèm giờ của nó, máy chủ tự trừ độ lệch). Vì vậy chỉnh ngày trên điện thoại sang hôm sau không làm chuỗi tăng — phải chờ qua 0 giờ (giờ Việt Nam) thật.
 - Máy chủ giữ chuỗi (`src/streaks.js`, bảng `streak_days`; API `GET /api/streaks`, `POST /api/streaks/played`, `POST /api/streaks/prefs`; realtime `streak:update`). Web: `public/streaks.js` + `streaks.css`; app: `native/src/streaks/`.
 
 **Quy tắc cho game mới** (bắt buộc — `npm test` sẽ báo lỗi nếu thiếu):

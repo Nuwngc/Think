@@ -163,6 +163,19 @@ test('máy chủ: mở màn lần lượt, chấm lời giải, giữ số sao c
   const b1 = data('blocks').levels[0];
   assert.equal(P.blocksVerify(b1, b1.sol.map(([k, r, c]) => [k, r + 0.001, c])), false);
   assert.throws(() => S.solveDaily(801, 'caro', { day, id: 'kd-cu', moves: [] }), /đã đổi/);
+  // Điện thoại chậm 1 ngày (giải quiz "hôm qua" theo điện thoại): chuỗi vẫn tính hôm nay theo giờ máy chủ
+  run("INSERT INTO users (id, username, display_name, password_hash, created_at) VALUES (804, 'pz4', 'Pz4', 'x', 0)");
+  const serverNow = Date.now();
+  const phone = serverNow - 86400000;
+  const yday = P.dayKey(phone);
+  const yp = S.dailyOf('blocks', yday).puzzle;
+  S.solveDaily(804, 'blocks', { day: yday, id: yp.id, moves: solution('blocks', yp), ms: 30000, playedAt: phone - 1000, now: phone }, serverNow);
+  let s4 = streaks.summaryOf(804, serverNow);
+  assert.equal(s4.games.find((g) => g.id === 'blocks').today, true);
+  S.solveLevel(804, 'chess', { level: 1, moves: solution('chess', lv('chess', 1)), playedAt: phone - 1000, now: phone }, serverNow);
+  s4 = streaks.summaryOf(804, serverNow);
+  assert.equal(s4.games.find((g) => g.id === 'chess').today, true);
+  assert.equal(s4.games.find((g) => g.id === 'chess').current, 1);
   const all = S.summary(801);
   assert.deepEqual(Object.keys(all.games), ['chess', 'blocks', 'caro']);
 });

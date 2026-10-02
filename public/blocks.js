@@ -633,7 +633,7 @@ window.ThinkBlocks = (() => {
           const pending = pendingFor(me);
           let data;
           if (pending.length) {
-            data = await host.api('/api/games/blocks/scores', { method: 'POST', body: { scores: pending.slice(0, 50).map(({ uid: _u, ...s }) => s) } });
+            data = await host.api('/api/games/blocks/scores', { method: 'POST', body: { scores: pending.slice(0, 50).map(({ uid: _u, ...s }) => s), now: Date.now() } });
             const done = new Set([...(data.accepted || []), ...(data.rejected || []).map((r) => r.id)]);
             store.set(KEY_PENDING, pendingList().filter((p) => !done.has(p.id)));
           } else {
