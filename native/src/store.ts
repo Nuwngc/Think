@@ -541,6 +541,7 @@ const inCaro = () => get().tab === "games" && get().gamesView === "caro";
 /** Rời mục Cờ vua: đóng ván đang mở (để thông báo về ván đó không bị nuốt mất) */
 function leaveChessView() {
   if (useChess.getState().openId != null) closeGame();
+  if (useChess.getState().localOpen) useChess.setState({ localOpen: false });
 }
 
 /** Rời mục Cờ caro: đóng ván đang mở, dừng máy (ván với máy vẫn lưu, mở lại chơi tiếp) */

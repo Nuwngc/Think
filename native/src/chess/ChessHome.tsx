@@ -12,7 +12,7 @@ import { Avatar, Button, Icon, IconButton, Sheet, useStyles, type IconName } fro
 import { clockText, myColor, opponentColor, outcomeFor, reasonText, tcLabel } from "./format";
 import { SideAvatar, useNow, useSide } from "./parts";
 import { BotSheet, ChallengeSheet, HistorySheet, PrefsSheet } from "./Sheets";
-import { answerChallenge, loadChess, loadLeaderboard, openGame, useChess } from "./store";
+import { answerChallenge, loadChess, loadLeaderboard, openGame, openLocal, useChess } from "./store";
 import type { ChessGame, ChessRating } from "./types";
 
 // Tab Cờ vua: điểm của tôi, câu đố (quiz hôm nay, thử thách nhanh), lời thách đấu, ván đang chơi, bảng xếp hạng, ván gần đây.
@@ -23,7 +23,14 @@ export function ChessHome() {
   const insets = useSafeAreaInsets();
   const meId = useStore((st) => st.me?.id ?? 0);
   const { loaded, loading, error, rating, games, leaderboard } = useChess(
-    useShallow((st) => ({ loaded: st.loaded, loading: st.loading, error: st.error, rating: st.rating, games: st.games, leaderboard: st.leaderboard })),
+    useShallow((st) => ({
+      loaded: st.loaded,
+      loading: st.loading,
+      error: st.error,
+      rating: st.rating,
+      games: st.games,
+      leaderboard: st.leaderboard,
+    })),
   );
   const [challengeOpen, setChallengeOpen] = useState(false);
   const [botOpen, setBotOpen] = useState(false);
@@ -101,6 +108,17 @@ export function ChessHome() {
             <HeroButton title="Thách đấu" icon="sports-kabaddi" solid onPress={() => setChallengeOpen(true)} />
             <HeroButton title="Chơi với máy" icon="smart-toy" onPress={() => setBotOpen(true)} />
           </View>
+          <Pressable
+            onPress={openLocal}
+            accessibilityRole="button"
+            accessibilityLabel="Hai người một máy: chơi cùng bạn ngồi cạnh, không cần mạng"
+            style={({ pressed }) => [s.localRow, { opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Icon name="people" size={20} color="#FFFFFF" />
+            <Text style={s.localText}>Hai người một máy</Text>
+            <Text style={s.crownText}>Không cần mạng</Text>
+            <Icon name="chevron-right" size={20} color="rgba(255,255,255,0.8)" />
+          </Pressable>
         </View>
 
         {/* Câu đố cờ vua: quiz hôm nay + thử thách nhanh */}
@@ -382,6 +400,9 @@ const makeStyles = (c: Colors) =>
     heroStats: { color: "rgba(255,255,255,0.92)", fontSize: 13.5, lineHeight: 19 },
     heroHint: { color: "rgba(255,255,255,0.75)", fontSize: 12 },
     heroActions: { flexDirection: "row", gap: 10, marginTop: 4 },
+    localRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.1)" },
+    localText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700", flex: 1 },
+    crownText: { color: "rgba(255,255,255,0.85)", fontSize: 12.5, fontWeight: "700" },
     heroButton: { flex: 1, minHeight: 46, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 10 },
     heroButtonText: { fontSize: 15, fontWeight: "800" },
     banner: { flexDirection: "row", gap: 10, alignItems: "center", paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12 },

@@ -215,6 +215,12 @@ window.ThinkChess = (() => {
       error: null,
       rating: null,
       bots: [],
+      botTiers: [], // nhóm máy theo sức cờ
+      customElo: null, // máy tự chọn sức: { min, max, step }
+      beaten: [], // máy đã thắng không cần trợ giúp (vương miện)
+      hint: null, // gợi ý vừa xin: { gameId, ply, move }
+      helping: new Set(), // ván đang xin gợi ý / đi lại
+      local: false, // đang mở ván hai người một máy
       games: new Map(),
       receivedAt: new Map(),
       leaderboard: null,
@@ -239,6 +245,7 @@ window.ThinkChess = (() => {
       P[key] = value;
       try { localStorage.setItem(PREF_KEY, JSON.stringify(P)); } catch { /* chế độ ẩn danh */ }
       if (S.openId != null) renderGame();
+      if (S.local) renderLocal();
     }
 
     /* ---------------- Âm thanh ---------------- */
@@ -274,12 +281,23 @@ window.ThinkChess = (() => {
         const prev = S.games.get(g.id);
         if (prev) {
           // Bản cũ đến trễ (vd phản hồi của lần tải đang dở, sự kiện đến không theo thứ tự): bỏ qua
-          if (stageOf(g) < stageOf(prev)) continue;
-          if (g.status === 'active' && prev.status === 'active' && prev.moves.length > g.moves.length) continue;
+          if (!isNewer(prev, g)) continue;
         }
         S.games.set(g.id, g);
         S.receivedAt.set(g.id, now);
       }
+    }
+
+    // Bản `g` có mới hơn bản đang có không. Ván đi lại nước (takebacks tăng) ít nước hơn mà vẫn mới hơn
+    function isNewer(prev, g) {
+      if (stageOf(g) < stageOf(prev)) return false;
+      if (g.status === 'active' && prev.status === 'active') {
+        const a = prev.takebacks || 0;
+        const b = g.takebacks || 0;
+        if (a !== b) return b > a;
+        if (prev.moves.length > g.moves.length) return false;
+      }
+      return true;
     }
 
     let loadAgain = false;
@@ -297,6 +315,9 @@ window.ThinkChess = (() => {
           for (const id of [...S.games.keys()]) if (!fresh.has(id) && id !== S.openId && !keep.has(id)) S.games.delete(id);
           S.rating = data.rating;
           S.bots = data.bots || [];
+          S.botTiers = data.botTiers || [];
+          S.customElo = data.customElo || null;
+          S.beaten = data.beaten || [];
           upsert([...data.challenges, ...data.active, ...data.recent]);
           S.loaded = true;
           S.error = null;
@@ -333,6 +354,12 @@ window.ThinkChess = (() => {
       S.error = null;
       S.rating = null;
       S.bots = [];
+      S.botTiers = [];
+      S.customElo = null;
+      S.beaten = [];
+      S.hint = null;
+      S.helping.clear();
+      S.local = false;
       S.games.clear();
       S.receivedAt.clear();
       S.leaderboard = null;
@@ -410,6 +437,32 @@ window.ThinkChess = (() => {
         renderHome();
       }
       const pane = $('#chess-pane');
+      if (gameId === 'local') {
+        // Hai người một máy (#/chess/local)
+        if (S.openId != null) {
+          S.openId = null;
+          watchGame(null);
+          stopTicker();
+          stopPlaying();
+        }
+        if (!S.local) {
+          S.local = true;
+          localCtx.anim.shown = null;
+          localCtx.sel.selected = null;
+          localCtx.sel.promo = null;
+        }
+        document.body.classList.add('in-chat');
+        $('#chat-empty').hidden = true;
+        $('#chat-pane').hidden = true;
+        pane.hidden = false;
+        renderLocal();
+        loadRules().then(() => S.local && renderLocal(), () => {
+          V.rulesError = true;
+          if (S.local) renderLocal();
+        });
+        return;
+      }
+      if (S.local) S.local = false;
       if (gameId != null) {
         const justOpened = S.openId !== gameId;
         if (justOpened) {
@@ -850,7 +903,8 @@ window.ThinkChess = (() => {
         r && r.provisional && r.games ? h('p', { class: 'chess-hero-hint', text: 'Dấu ? : điểm tạm tính, sau 10 ván sẽ ổn định hơn.' }) : null,
         h('div', { class: 'chess-hero-actions' },
           h('button', { class: 'btn chess-btn-light', type: 'button', onclick: () => openChallenge() }, icon('swords'), 'Thách đấu'),
-          h('button', { class: 'btn chess-btn-ghost', type: 'button', onclick: () => openBots() }, icon('bot'), 'Chơi với máy')));
+          h('button', { class: 'btn chess-btn-ghost', type: 'button', onclick: () => openBots() }, icon('bot'), 'Chơi với máy')),
+        h('a', { class: 'chess-local-link', href: '#/chess/local' }, icon('group'), h('span', { text: 'Hai người một máy' }), h('small', { text: 'Không cần mạng' })));
 
       const parts = [hero];
       // Quiz hôm nay + Thử thách nhanh (public/puzzles-ui.js)
@@ -892,10 +946,11 @@ window.ThinkChess = (() => {
       if (isBotSide(g, color)) return botAvatar(g.bot, cls);
       return avatarEl(userOf(color === 'w' ? g.whiteId : g.blackId), cls, { dot: false });
     }
-    function botAvatar(bot, cls = '') {
-      const el = h('span', { class: `avatar is-bot ${cls}`.trim() }, icon('bot'));
+    function botAvatar(bot, cls = '', crown = false) {
+      const el = h('span', { class: `avatar is-bot ${cls}`.trim() }, bot.avatar ? h('span', { class: 'bot-emoji', text: bot.avatar }) : icon('bot'));
       el.style.setProperty('--av', botTint(bot.elo));
-      return el;
+      if (!crown) return el;
+      return h('span', { class: 'bot-av-wrap' }, el, h('span', { class: 'bot-crown', 'aria-label': 'Đã thắng máy này', text: '👑' }));
     }
 
     function colorPrefText(g, forChallenger) {
@@ -1044,6 +1099,20 @@ window.ThinkChess = (() => {
 
       let arrow = null;
       let badge = null;
+      // Gợi ý vừa xin (ván với máy): mũi tên nước tốt nhất, chỉ khi đang ở thế cờ hiện tại và tới lượt mình
+      const hintArrow = S.hint && S.hint.gameId === g.id && S.hint.ply === total && live && active && g.turn === mine ? S.hint.move : null;
+      if (hintArrow) arrow = hintArrow;
+      // Câu máy vừa nói: bong bóng cạnh tên máy khoảng 7 giây
+      const say = g.botSay && live && (g.botSay.ply === total || !active) ? g.botSay : null;
+      let sayText = null;
+      if (say) {
+        const key = `${g.id}:${say.ply}:${say.text}`;
+        if (!V.say || V.say.key !== key) {
+          V.say = { key, at: Date.now() };
+          setTimeout(() => { if (S.openId === g.id && V.say && V.say.key === key) renderGame(); }, 7100);
+        }
+        if (Date.now() - V.say.at < 7000) sayText = say.text;
+      }
       if (review) {
         if (P.arrows) arrow = bestView ? beforePos.best : ply < total && review.positions[ply] ? review.positions[ply].best : null;
         if (bestView) badge = { sq: beforePos.best.slice(2, 4), cls: 'best' };
@@ -1070,6 +1139,10 @@ window.ThinkChess = (() => {
         moveList,
         navBtn('next', 'Nước sau', live, () => setPly(ply + 1 >= total ? null : ply + 1)),
         navBtn('last', 'Nước mới nhất', live, () => setPly(null))));
+      if (g.opening && !review) {
+        side.push(h('p', { class: 'chess-opening', 'aria-label': `Khai cuộc: ${g.opening.name}` },
+          classBadge('book'), h('span', { text: g.opening.name }), h('small', { text: ` (${g.opening.eco})` })));
+      }
 
       if (review) {
         side.push(coachCard(g, review, ply, total, bestView));
@@ -1102,6 +1175,24 @@ window.ThinkChess = (() => {
       }
       if (!active && g.status === 'finished' && total >= 2) side.push(analysisPanel(g, ply, analysis));
 
+      if (active && mine && g.bot) {
+        const helping = S.helping.has(g.id);
+        const canTakeBack = total >= (mine === 'w' ? 1 : 2);
+        side.push(h('div', { class: 'btn-row chess-actions' },
+          h('button', {
+            class: 'btn', type: 'button', dataset: { focus: 'hint' },
+            disabled: !live || g.turn !== mine || S.sending.has(g.id) || helping || Boolean(hintArrow),
+            onclick: (e) => withBusy(e.currentTarget, () => askHint(g)),
+          }, icon('bulb'), 'Gợi ý'),
+          h('button', {
+            class: 'btn', type: 'button', dataset: { focus: 'takeback' },
+            disabled: !canTakeBack || S.sending.has(g.id) || helping,
+            onclick: (e) => withBusy(e.currentTarget, () => takeBack(g)),
+          }, icon('undo'), 'Đi lại')));
+        if ((g.hints || 0) + (g.takebacks || 0) > 0) {
+          side.push(h('p', { class: 'chess-note', text: `Đã dùng ${g.hints || 0} gợi ý, ${g.takebacks || 0} lần đi lại. Thắng ván này vẫn vui, nhưng không nhận vương miện của ${g.bot.name}.` }));
+        }
+      }
       if (active && mine) {
         const canAbort = total < 2;
         side.push(h('div', { class: 'btn-row chess-actions' },
@@ -1138,9 +1229,9 @@ window.ThinkChess = (() => {
 
       const body = h('div', { class: 'chess-game' },
         h('div', { class: 'chess-play' },
-          playerBar(g, top, mat.captured[top], mat.lead[top]),
+          playerBar(g, top, mat.captured[top], mat.lead[top], g.botColor === top ? sayText : null, true),
           board,
-          playerBar(g, bottom, mat.captured[bottom], mat.lead[bottom])),
+          playerBar(g, bottom, mat.captured[bottom], mat.lead[bottom], g.botColor === bottom ? sayText : null, false)),
         h('div', { class: 'chess-side' }, side));
       const prevScroll = pane.querySelector('.chess-game')?.scrollTop || 0;
       pane.replaceChildren(head, body);
@@ -1405,14 +1496,16 @@ window.ThinkChess = (() => {
       }
     }
 
-    function playerBar(g, color, captured, lead) {
+    // say: câu máy đang nói (bong bóng); below: bong bóng nằm dưới thanh (thanh ở trên bàn cờ)
+    function playerBar(g, color, captured, lead, say = null, below = false) {
       const isMe = !isBotSide(g, color) && (color === 'w' ? g.whiteId : g.blackId) === meId();
       const active = g.status === 'active';
       const turn = active && g.turn === color;
       const rating = g.status === 'finished' && g.rated ? g.ratings[color] : g.live[color];
       const delta = g.deltas[color];
       const ms = clockMs(g, color);
-      return h('div', { class: `chess-player${turn ? ' is-turn' : ''}` },
+      return h('div', { class: `chess-player${turn ? ' is-turn' : ''}${say ? ' is-talking' : ''}` },
+        say ? h('div', { class: `chess-say${below ? ' is-below' : ' is-above'}`, role: 'status', 'aria-label': `${sideName(g, color)} nói: ${say}`, text: say }) : null,
         sideAvatar(g, color, 'avatar-sm'),
         h('div', { class: 'chess-player-main' },
           h('div', { class: 'chess-player-name' },
@@ -1438,7 +1531,47 @@ window.ThinkChess = (() => {
           h('span', { text: `${winner ? `${winner} thắng do ${reasonText(g.reason)}` : reasonText(g.reason)}${g.result ? ` · ${g.result.replace(/1\/2/g, '½')}` : ''}` })),
         delta != null
           ? h('div', { class: 'chess-result-delta' }, h('strong', { text: signed(delta) }), h('span', { text: `ELO ${(g.ratings[mine] || 0) + delta}` }))
+          : null,
+        g.bot && mine && o === 'win'
+          ? h('p', {
+              class: 'chess-result-crown',
+              text: (g.hints || 0) + (g.takebacks || 0) > 0
+                ? `Thắng có trợ giúp (${g.hints || 0} gợi ý, ${g.takebacks || 0} lần đi lại).`
+                : g.bot.custom ? 'Thắng không cần trợ giúp!' : `👑 Bạn nhận vương miện của ${g.bot.name}!`,
+            })
           : null);
+    }
+
+    // Ván với máy: xin gợi ý (mũi tên nước tốt nhất) / đi lại nước vừa đi
+    async function askHint(g) {
+      S.helping.add(g.id);
+      try {
+        const data = await api(`/api/chess/games/${g.id}/hint`, { method: 'POST', body: {} });
+        upsert([data.game]);
+        S.hint = { gameId: g.id, ply: data.game.moves.length, move: data.move };
+      } catch (err) {
+        if (err.data && err.data.game) upsert([err.data.game]);
+        toast(err.message);
+      } finally {
+        S.helping.delete(g.id);
+        if (S.openId === g.id) renderGame();
+      }
+    }
+    async function takeBack(g) {
+      S.helping.add(g.id);
+      try {
+        const data = await api(`/api/chess/games/${g.id}/takeback`, { method: 'POST', body: {} });
+        upsert([data.game]);
+        S.hint = null;
+        V.ply = null;
+        V.selected = null;
+      } catch (err) {
+        if (err.data && err.data.game) upsert([err.data.game]);
+        toast(err.message);
+      } finally {
+        S.helping.delete(g.id);
+        if (S.openId === g.id) renderGame();
+      }
     }
 
     async function rematch(g) {
@@ -1743,6 +1876,163 @@ window.ThinkChess = (() => {
     window.addEventListener('pointerup', endDrag);
     window.addEventListener('pointercancel', () => endDrag(null));
 
+    /* ---------------- Hai người một máy (#/chess/local) ---------------- */
+    // Hai bạn ngồi cạnh nhau, đưa máy cho nhau sau mỗi nước. Luật chạy ngay trên máy, không cần mạng, không tính điểm.
+    // Ván lưu trên máy này (localStorage), thoát ra vào lại vẫn chơi tiếp.
+    const LOCAL_KEY = 'chess-local';
+    const L = { moves: [], resigned: null, autoFlip: false, flip: false };
+    try {
+      const v = JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}');
+      if (Array.isArray(v.moves)) L.moves = v.moves.filter((m) => typeof m === 'string');
+      if (v.resigned === 'w' || v.resigned === 'b') L.resigned = v.resigned;
+      L.autoFlip = Boolean(v.autoFlip);
+    } catch { /* ván mới */ }
+    function saveLocal() {
+      try { localStorage.setItem(LOCAL_KEY, JSON.stringify({ moves: L.moves, resigned: L.resigned, autoFlip: L.autoFlip })); } catch { /* chế độ ẩn danh */ }
+    }
+    const localCtx = {
+      root: '#chess-pane',
+      sel: { selected: null, promo: null },
+      anim: { shown: null, dropped: null, inflight: null },
+      rerender: () => renderLocal(),
+      move: (uci) => localMove(uci),
+    };
+    // Dựng lại ván từ danh sách nước đi: thế cờ, ký hiệu nước, kết quả (null = đang chơi)
+    function localState() {
+      const chess = new Chess();
+      const ok = [];
+      const san = [];
+      for (const m of L.moves) {
+        try {
+          const r = chess.move({ from: m.slice(0, 2), to: m.slice(2, 4), promotion: m[4] || undefined });
+          ok.push(`${r.from}${r.to}${r.promotion || ''}`);
+          san.push(r.san);
+        } catch {
+          break;
+        }
+      }
+      let outcome = null;
+      if (chess.isCheckmate()) outcome = { result: chess.turn() === 'w' ? '0-1' : '1-0', reason: 'checkmate' };
+      else if (chess.isStalemate()) outcome = { result: '1/2-1/2', reason: 'stalemate' };
+      else if (chess.isInsufficientMaterial()) outcome = { result: '1/2-1/2', reason: 'insufficient' };
+      else if (chess.isThreefoldRepetition()) outcome = { result: '1/2-1/2', reason: 'repetition' };
+      else if (chess.isDrawByFiftyMoves()) outcome = { result: '1/2-1/2', reason: 'fifty' };
+      else if (L.resigned) outcome = { result: L.resigned === 'w' ? '0-1' : '1-0', reason: 'resign' };
+      return { moves: ok, san, fen: chess.fen(), turn: chess.turn(), check: chess.inCheck(), outcome };
+    }
+    function localStatus(st) {
+      const side = (c) => (c === 'w' ? 'Trắng' : 'Đen');
+      const o = st.outcome;
+      if (!o) return `${side(st.turn)} đi${st.check ? ' — đang bị chiếu!' : '.'}`;
+      if (o.reason === 'checkmate') return `Chiếu hết! ${o.result === '1-0' ? 'Trắng' : 'Đen'} thắng.`;
+      if (o.reason === 'resign') return `${o.result === '1-0' ? 'Đen' : 'Trắng'} đầu hàng. ${o.result === '1-0' ? 'Trắng' : 'Đen'} thắng.`;
+      const why = { stalemate: 'hết nước đi (pat)', insufficient: 'không đủ quân chiếu hết', repetition: 'lặp lại thế cờ 3 lần', fifty: '50 nước không ăn quân, không đi tốt' }[o.reason];
+      return `Hòa do ${why}.`;
+    }
+    function localMove(uci) {
+      if (!Chess) return;
+      const before = localState();
+      if (before.outcome) return;
+      L.moves = [...before.moves, uci];
+      const after = localState();
+      if (after.moves.length !== before.moves.length + 1) {
+        L.moves = before.moves; // nước không hợp lệ
+        renderLocal();
+        return;
+      }
+      L.resigned = null;
+      saveLocal();
+      playSound(soundForSan(after.san[after.san.length - 1], after.moves.length % 2 === 1));
+      if (after.outcome) setTimeout(() => playSound('end'), 250);
+      renderLocal();
+    }
+    function localSide(color, turn, captured, lead) {
+      return h('div', { class: `chess-player${turn ? ' is-turn' : ''}` },
+        h('span', { class: `avatar avatar-sm chess-local-chip is-${color}`, 'aria-hidden': 'true' }, icon('group')),
+        h('div', { class: 'chess-player-main' },
+          h('div', { class: 'chess-player-name' }, h('span', { class: 'chess-player-label', text: color === 'w' ? 'Trắng' : 'Đen' })),
+          h('div', { class: 'chess-captured' },
+            captured.map((p) => h('img', { src: pieceSrc(p), alt: '', draggable: 'false' })),
+            lead > 0 ? h('span', { text: `+${lead}` }) : null)),
+        turn ? h('span', { class: 'chess-turn-dot', 'aria-label': 'Đang tới lượt' }) : null);
+    }
+    function renderLocal() {
+      const pane = $('#chess-pane');
+      if (!pane || !S.local) return;
+      const back = h('button', { class: 'icon-btn back-btn chess-back', type: 'button', 'aria-label': 'Quay lại', onclick: () => navigate('#/chess', { replace: true }) }, icon('back'));
+      if (!Chess) {
+        pane.replaceChildren(h('header', { class: 'chat-head' }, back, h('div', { class: 'chat-title' }, h('h2', { text: 'Hai người một máy' }))),
+          V.rulesError
+            ? h('p', { class: 'chess-alert', text: 'Không tải được luật cờ. Kiểm tra mạng rồi tải lại trang.' })
+            : h('div', { class: 'chess-loading' }, h('span', { class: 'spinner' }), 'Đang tải…'));
+        return;
+      }
+      const st = localState();
+      const over = Boolean(st.outcome);
+      const bottom = L.autoFlip && !over ? st.turn : L.flip ? 'b' : 'w';
+      const top = other(bottom);
+      const mat = material(st.fen);
+      const total = st.moves.length;
+      const head = h('header', { class: 'chat-head' },
+        back,
+        h('div', { class: 'chat-title' }, h('h2', { text: 'Hai người một máy' }), h('p', { text: 'Không cần mạng · không tính điểm' })),
+        h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Tùy chọn bàn cờ', onclick: openPrefs }, icon('tune')),
+        h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Xoay bàn cờ', disabled: L.autoFlip && !over, dataset: { focus: 'flip' }, onclick: () => { L.flip = !L.flip; renderLocal(); } }, icon('flip')));
+      const board = renderBoard({ fen: st.fen, orientation: bottom, movable: over ? null : st.turn, lastMove: total ? st.moves[total - 1] : null, animKey: `local:${bottom}` }, localCtx);
+      const moveList = h('ol', { class: 'chess-moves', 'aria-label': 'Các nước đã đi' });
+      for (let i = 0; i < st.san.length; i += 2) {
+        moveList.append(h('li', {},
+          h('span', { class: 'chess-move-no', text: `${i / 2 + 1}.` }),
+          h('span', { class: `chess-move${i === total - 1 ? ' is-current' : ''}`, text: st.san[i] }),
+          st.san[i + 1] ? h('span', { class: `chess-move${i + 1 === total - 1 ? ' is-current' : ''}`, text: st.san[i + 1] }) : null));
+      }
+      if (!st.san.length) moveList.append(h('li', { class: 'chess-moves-empty', text: 'Trắng đi trước. Đưa máy cho nhau sau mỗi nước nhé!' }));
+      const auto = h('input', { class: 'switch', type: 'checkbox', checked: L.autoFlip, 'aria-label': 'Tự xoay bàn cờ' });
+      auto.addEventListener('change', () => { L.autoFlip = auto.checked; saveLocal(); renderLocal(); });
+      const newGame = () => { L.moves = []; L.resigned = null; saveLocal(); localCtx.anim.shown = null; renderLocal(); };
+      const side = [
+        h('div', { class: 'chess-nav' }, moveList),
+        h('p', { class: `chess-status${over ? ' is-turn' : ''}`, 'aria-live': 'polite', text: localStatus(st) }),
+        h('div', { class: 'btn-row chess-actions' },
+          h('button', {
+            class: 'btn', type: 'button', disabled: total === 0 && !L.resigned, dataset: { focus: 'local-undo' },
+            onclick: () => { if (L.resigned) L.resigned = null; else L.moves = st.moves.slice(0, -1); saveLocal(); renderLocal(); },
+          }, icon('undo'), 'Đi lại'),
+          over
+            ? h('button', { class: 'btn btn-primary', type: 'button', dataset: { focus: 'local-new' }, onclick: newGame }, icon('replay'), 'Ván mới')
+            : h('button', {
+                class: 'btn btn-danger', type: 'button', disabled: total < 2,
+                onclick: () => {
+                  if (!window.confirm(`Bên ${st.turn === 'w' ? 'Trắng' : 'Đen'} đầu hàng?`)) return;
+                  L.resigned = st.turn;
+                  saveLocal();
+                  playSound('end');
+                  renderLocal();
+                },
+              }, icon('flag'), `${st.turn === 'w' ? 'Trắng' : 'Đen'} đầu hàng`)),
+        !over && total > 0
+          ? h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { if (window.confirm('Bắt đầu ván mới? Ván đang chơi sẽ bị xóa.')) newGame(); } }, icon('replay'), 'Ván mới')
+          : null,
+        h('div', { class: 'panel' }, h('label', { class: 'switch-row chess-pref' },
+          h('span', { class: 'chess-switch-text' }, h('strong', { text: 'Tự xoay bàn cờ' }), h('span', { class: 'hint', text: 'Bên tới lượt luôn ngồi phía dưới, hợp khi đặt máy giữa hai người.' })),
+          auto)),
+      ];
+      const body = h('div', { class: 'chess-game' },
+        h('div', { class: 'chess-play' },
+          localSide(top, !over && st.turn === top, mat.captured[top], mat.lead[top]),
+          board,
+          localSide(bottom, !over && st.turn === bottom, mat.captured[bottom], mat.lead[bottom])),
+        h('div', { class: 'chess-side' }, side));
+      const focusSq = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.sq : null;
+      const focusKey = document.activeElement && document.activeElement.closest && document.activeElement.closest('#chess-pane') ? document.activeElement.dataset.focus || null : null;
+      pane.replaceChildren(head, body);
+      moveList.scrollLeft = moveList.scrollWidth;
+      moveList.scrollTop = moveList.scrollHeight;
+      if (localCtx.sel.promo) pane.querySelector('.chess-promo-row button')?.focus({ preventScroll: true });
+      else if (focusSq) pane.querySelector(`.sq[data-sq="${focusSq}"]`)?.focus({ preventScroll: true });
+      else if (focusKey) pane.querySelector(`[data-focus="${focusKey}"]:not([disabled])`)?.focus({ preventScroll: true });
+    }
+
     /* ---------------- Bàn câu đố (Quiz hằng ngày, Thử thách nhanh: public/puzzles-ui.js) ---------------- */
     // Cùng bàn cờ, kéo thả, quân trượt, âm thanh và tùy chọn với ván đấu.
     // opts: { root: bộ chọn CSS của khung chứa bàn (để kéo thả tìm ô), onMove(uci) }
@@ -2006,28 +2296,72 @@ window.ThinkChess = (() => {
 
     async function openBots() {
       if (!S.bots.length) await load();
-      const pick = { id: (S.bots[2] || S.bots[0] || {}).id || null };
+      const pick = { id: (S.bots[2] || S.bots[0] || {}).id || null, elo: 1200 };
       const tc = { base: 0, inc: 0 };
       const opts = { color: 'white' };
+      const crowns = new Set(S.beaten);
       const error = h('p', { class: 'form-error', role: 'alert', hidden: true });
-      const list = h('ul', { class: 'people-list chess-people', role: 'radiogroup', 'aria-label': 'Chọn máy' });
-      const drawBots = () => {
-        list.replaceChildren(...S.bots.map((b) => h('li', { class: 'chess-bot-item' },
+      const list = h('div', { class: 'chess-bot-groups', role: 'radiogroup', 'aria-label': 'Chọn máy' });
+      const botRow = (b) => {
+        const on = pick.id === b.id;
+        const won = crowns.has(b.id);
+        return h('li', { class: 'chess-bot-item' },
           h('button', {
             class: 'person pick',
             type: 'button',
             role: 'radio',
-            'aria-checked': pick.id === b.id ? 'true' : 'false',
-            'aria-pressed': pick.id === b.id ? 'true' : 'false',
-            'aria-label': `${b.name}, khoảng ${b.elo} ELO. ${b.about}`,
+            'aria-checked': on ? 'true' : 'false',
+            'aria-pressed': on ? 'true' : 'false',
+            'aria-label': `${b.name}, khoảng ${b.elo} ELO${b.style ? `, ${b.style}` : ''}${won ? ', đã thắng' : ''}. ${b.about}`,
             onclick: () => { pick.id = b.id; drawBots(); },
           },
-          botAvatar(b),
+          botAvatar(b, '', won),
           h('span', { class: 'person-main' },
             h('span', { class: 'person-name' }, b.name, h('span', { class: 'chess-elo', text: ` ~${b.elo}` })),
+            b.style ? h('span', { class: 'chess-bot-style', text: b.style }) : null,
             h('span', { class: 'person-sub', text: b.about })),
           h('span', { class: 'check' }, icon('check'))),
-          h('a', { class: 'chess-source', href: b.source.url, target: '_blank', rel: 'noopener noreferrer', text: `${b.source.name} · ${b.source.license} ↗` }))));
+          on ? h('a', { class: 'chess-source', href: b.source.url, target: '_blank', rel: 'noopener noreferrer', text: `${b.source.name} · ${b.source.license} ↗` }) : null);
+      };
+      const drawBots = () => {
+        const groups = S.botTiers.length
+          ? S.botTiers.map((t) => ({ name: t.name, list: S.bots.filter((b) => b.tier === t.id) })).filter((t) => t.list.length)
+          : [{ name: '', list: S.bots }];
+        const parts = groups.map((grp) => h('div', { class: 'chess-bot-group' },
+          grp.name ? h('h4', { class: 'chess-bot-tier', text: grp.name }) : null,
+          h('ul', { class: 'people-list chess-people' }, grp.list.map(botRow))));
+        if (S.customElo) {
+          const c = S.customElo;
+          const on = pick.id === 'custom';
+          const step = (d) => {
+            pick.id = 'custom';
+            pick.elo = Math.max(c.min, Math.min(c.max, pick.elo + d));
+            drawBots();
+            list.querySelector(`[data-step="${d}"]`)?.focus({ preventScroll: true });
+          };
+          parts.push(h('div', { class: 'chess-bot-group' },
+            h('h4', { class: 'chess-bot-tier', text: 'Tự chọn sức' }),
+            h('div', { class: `chess-custom${on ? ' is-on' : ''}` },
+              h('button', {
+                class: 'person pick',
+                type: 'button',
+                role: 'radio',
+                'aria-checked': on ? 'true' : 'false',
+                'aria-pressed': on ? 'true' : 'false',
+                'aria-label': `Máy tùy chỉnh, ${pick.elo} ELO`,
+                onclick: () => { pick.id = 'custom'; drawBots(); },
+              },
+              botAvatar({ elo: pick.elo, avatar: '🎯' }),
+              h('span', { class: 'person-main' },
+                h('span', { class: 'person-name', text: 'Máy tùy chỉnh' }),
+                h('span', { class: 'person-sub', text: `Chọn đúng sức cờ bạn muốn luyện, từ ${c.min} đến ${c.max} ELO.` })),
+              h('span', { class: 'check' }, icon('check'))),
+              h('div', { class: 'chess-stepper' },
+                ...[-200, -50].map((d) => h('button', { class: 'btn btn-sm', type: 'button', dataset: { step: String(d) }, 'aria-label': `Giảm ${-d} điểm`, onclick: () => step(d), text: String(d) })),
+                h('strong', { class: 'chess-stepper-value', 'aria-live': 'polite', text: String(pick.elo) }),
+                ...[50, 200].map((d) => h('button', { class: 'btn btn-sm', type: 'button', dataset: { step: String(d) }, 'aria-label': `Tăng ${d} điểm`, onclick: () => step(d), text: `+${d}` }))))));
+        }
+        list.replaceChildren(...parts);
       };
       drawBots();
       const start = h('button', { class: 'btn btn-primary btn-block', type: 'button' }, 'Bắt đầu');
@@ -2035,7 +2369,8 @@ window.ThinkChess = (() => {
         if (!pick.id) return;
         error.hidden = true;
         try {
-          const { game } = await api('/api/chess/bot', { method: 'POST', body: { bot: pick.id, base: tc.base, inc: tc.inc, color: opts.color } });
+          const bot = pick.id === 'custom' ? `custom-${pick.elo}` : pick.id;
+          const { game } = await api('/api/chess/bot', { method: 'POST', body: { bot, base: tc.base, inc: tc.inc, color: opts.color } });
           upsert([game]);
           closeSheet(true);
           // Thay bước lịch sử của bảng bằng ván cờ
@@ -2047,7 +2382,7 @@ window.ThinkChess = (() => {
         }
       }));
       openSheet('Chơi với máy', [
-        h('p', { class: 'hint', text: 'Luyện tập với các máy cờ mã nguồn mở. Ván với máy không tính điểm ELO.' }),
+        h('p', { class: 'hint', text: `Mỗi máy một tính cách. Thắng không dùng gợi ý, không đi lại để nhận vương miện 👑 (${crowns.size}/${S.bots.length}). Ván với máy không tính điểm ELO.` }),
         list,
         h('div', { class: 'panel' }, h('h3', { text: 'Thời gian mỗi bên' }), timePicker(tc)),
         h('div', { class: 'panel' }, h('h3', { text: 'Bạn cầm quân' }), colorPicker(opts)),

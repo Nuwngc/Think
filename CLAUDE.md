@@ -29,6 +29,12 @@ Dữ liệu ở `public/puzzles/<game>.json` và bản giống hệt `native/src
 - Tin nhắn thoại: phần dùng chung `public/voice-core.js` và bản app `native/src/voice/core.ts` phải giống hệt (kiểm thử so khớp). Mỗi lúc một trình phát dùng chung (`native/src/voice/player.ts`) — đừng tạo trình phát riêng cho từng tin (Android hết luồng âm thanh).
 - Thành tựu tính trên máy chủ (`src/achievements.js`); web và app chỉ vẽ. Game mới nên có thêm một huy hiệu.
 
+## Cờ vua: máy cờ, bàn cờ trong app
+
+- Máy cờ khai báo ở `src/chess-bots.js` (id, ELO, gu, câu nói). Không đổi / bỏ id cũ (ván đang chơi và vương miện lưu theo id). Thêm máy có tính cách: thêm một dòng `style({...})`, gu mới thì thêm cách cộng điểm vào `styleBonus` (`src/chess-worker.js`) và tên vào `STYLES`. `test/chess-bots.test.js` kiểm tra ELO tăng dần, đủ câu nói.
+- Ván với máy có `hints` / `takebacks`; đi lại làm ván ít nước hơn nên web và app nhận bản mới theo `takebacks` (`isNewer`), đừng bỏ.
+- Bàn cờ trong app (`native/src/chess/Board.tsx`): vị trí quân dùng Animated **không** native driver và các quân giữ thứ tự vẽ cố định (`layout.ts`). Đổi lại sẽ làm quân hiện sai ô với kiến trúc mới (lỗi phong cấp bản 0.6).
+
 ## Kiểm tra trước khi push
 
 - Máy chủ + web: `npm test`.

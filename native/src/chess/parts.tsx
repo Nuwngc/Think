@@ -28,10 +28,25 @@ export function botTint(elo: number) {
   return "#B3372A";
 }
 
-export function BotAvatar({ bot, size = 40 }: { bot: Pick<ChessBot, "elo">; size?: number }) {
+export function BotAvatar({ bot, size = 40, crown }: { bot: Pick<ChessBot, "elo" | "avatar">; size?: number; crown?: boolean }) {
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: botTint(bot.elo), alignItems: "center", justifyContent: "center" }}>
-      <Icon name="smart-toy" size={size * 0.56} color="#fff" />
+    <View style={{ width: size, height: size }}>
+      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: botTint(bot.elo), alignItems: "center", justifyContent: "center" }}>
+        {bot.avatar ? (
+          <Text style={{ fontSize: size * 0.52, lineHeight: size * 0.68 }} allowFontScaling={false}>
+            {bot.avatar}
+          </Text>
+        ) : (
+          <Icon name="smart-toy" size={size * 0.56} color="#fff" />
+        )}
+      </View>
+      {crown ? (
+        <View style={[styles.crown, { width: size * 0.48, height: size * 0.48, borderRadius: size }]} accessibilityLabel="Đã thắng máy này">
+          <Text style={{ fontSize: size * 0.28 }} allowFontScaling={false}>
+            👑
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -119,6 +134,16 @@ export function ColorPicker({ value, onChange }: { value: ColorPref; onChange: (
 }
 
 const styles = StyleSheet.create({
+  crown: {
+    position: "absolute",
+    right: -4,
+    top: -6,
+    backgroundColor: "#FFF6D8",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E8C25A",
+  },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tc: { width: "31.5%", flexGrow: 1, minHeight: 58, borderRadius: 12, alignItems: "center", justifyContent: "center", paddingVertical: 8 },
   tcLabel: { fontSize: 18, fontWeight: "800" },

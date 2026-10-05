@@ -267,6 +267,12 @@ export const api = {
     request<{
       rating: ChessRating;
       bots: ChessBot[];
+      /** Nhóm máy theo sức cờ (bản máy chủ cũ không có) */
+      botTiers?: { id: string; name: string }[];
+      /** Máy tự chọn sức: khoảng ELO */
+      customElo?: { min: number; max: number; step: number };
+      /** Các máy đã thắng không cần trợ giúp */
+      beaten?: string[];
       baseMinutes: number[];
       challenges: ChessGame[];
       active: ChessGame[];
@@ -295,6 +301,12 @@ export const api = {
 
   chessDraw: (id: number, action: "offer" | "accept" | "decline") =>
     request<{ game: ChessGame }>(`/api/chess/games/${id}/draw`, { method: "POST", body: { action } }),
+
+  /** Ván với máy: gợi ý nước đi (Stockfish) */
+  chessHint: (id: number) => request<{ move: string; game: ChessGame }>(`/api/chess/games/${id}/hint`, { method: "POST", body: {} }),
+
+  /** Ván với máy: đi lại nước vừa đi */
+  chessTakeback: (id: number) => request<{ game: ChessGame }>(`/api/chess/games/${id}/takeback`, { method: "POST", body: {} }),
 
   chessRematch: (id: number) => request<{ game: ChessGame }>(`/api/chess/games/${id}/rematch`, { method: "POST", body: {} }),
 

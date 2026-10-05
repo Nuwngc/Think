@@ -8,7 +8,18 @@ export type ChessBot = {
   elo: number;
   about: string;
   source: { name: string; url: string; license: string };
+  /** Biểu tượng (emoji) của máy có tính cách; null = hình máy */
+  avatar?: string | null;
+  /** Gu chơi, vd "Mê đẩy tốt" */
+  style?: string | null;
+  /** Nhóm sức cờ: new | mid | adv | pro */
+  tier?: string;
+  /** Máy tự chọn sức */
+  custom?: boolean;
 };
+
+/** Câu máy vừa nói trong ván (ply: số nước lúc nói) */
+export type BotSay = { ply: number; text: string; event: string | null };
 
 export type ChessStatus = "challenge" | "active" | "finished" | "aborted" | "declined" | "cancelled" | "expired";
 
@@ -42,6 +53,12 @@ export type ChessGame = {
   startedAt: number | null;
   endedAt: number | null;
   expiresAt: number | null;
+  /** Tên khai cuộc (sách khai cuộc lichess) */
+  opening?: { eco: string; name: string } | null;
+  botSay?: BotSay | null;
+  /** Số lần dùng gợi ý / đi lại (ván với máy) */
+  hints?: number;
+  takebacks?: number;
 };
 
 export type ChessRating = {
