@@ -14,9 +14,13 @@ const MINUTE = 60000 * SCALE;
 const BASE_MINUTES = [0, 1, 2, 3, 5, 10, 15, 30, 60]; // 0 = không giới hạn thời gian
 const MAX_INC = 60; // giây cộng thêm mỗi nước
 const CHALLENGE_TTL = 15 * MINUTE;
+const DAY = 24 * 60 * MINUTE;
+const DAILY_DAYS = [1, 2, 3, 7]; // cờ theo ngày: số ngày mỗi nước
+const DAILY_CHALLENGE_TTL = 2 * DAY; // lời thách đấu cờ theo ngày chờ được 2 ngày
+const DAILY_REMIND_MS = 2 * 60 * MINUTE; // cờ theo ngày: còn 2 giờ thì nhắc
 const FIRST_MOVE_MS = MINUTE; // ván có giờ: mỗi bên phải đi nước đầu trong 1 phút, không thì hủy ván
 const DEFAULT_RATING = 1200;
-const MAX_ACTIVE = 12;
+const MAX_ACTIVE = 20;
 const MAX_PENDING = 6;
 
 /* ---------------- Máy cờ (AI) ---------------- */
@@ -26,6 +30,7 @@ const bots = require('./chess-bots');
 const { BOTS, botPublic } = bots;
 const botById = { get: (id) => bots.botById(id) };
 const openings = require('./chess-openings');
+const { setupChessExtra, PHRASES } = require('./chess-extra');
 
 /* ---------------- Tiện ích ---------------- */
 
@@ -38,7 +43,10 @@ const playerId = (g, color) => (color === 'w' ? g.white_id : g.black_id);
 const isBotSide = (g, color) => Boolean(g.bot) && playerId(g, color) == null;
 const humanIds = (g) => [g.white_id, g.black_id, g.challenger_id, g.opponent_id].filter((x, i, a) => x != null && a.indexOf(x) === i);
 
+const ttlOf = (g) => (g.daily_ms ? DAILY_CHALLENGE_TTL : CHALLENGE_TTL);
+
 function tcLabel(g) {
+  if (g.daily_ms) return `${Math.round(g.daily_ms / DAY)} ngày mỗi nước`;
   if (!g.base_ms) return 'không giới hạn thời gian';
   return `${Math.round(g.base_ms / MINUTE)}+${Math.round(g.inc_ms / 1000 / SCALE)}`;
 }
@@ -68,6 +76,17 @@ function boardOf(g) {
 }
 
 function clocksOf(g, now) {
+  if (g.daily_ms) {
+    // Cờ theo ngày: mỗi nước có daily_ms, bên đang đi đếm lùi từ lúc tới lượt
+    const clocks = { w: g.daily_ms, b: g.daily_ms };
+    if (g.status === 'active') {
+      const t = turnOf(g);
+      clocks[t] = Math.max(0, g.daily_ms - (now - g.turn_started_at));
+    } else if (g.white_ms != null && g.black_ms != null) {
+      return { w: g.white_ms, b: g.black_ms };
+    }
+    return clocks;
+  }
   if (!g.base_ms) return null;
   const clocks = { w: g.white_ms, b: g.black_ms };
   if (g.status === 'active' && movesOf(g).length >= 2) {
@@ -113,6 +132,16 @@ function readSay(text) {
   }
 }
 
+function readChat(text) {
+  if (!text) return null;
+  try {
+    const v = JSON.parse(text);
+    return v && (v.color === 'w' || v.color === 'b') && typeof v.text === 'string' ? { color: v.color, text: v.text, ply: Number(v.ply) || 0, at: Number(v.at) || 0 } : null;
+  } catch {
+    return null;
+  }
+}
+
 function serialize(g, now = Date.now()) {
   const moves = movesOf(g);
   const active = g.status === 'active';
@@ -129,6 +158,8 @@ function serialize(g, now = Date.now()) {
     opponentId: g.opponent_id,
     colorPref: g.color_pref,
     base: g.base_ms,
+    // Cờ theo ngày: thời gian mỗi nước (ms), 0 = ván thường
+    daily: g.daily_ms || 0,
     inc: g.inc_ms,
     moves,
     fen: g.fen,
@@ -146,10 +177,12 @@ function serialize(g, now = Date.now()) {
     createdAt: g.created_at,
     startedAt: g.started_at || null,
     endedAt: g.ended_at || null,
-    expiresAt: g.status === 'challenge' ? g.created_at + CHALLENGE_TTL : null,
+    expiresAt: g.status === 'challenge' ? g.created_at + ttlOf(g) : null,
     opening: openingOf(moves),
     // Ván với máy: câu máy vừa nói, số lần dùng gợi ý / đi lại
     botSay: bot ? readSay(g.bot_say) : null,
+    // Ván người với người: câu nói nhanh gần nhất ({ color, text, ply, at })
+    chat: !bot ? readChat(g.chat) : null,
     hints: g.hints || 0,
     takebacks: g.takebacks || 0,
   };
@@ -299,10 +332,16 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
   function clearTimer(id) {
     clearTimeout(timers.get(id));
     timers.delete(id);
+    clearTimeout(reminders.get(id));
+    reminders.delete(id);
   }
 
   function arm(g) {
     clearTimer(g.id);
+    if (g.status === 'active' && g.daily_ms) {
+      armDaily(g);
+      return;
+    }
     if (g.status !== 'active' || !g.base_ms) return;
     const ply = movesOf(g).length;
     const turn = turnOf(g);
@@ -313,10 +352,59 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     timers.set(g.id, t);
   }
 
+  /* Cờ theo ngày: hẹn giờ hết hạn nước đi (và nhắc khi còn 2 giờ) */
+  const reminders = new Map();
+  function armDaily(g) {
+    clearTimeout(reminders.get(g.id));
+    reminders.delete(g.id);
+    const deadline = g.turn_started_at + g.daily_ms;
+    const wait = Math.max(0, deadline - Date.now()) + 50;
+    const t = setTimeout(() => checkClock(g.id), Math.min(wait, 2 ** 31 - 1));
+    t.unref?.();
+    timers.set(g.id, t);
+    const remindAt = deadline - DAILY_REMIND_MS;
+    if (g.daily_ms > DAILY_REMIND_MS * 2 && remindAt > Date.now()) {
+      const r = setTimeout(() => {
+        reminders.delete(g.id);
+        const cur = loadGame(g.id);
+        if (!cur || cur.status !== 'active' || cur.moves !== g.moves) return;
+        const color = turnOf(cur);
+        const uid = playerId(cur, color);
+        if (uid == null) return;
+        notify(uid, {
+          type: 'chess',
+          title: '⏰ Sắp hết giờ đi nước',
+          body: `Còn khoảng 2 giờ để đi nước trong ván cờ với ${sideName(cur, other(color))}.`,
+          tag: `chess-g-${cur.id}`,
+          url: `/#/chess/g/${cur.id}`,
+          gameId: cur.id,
+        }).catch((err) => console.warn('[push]', err.message));
+      }, Math.min(remindAt - Date.now(), 2 ** 31 - 1));
+      r.unref?.();
+      reminders.set(g.id, r);
+    }
+  }
+
   function checkClock(id) {
     timers.delete(id);
     const g = loadGame(id);
-    if (!g || g.status !== 'active' || !g.base_ms) return;
+    if (!g || g.status !== 'active') return;
+    if (g.daily_ms) {
+      const now = Date.now();
+      if (now - g.turn_started_at < g.daily_ms) {
+        arm(g);
+        return;
+      }
+      if (movesOf(g).length < 2) {
+        // Chưa ai đi đủ nước đầu: hủy ván, không ai mất điểm
+        const done = finish(g, null, 'no-start', now);
+        for (const uid of humanIds(done)) pushIfAway(uid, { title: 'Ván cờ đã bị hủy', body: 'Hết hạn đi nước đầu tiên.', tag: `chess-g-${id}`, url: `/#/chess/g/${id}`, gameId: id });
+        return;
+      }
+      flag(g, turnOf(g), now);
+      return;
+    }
+    if (!g.base_ms) return;
     const now = Date.now();
     const ply = movesOf(g).length;
     const turn = turnOf(g);
@@ -368,6 +456,10 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
 
     let whiteMs = g.white_ms;
     let blackMs = g.black_ms;
+    if (g.daily_ms && now - g.turn_started_at >= g.daily_ms) {
+      checkClock(g.id);
+      throw new ChessError(409, 'Đã hết hạn đi nước này.');
+    }
     if (g.base_ms) {
       if (ply < 2) {
         if (now - g.turn_started_at >= FIRST_MOVE_MS) {
@@ -527,12 +619,17 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
 
   /* ----- Kiểm tra dữ liệu gửi lên ----- */
 
-  function readTimeControl(body) {
+  function readTimeControl(body, { daily = false } = {}) {
+    if (daily && body?.days != null) {
+      const days = Number(body.days);
+      if (!DAILY_DAYS.includes(days)) throw new ChessError(400, 'Cờ theo ngày: chọn 1, 2, 3 hoặc 7 ngày mỗi nước.');
+      return { base_ms: 0, inc_ms: 0, daily_ms: Math.round(days * DAY) };
+    }
     const base = Number(body?.base);
     const inc = Number(body?.inc ?? 0);
     if (!BASE_MINUTES.includes(base)) throw new ChessError(400, 'Chọn thời gian cho ván cờ.');
     if (!Number.isInteger(inc) || inc < 0 || inc > MAX_INC) throw new ChessError(400, 'Thời gian cộng thêm mỗi nước từ 0 đến 60 giây.');
-    return { base_ms: Math.round(base * MINUTE), inc_ms: base ? Math.round(inc * 1000 * SCALE) : 0 };
+    return { base_ms: Math.round(base * MINUTE), inc_ms: base ? Math.round(inc * 1000 * SCALE) : 0, daily_ms: 0 };
   }
   const readColor = (v) => (v === 'white' || v === 'black' ? v : 'random');
 
@@ -593,6 +690,8 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
       customElo: { min: bots.CUSTOM_MIN, max: bots.CUSTOM_MAX, step: 50 },
       beaten: beatenBots(uid),
       baseMinutes: BASE_MINUTES,
+      dailyDays: DAILY_DAYS,
+      phrases: PHRASES,
       challenges: challenges.map((g) => serialize(g, now)),
       active: active.map((g) => serialize(g, now)),
       recent: recent.map((g) => serialize(g, now)),
@@ -645,7 +744,7 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     if (!Number.isInteger(oppId) || oppId === uid) throw new ChessError(400, 'Chọn một người để thách đấu.');
     const opp = get('SELECT id, disabled FROM users WHERE id = ?', oppId);
     if (!opp || opp.disabled) throw new ChessError(404, 'Không tìm thấy người này.');
-    const tc = readTimeControl(body);
+    const tc = readTimeControl(body, { daily: true });
     const pending = get("SELECT COUNT(*) AS n FROM chess_games WHERE status = 'challenge' AND challenger_id = ?", uid).n;
     if (pending >= MAX_PENDING) throw new ChessError(429, 'Bạn đang chờ quá nhiều lời thách đấu. Hủy bớt rồi thử lại.');
     if (activeCount(uid) >= MAX_ACTIVE) throw new ChessError(429, 'Bạn đang chơi quá nhiều ván cùng lúc.');
@@ -656,9 +755,9 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     const rated = body?.rated !== false && body?.rated !== 'false';
     const id = Number(
       run(
-        `INSERT INTO chess_games (status, challenger_id, opponent_id, color_pref, rated, base_ms, inc_ms, moves, fen, created_at, updated_at)
-         VALUES ('challenge', ?, ?, ?, ?, ?, ?, '', ?, ?, ?)`,
-        uid, oppId, readColor(body?.color), rated ? 1 : 0, tc.base_ms, tc.inc_ms, START_FEN, now, now
+        `INSERT INTO chess_games (status, challenger_id, opponent_id, color_pref, rated, base_ms, inc_ms, daily_ms, moves, fen, created_at, updated_at)
+         VALUES ('challenge', ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?)`,
+        uid, oppId, readColor(body?.color), rated ? 1 : 0, tc.base_ms, tc.inc_ms, tc.daily_ms, START_FEN, now, now
       ).lastInsertRowid
     );
     const g = loadGame(id);
@@ -680,7 +779,7 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     const g = mine(req, req.params.id);
     if (g.status !== 'challenge') throw new ChessError(409, 'Lời thách đấu này không còn nữa.');
     const now = Date.now();
-    if (now - g.created_at > CHALLENGE_TTL) {
+    if (now - g.created_at > ttlOf(g)) {
       run("UPDATE chess_games SET status = 'expired', updated_at = ? WHERE id = ?", now, g.id);
       emitTo([g.challenger_id, g.opponent_id], 'chess:challenge', { game: serialize(loadGame(g.id)) });
       throw new ChessError(409, 'Lời thách đấu đã hết hạn.');
@@ -901,6 +1000,7 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     if (!color || (g.status !== 'finished' && g.status !== 'aborted')) throw new ChessError(409, 'Ván cờ chưa kết thúc.');
     const body = {
       base: Math.round(g.base_ms / MINUTE),
+      days: g.daily_ms ? Math.round(g.daily_ms / DAY) : undefined,
       inc: Math.round(g.inc_ms / 1000 / SCALE),
       color: color === 'w' ? 'black' : 'white',
       rated: Boolean(g.rated),
@@ -917,6 +1017,7 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     const now = Date.now();
     const rows = all("SELECT * FROM chess_games WHERE status = 'challenge' AND created_at < ?", now - CHALLENGE_TTL);
     for (const g of rows) {
+      if (now - g.created_at <= ttlOf(g)) continue; // lời thách cờ theo ngày chờ lâu hơn
       run("UPDATE chess_games SET status = 'expired', updated_at = ? WHERE id = ?", now, g.id);
       emitTo([g.challenger_id, g.opponent_id], 'chess:challenge', { game: serialize(loadGame(g.id)) });
     }
@@ -930,6 +1031,11 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     scheduleBot(g);
   }
 
+  // Bàn phân tích, thống kê, câu nói nhanh (src/chess-extra.js)
+  setupChessExtra({
+    app, auth, handle, ChessError, mine, loadGame, serialize, emitGame, colorOf, movesOf, openingOf, ratingOf, ratingPublic, nameOf,
+  });
+
   // Ván cờ gọn để hiện trong bài đăng / tin nhắn chia sẻ
   function gameForShare(id) {
     const g = loadGame(id);
@@ -939,4 +1045,4 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
   return { serialize, BOTS, gameForShare };
 }
 
-module.exports = { setupChess, eloDeltas, cannotMate, BOTS, BASE_MINUTES, START_FEN };
+module.exports = { setupChess, eloDeltas, cannotMate, BOTS, BASE_MINUTES, START_FEN, DAILY_DAYS };

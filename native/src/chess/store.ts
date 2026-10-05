@@ -3,7 +3,7 @@ import { create } from "zustand";
 
 import { api, ApiError } from "../api";
 import { myColor, tcLabel } from "./format";
-import type { ChessAnalysis, ChessBot, ChessGame, ChessRating } from "./types";
+import type { ChessAnalysis, ChessBot, ChessGame, ChessPhrase, ChessRating } from "./types";
 
 // Dữ liệu cờ vua trong app. Kết nối realtime và thông báo nhỏ nằm ở src/store.ts, gắn vào qua bindChess().
 
@@ -25,6 +25,14 @@ type State = {
   helping: Record<number, boolean>;
   /** Đang mở ván hai người một máy */
   localOpen: boolean;
+  /** Bàn phân tích đang mở: các nước, đang xem tới nước nào, quân phía dưới */
+  analysis: { moves: string[]; ply: number; bottom: "w" | "b" } | null;
+  /** Cờ theo ngày: số ngày mỗi nước máy chủ nhận (rỗng = máy chủ cũ) */
+  dailyDays: number[];
+  /** Câu nói nhanh trong ván với bạn */
+  phrases: ChessPhrase[];
+  /** Đang xem thống kê của ai (null = không mở) */
+  statsFor: number | null;
   games: Record<number, ChessGame>;
   /** Giờ trên máy lúc nhận trạng thái ván (để chạy đồng hồ) */
   receivedAt: Record<number, number>;
@@ -53,6 +61,10 @@ export const useChess = create<State>(() => ({
   hint: null,
   helping: {},
   localOpen: false,
+  analysis: null,
+  dailyDays: [],
+  phrases: [],
+  statsFor: null,
   games: {},
   receivedAt: {},
   leaderboard: null,
@@ -101,6 +113,10 @@ export function resetChess() {
     hint: null,
     helping: {},
     localOpen: false,
+    analysis: null,
+    dailyDays: [],
+    phrases: [],
+    statsFor: null,
     games: {},
     receivedAt: {},
     leaderboard: null,
@@ -172,6 +188,8 @@ export async function loadChess() {
         botTiers: data.botTiers || [],
         customElo: data.customElo || null,
         beaten: data.beaten || [],
+        dailyDays: data.dailyDays || [],
+        phrases: data.phrases || [],
         loaded: true,
         error: null,
       };
@@ -233,7 +251,7 @@ export function closeGame() {
 
 /* ---------------- Thách đấu, chơi với máy ---------------- */
 
-export async function sendChallenge(body: { opponentId: number; base: number; inc: number; color: string; rated: boolean }) {
+export async function sendChallenge(body: { opponentId: number; base: number; inc: number; days?: number; color: string; rated: boolean }) {
   const { game } = await api.chessChallenge(body);
   upsert([game]);
   return game;
@@ -348,6 +366,33 @@ export function openLocal() {
 }
 export function closeLocal() {
   set({ localOpen: false });
+}
+
+/** Mở bàn phân tích (AnalysisBoard.tsx) với một ván, đang xem tới nước ply. Không truyền gì: mở lại bàn đã lưu */
+export function openAnalysis(moves?: string[], ply?: number, bottom: "w" | "b" = "w") {
+  set({
+    analysis: moves ? { moves: moves.slice(0, 600), ply: Math.max(0, Math.min(moves.length, ply ?? moves.length)), bottom } : { moves: [], ply: -1, bottom },
+  });
+}
+export function closeAnalysis() {
+  set({ analysis: null });
+}
+
+/** Mở / đóng bảng thống kê */
+export function openStats(userId: number | null) {
+  set({ statsFor: userId });
+}
+
+/** Câu nói nhanh trong ván với bạn */
+export async function sayPhrase(id: number, phrase: string) {
+  try {
+    const res = await api.chessSay(id, phrase);
+    upsert([res.game]);
+    return true;
+  } catch (err) {
+    bridge.toast(err instanceof Error ? err.message : "Chưa gửi được.");
+    return false;
+  }
 }
 
 async function act(fn: () => Promise<{ game: ChessGame }>) {

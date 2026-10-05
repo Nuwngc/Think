@@ -33,6 +33,9 @@ Dữ liệu ở `public/puzzles/<game>.json` và bản giống hệt `native/src
 
 - Máy cờ khai báo ở `src/chess-bots.js` (id, ELO, gu, câu nói). Không đổi / bỏ id cũ (ván đang chơi và vương miện lưu theo id). Thêm máy có tính cách: thêm một dòng `style({...})`, gu mới thì thêm cách cộng điểm vào `styleBonus` (`src/chess-worker.js`) và tên vào `STYLES`. `test/chess-bots.test.js` kiểm tra ELO tăng dần, đủ câu nói.
 - Ván với máy có `hints` / `takebacks`; đi lại làm ván ít nước hơn nên web và app nhận bản mới theo `takebacks` (`isNewer`), đừng bỏ.
+- Bàn phân tích, thống kê, câu nói nhanh ở `src/chess-extra.js`. `POST /api/chess/eval` phải giữ chặn thế cờ hiện tại của ván đang chơi và giới hạn số lần (CPU máy chủ miễn phí). Câu nói nhanh chỉ chọn trong `PHRASES` (không cho gõ tự do).
+- Màu bàn cờ: `BOARD_THEMES` có hai bản giống nhau (`public/chess-ui.js`, `native/src/chess/prefs.ts`).
+- Kiểm thử có máy cờ chạy thật: dừng bằng `engine.stop()` trong `test.after`, ván với máy trong kiểm thử nên cầm Trắng (máy không nghĩ dở khi kiểm thử kết thúc).
 - Bàn cờ trong app (`native/src/chess/Board.tsx`): vị trí quân dùng Animated **không** native driver và các quân giữ thứ tự vẽ cố định (`layout.ts`). Đổi lại sẽ làm quân hiện sai ô với kiến trúc mới (lỗi phong cấp bản 0.6).
 
 ## Kiểm tra trước khi push

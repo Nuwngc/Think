@@ -227,6 +227,9 @@ ensureColumn('messages', 'audio_wave', 'audio_wave TEXT');
 ensureColumn('chess_games', 'bot_say', 'bot_say TEXT');
 ensureColumn('chess_games', 'hints', 'hints INTEGER NOT NULL DEFAULT 0');
 ensureColumn('chess_games', 'takebacks', 'takebacks INTEGER NOT NULL DEFAULT 0');
+// 2.7.0: cờ theo ngày (thời gian mỗi nước, ms; 0 = ván thường), câu nói nhanh gần nhất trong ván người với người
+ensureColumn('chess_games', 'daily_ms', 'daily_ms INTEGER NOT NULL DEFAULT 0');
+ensureColumn('chess_games', 'chat', 'chat TEXT');
 if (!db.prepare('PRAGMA table_info(messages)').all().some((c) => c.name === 'updated_at')) {
   // Thời điểm tin nhắn thay đổi lần cuối (thu hồi, cảm xúc, dọn ảnh) để máy người dùng đồng bộ
   db.exec('ALTER TABLE messages ADD COLUMN updated_at INTEGER');

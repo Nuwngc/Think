@@ -6,9 +6,9 @@ import { fold } from "../format";
 import { showToast, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Button, FormError, Icon, Sheet, useStyles } from "../ui";
-import { BotAvatar, ColorPicker, TimePicker, type ColorPref } from "./parts";
-import { setPref, usePrefs, type ChessPrefs } from "./prefs";
-import { loadHistory, loadLeaderboard, sendChallenge, startBotGame, useChess } from "./store";
+import { BotAvatar, ColorPicker, TimePicker, type ColorPref, type TimeValue } from "./parts";
+import { BOARD_THEMES, setPref, usePrefs, type ChessPrefs } from "./prefs";
+import { loadHistory, loadLeaderboard, sayPhrase, sendChallenge, startBotGame, useChess } from "./store";
 import type { ChessGame } from "./types";
 
 /* =========================================================
@@ -20,8 +20,9 @@ export function ChallengeSheet({ visible, onClose, opponentId }: { visible: bool
   const s = useStyles(makeStyles);
   const { users, meId } = useStore(useShallow((st) => ({ users: st.users, meId: st.me?.id ?? 0 })));
   const leaderboard = useChess((st) => st.leaderboard);
+  const dailyOk = useChess((st) => st.dailyDays.length > 0);
   const [pick, setPick] = useState<number | null>(opponentId ?? null);
-  const [tc, setTc] = useState({ base: 10, inc: 0 });
+  const [tc, setTc] = useState<TimeValue>({ base: 10, inc: 0 });
   const [color, setColor] = useState<ColorPref>("random");
   const [rated, setRated] = useState(true);
   const [query, setQuery] = useState("");
@@ -61,7 +62,7 @@ export function ChallengeSheet({ visible, onClose, opponentId }: { visible: bool
     setBusy(true);
     setError(null);
     try {
-      await sendChallenge({ opponentId: pick, base: tc.base, inc: tc.inc, color, rated });
+      await sendChallenge({ opponentId: pick, base: tc.base, inc: tc.inc, days: tc.days || undefined, color, rated });
       onClose();
       showToast(`Đã gửi lời thách đấu tới ${chosen?.displayName || "đối thủ"}. Họ nhận là vào ván ngay.`, { chessGameId: 0 });
     } catch (err) {
@@ -134,9 +135,11 @@ export function ChallengeSheet({ visible, onClose, opponentId }: { visible: bool
       )}
 
       <Text style={s.label}>Thời gian mỗi bên</Text>
-      <TimePicker value={tc} onChange={setTc} />
+      <TimePicker value={tc} onChange={setTc} daily={dailyOk} />
       <Text style={s.hint}>
-        {tc.base
+        {tc.days
+          ? `Cờ theo ngày: mỗi nước có ${tc.days} ngày để nghĩ, có thông báo khi tới lượt và khi còn 2 giờ. Quá hạn là thua. Lời thách đấu chờ được 2 ngày.`
+          : tc.base
           ? `Mỗi bên ${tc.base} phút${tc.inc ? `, đi xong mỗi nước được cộng ${tc.inc} giây` : ""}. Hết giờ là thua.`
           : "Không tính giờ: đi lúc nào cũng được, hợp để chơi thong thả cả ngày."}
       </Text>
@@ -328,6 +331,14 @@ const makeStyles = (c: Colors) =>
     personSub: { color: c.muted, fontSize: 13 },
     elo: { color: c.accent, fontSize: 13, fontWeight: "800" },
     styleTag: { color: c.text2, fontSize: 12.5, fontWeight: "700" },
+    themes: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    phrases: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    phrase: { width: "48%", flexGrow: 1, paddingVertical: 12, paddingHorizontal: 10, borderRadius: 12, backgroundColor: c.field },
+    phraseText: { color: c.text, fontSize: 15, fontWeight: "600", textAlign: "center" },
+    theme: { width: "31%", flexGrow: 1, alignItems: "center", gap: 6, paddingVertical: 8, borderRadius: 12, borderWidth: 1.5, borderColor: "transparent", backgroundColor: c.field },
+    themeOn: { borderColor: c.accent, backgroundColor: c.jadeWash },
+    themeSw: { width: 40, height: 40, borderRadius: 6, overflow: "hidden", flexDirection: "row", flexWrap: "wrap" },
+    themeName: { color: c.text, fontSize: 13, fontWeight: "700" },
     stepper: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 },
     stepBtn: { minWidth: 52, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
     stepText: { color: c.text, fontSize: 14, fontWeight: "800" },
@@ -343,12 +354,14 @@ const makeStyles = (c: Colors) =>
    Tùy chọn bàn cờ: chỉ dẫn, tô nước vừa đi, tọa độ, mũi tên gợi ý, quân trượt, âm thanh
    ========================================================= */
 
-const PREF_ROWS: { key: keyof ChessPrefs; title: string; hint: string }[] = [
+type BoolPref = Exclude<keyof ChessPrefs, "theme">;
+const PREF_ROWS: { key: BoolPref; title: string; hint: string }[] = [
   { key: "hints", title: "Chỉ dẫn nước đi", hint: "Chạm vào quân thì hiện chấm ở các ô đi được." },
   { key: "lastMove", title: "Tô màu nước vừa đi", hint: "Tô vàng ô đi và ô đến của nước gần nhất." },
   { key: "coords", title: "Tọa độ bàn cờ", hint: "Chữ a–h và số 1–8 ở mép bàn cờ." },
   { key: "arrows", title: "Mũi tên gợi ý khi phân tích", hint: "Khi xem lại ván đã phân tích, vẽ mũi tên nước tốt nhất của máy." },
   { key: "anim", title: "Quân trượt khi đi", hint: "Quân cờ trượt mượt từ ô đi tới ô đến (nước của bạn, của đối thủ, khi xem lại ván), quân bị ăn mờ dần." },
+  { key: "talk", title: "Câu nói trong ván", hint: "Hiện bong bóng câu nói của máy và câu nói nhanh của bạn bè." },
   { key: "sound", title: "Âm thanh", hint: "Tiếng quân cờ khi đi, ăn quân, chiếu tướng, bắt đầu và kết thúc ván." },
 ];
 
@@ -358,6 +371,29 @@ export function PrefsSheet({ visible, onClose }: { visible: boolean; onClose: ()
   const prefs = usePrefs();
   return (
     <Sheet visible={visible} onClose={onClose} title="Tùy chọn bàn cờ">
+      <Text style={s.label}>Màu bàn cờ</Text>
+      <View style={s.themes} accessibilityRole="radiogroup">
+        {BOARD_THEMES.map((t) => {
+          const on = prefs.theme === t.id;
+          return (
+            <Pressable
+              key={t.id}
+              onPress={() => setPref("theme", t.id)}
+              style={[s.theme, on && s.themeOn]}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: on }}
+              accessibilityLabel={`Màu bàn cờ ${t.name}`}
+            >
+              <View style={s.themeSw}>
+                {[0, 1, 2, 3].map((i) => (
+                  <View key={i} style={{ width: "50%", height: "50%", backgroundColor: i === 0 || i === 3 ? t.light : t.dark }} />
+                ))}
+              </View>
+              <Text style={s.themeName}>{t.name}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
       {PREF_ROWS.map((row) => (
         <Pressable
           key={row.key}
@@ -379,6 +415,40 @@ export function PrefsSheet({ visible, onClose }: { visible: boolean; onClose: ()
           />
         </Pressable>
       ))}
+    </Sheet>
+  );
+}
+
+/* =========================================================
+   Nói nhanh (ván với bạn): chạm một câu là gửi
+   ========================================================= */
+
+export function PhrasesSheet({ visible, onClose, gameId, to }: { visible: boolean; onClose: () => void; gameId: number; to: string }) {
+  const s = useStyles(makeStyles);
+  const phrases = useChess((st) => st.phrases);
+  const [busy, setBusy] = useState<string | null>(null);
+  return (
+    <Sheet visible={visible} onClose={onClose} title="Nói nhanh">
+      <Text style={s.hint}>Câu nói hiện thành bong bóng cạnh tên bạn trên màn hình của {to}.</Text>
+      <View style={s.phrases}>
+        {phrases.map((p) => (
+          <Pressable
+            key={p.id}
+            disabled={busy != null}
+            onPress={async () => {
+              setBusy(p.id);
+              const ok = await sayPhrase(gameId, p.id);
+              setBusy(null);
+              if (ok) onClose();
+            }}
+            style={({ pressed }) => [s.phrase, (pressed || busy === p.id) && { opacity: 0.6 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Nói: ${p.text}`}
+          >
+            <Text style={s.phraseText}>{p.text}</Text>
+          </Pressable>
+        ))}
+      </View>
     </Sheet>
   );
 }

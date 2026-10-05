@@ -542,6 +542,7 @@ const inCaro = () => get().tab === "games" && get().gamesView === "caro";
 function leaveChessView() {
   if (useChess.getState().openId != null) closeGame();
   if (useChess.getState().localOpen) useChess.setState({ localOpen: false });
+  if (useChess.getState().analysis || useChess.getState().statsFor != null) useChess.setState({ analysis: null, statsFor: null });
 }
 
 /** Rời mục Cờ caro: đóng ván đang mở, dừng máy (ván với máy vẫn lưu, mở lại chơi tiếp) */

@@ -10,7 +10,8 @@ import { caroBadge, useCaro } from "../caro/store";
 import { ChessHome } from "../chess/ChessHome";
 import { GameScreen } from "../chess/GameScreen";
 import { LocalGame } from "../chess/LocalGame";
-import { chessBadge, closeLocal, useChess } from "../chess/store";
+import { AnalysisBoard } from "../chess/AnalysisBoard";
+import { chessBadge, closeAnalysis, closeLocal, useChess } from "../chess/store";
 import { SocialHost } from "../social/SocialHost";
 import { StreakHost } from "../streaks/ui";
 import { closeUser, useSocial } from "../social/store";
@@ -52,6 +53,7 @@ export function MainScreen() {
   const caroTodo = useCaro((s) => caroBadge(s, meId));
   const gameId = useChess((s) => s.openId);
   const localOpen = useChess((s) => s.localOpen);
+  const analysisOpen = useChess((s) => s.analysis != null);
   const caroId = useCaro((s) => s.openId);
   const caroBot = useCaro((s) => s.botOpen);
   const viewUser = useSocial((s) => s.viewUser);
@@ -64,6 +66,10 @@ export function MainScreen() {
       const s = useStore.getState();
       if (s.currentId != null) {
         closeConversation();
+        return true;
+      }
+      if (s.tab === "games" && s.gamesView === "chess" && useChess.getState().analysis != null) {
+        closeAnalysis(); // bàn phân tích mở từ ván cờ: quay lại ván
         return true;
       }
       if (s.tab === "games" && s.gamesView === "chess" && useChess.getState().openId != null) {
@@ -114,6 +120,8 @@ export function MainScreen() {
   const full =
     currentId != null ? (
       <ChatScreen key={currentId} convId={currentId} />
+    ) : tab === "games" && gamesView === "chess" && analysisOpen ? (
+      <AnalysisBoard />
     ) : tab === "games" && gamesView === "chess" && gameId != null ? (
       <GameScreen key={gameId} id={gameId} />
     ) : tab === "games" && gamesView === "chess" && localOpen ? (
