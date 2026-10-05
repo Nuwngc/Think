@@ -11,6 +11,7 @@ const DEFS = [
   { id: 'streak', icon: '🔥', name: 'Lửa bền bỉ', goals: [3, 7, 30], text: (n) => `Chơi game ${n} ngày liên tiếp` },
   { id: 'chess-wins', icon: '🏆', name: 'Kỳ thủ', goals: [1, 10, 50], text: (n) => `Thắng ${n} ván cờ vua` },
   { id: 'chess-elo', icon: '👑', name: 'Cao thủ cờ vua', goals: [1300, 1500, 1800], base: 1200, text: (n) => `Đạt ${n} điểm ELO cờ vua` },
+  { id: 'bots', icon: '🐲', name: 'Thuần phục máy', goals: [1, 6, 12], text: (n) => `Thắng ${n} máy cờ khác nhau (không gợi ý, không đi lại)` },
   { id: 'caro-wins', icon: '🎯', name: 'Vua caro', goals: [1, 10, 50], text: (n) => `Thắng ${n} ván cờ caro với bạn bè` },
   { id: 'blocks', icon: '🎮', name: 'Thợ xếp khối', goals: [1000, 5000, 20000], text: (n) => `Đạt ${n.toLocaleString('vi-VN')} điểm một ván Xếp Khối` },
   { id: 'puzzle-stars', icon: '⭐', name: 'Nhà giải đố', goals: [30, 150, 450], text: (n) => `Gom ${n} sao Thử thách nhanh` },
@@ -60,6 +61,11 @@ function valuesOf(uid) {
       uid, uid
     ),
     'chess-elo': one('SELECT MAX(peak, rating) FROM chess_ratings WHERE user_id = ?', uid),
+    bots: one(
+      `SELECT COUNT(DISTINCT bot) FROM chess_games WHERE bot IS NOT NULL AND bot NOT LIKE 'custom-%' AND status = 'finished'
+         AND hints = 0 AND takebacks = 0 AND ((white_id = ? AND result = '1-0') OR (black_id = ? AND result = '0-1'))`,
+      uid, uid
+    ),
     'caro-wins': one(
       `SELECT COUNT(*) FROM caro_games WHERE status = 'finished' AND ((x_id = ? AND result = 'x') OR (o_id = ? AND result = 'o'))`,
       uid, uid

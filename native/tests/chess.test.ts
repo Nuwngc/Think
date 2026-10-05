@@ -8,6 +8,8 @@ const api = vi.hoisted(() => ({
   chessHistory: vi.fn(),
   chessAnalysis: vi.fn(),
   chessAnalyze: vi.fn(),
+  chessHint: vi.fn(),
+  chessTakeback: vi.fn(),
 }));
 
 vi.mock("../src/api", () => {
@@ -25,7 +27,9 @@ vi.mock("../src/api", () => {
 
 import { ApiError } from "../src/api";
 import { clockText, coachText, evalText, material, MOVE_CLASS, moveComment, outcomeFor, replay, resultTitle, tcLabel } from "../src/chess/format";
+import { localState, localStatusText } from "../src/chess/local";
 import {
+  askHint,
   bindChess,
   chessBadge,
   closeGame,
@@ -36,6 +40,7 @@ import {
   playMove,
   requestAnalysis,
   resetChess,
+  takeBack,
   useChess,
 } from "../src/chess/store";
 import type { ChessGame } from "../src/chess/types";
@@ -207,6 +212,33 @@ describe("đi quân", () => {
     expect(useChess.getState().games[1].status).toBe("finished");
   });
 
+  it("đi lại nước (takebacks tăng): nhận bản ít nước hơn; bản cũ từ trước lần đi lại thì bỏ", () => {
+    onChessEvent("chess:game", { game: game({ moves: ["e2e4", "e7e5"], turn: "w", takebacks: 0 }) });
+    onChessEvent("chess:game", { game: game({ moves: [], turn: "w", takebacks: 1 }) });
+    expect(useChess.getState().games[1].moves).toEqual([]);
+    onChessEvent("chess:game", { game: game({ moves: ["e2e4", "e7e5"], turn: "w", takebacks: 0 }) });
+    expect(useChess.getState().games[1].moves).toEqual([]);
+    onChessEvent("chess:game", { game: game({ moves: ["d2d4"], turn: "b", takebacks: 1 }) });
+    expect(useChess.getState().games[1].moves).toEqual(["d2d4"]);
+  });
+
+  it("gợi ý và đi lại trong ván với máy", async () => {
+    const bot = { id: "ma", name: "Mã Phi", elo: 900, about: "", source: { name: "x", url: "https://x", license: "MIT" } };
+    onChessEvent("chess:game", { game: game({ moves: ["e2e4", "e7e5"], turn: "w", bot, botColor: "b", blackId: null }) });
+    api.chessHint.mockResolvedValue({ move: "g1f3", game: game({ moves: ["e2e4", "e7e5"], turn: "w", bot, botColor: "b", blackId: null, hints: 1 }) });
+    await askHint(1);
+    expect(useChess.getState().hint).toEqual({ gameId: 1, ply: 2, move: "g1f3" });
+    expect(useChess.getState().games[1].hints).toBe(1);
+    api.chessTakeback.mockResolvedValue({ game: game({ moves: [], turn: "w", bot, botColor: "b", blackId: null, hints: 1, takebacks: 1 }) });
+    await takeBack(1);
+    expect(useChess.getState().games[1].moves).toEqual([]);
+    expect(useChess.getState().hint).toBeNull();
+    api.chessTakeback.mockRejectedValue(new ApiError("Chưa có nước nào của bạn để đi lại.", 409));
+    await takeBack(1);
+    expect(toasts).toContain("Chưa có nước nào của bạn để đi lại.");
+    expect(useChess.getState().helping[1]).toBe(false);
+  });
+
   it("báo lời thách đấu mới", () => {
     onChessEvent("chess:challenge", {
       game: game({ id: 9, status: "challenge", challengerId: 2, opponentId: 1, whiteId: null, blackId: null }),
@@ -279,5 +311,29 @@ describe("phân tích và lịch sử", () => {
     expect(useChess.getState().history.ids).toEqual([30, 29, 28]);
     await loadHistory(true); // hết trang: không gọi nữa
     expect(api.chessHistory).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("hai người một máy", () => {
+  it("dựng ván, chiếu hết, hòa, đầu hàng", () => {
+    const fool = localState(["f2f3", "e7e5", "g2g4", "d8h4"]);
+    expect(fool.outcome).toEqual({ result: "0-1", reason: "checkmate" });
+    expect(localStatusText(fool)).toBe("Chiếu hết! Đen thắng.");
+    const start = localState([]);
+    expect(start.outcome).toBeNull();
+    expect(localStatusText(start)).toBe("Trắng đi.");
+    const check = localState(["e2e4", "f7f6", "d1h5"]);
+    expect(localStatusText(check)).toContain("đang bị chiếu");
+    // Nước hỏng trong dữ liệu lưu: bỏ từ đó trở đi
+    expect(localState(["e2e4", "e2e4", "e7e5"]).moves).toEqual(["e2e4"]);
+    // Phong cấp
+    const promo = localState(["a2a4", "h7h5", "a4a5", "h5h4", "a5a6", "h4h3", "a6b7", "h3g2", "b7a8q"]);
+    expect(promo.san[8]).toBe("bxa8=Q");
+    expect(promo.fen.startsWith("Qn")).toBe(true);
+    const resign = localState(["e2e4", "e7e5"], "b");
+    expect(resign.outcome).toEqual({ result: "1-0", reason: "resign" });
+    expect(localStatusText(resign)).toBe("Đen đầu hàng. Trắng thắng.");
+    const rep = localState(["g1f3", "g8f6", "f3g1", "f6g8", "g1f3", "g8f6", "f3g1", "f6g8"]);
+    expect(rep.outcome?.reason).toBe("repetition");
   });
 });

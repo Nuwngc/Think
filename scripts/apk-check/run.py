@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import re
+import struct
 import subprocess
 import sys
 import time
@@ -428,7 +429,7 @@ def s_games_hub():
 def s_chess_bot():
     tap_scrolled(r"^Cờ vua\.")  # thẻ game (nhãn "Cờ vua. … Chạm để vào"), không phải dòng Cờ vua trong khung Quiz hôm nay
     tap(r"^Chơi với máy", 20)
-    tap(r"ELO", 15)
+    tap(r"^Mầm Non, khoảng \d+ ELO", 15)  # máy có tính cách (Stockfish xem nhiều nước rồi chọn theo gu)
     tap(r"^Bắt đầu$", 10)
     if wait_for(r"^e2, Tốt trắng", 30) is None:
         raise RuntimeError("Không mở được bàn cờ")
@@ -457,6 +458,74 @@ def s_chess_back():
         back()
         if wait_for(HUB, 10) is None:
             raise RuntimeError("Không về được mục Trò chơi")
+
+
+# Lỗi bản 0.6: Xe vừa đi a8→b8 rồi tốt a7 phong Hậu thì Xe hiện lại ở a8 (che mất Hậu), ô b8 trống.
+# Bày đúng thế cờ đó trong chế độ Hai người một máy, rồi đọc điểm ảnh: ô a8 và b8 phải cùng có quân trắng.
+LOCAL_PROMO = ["a2a4", "b7b5", "a4b5", "a7a6", "b5a6", "h7h6", "a1a5", "h6h5", "a5b5", "g7g6",
+               "b5b8", "g6g5", "b8a8", "f7f6", "a6a7", "e7e6", "a8b8", "h5h4", "a7a8q"]
+
+
+def screen_pixels():
+    """Ảnh màn hình dạng RGBA thô (không cần thư viện ảnh)"""
+    data = adb("exec-out", "screencap", binary=True, timeout=30)
+    w, h = struct.unpack("<II", data[:8])
+    return w, h, data[len(data) - w * h * 4:]
+
+
+def white_share(px, w, box):
+    """Tỉ lệ điểm ảnh trắng trong ô (quân trắng tô trắng; ô bàn cờ không có màu trắng tinh)"""
+    x1, y1, x2, y2 = box
+    total = white = 0
+    for y in range(y1, y2, 3):
+        row = y * w * 4
+        for x in range(x1, x2, 3):
+            i = row + x * 4
+            total += 1
+            if px[i] > 240 and px[i + 1] > 240 and px[i + 2] > 240:
+                white += 1
+    return white / max(1, total)
+
+
+def s_chess_local_promo():
+    tap_scrolled(r"^Cờ vua\.")
+    tap(r"^Hai người một máy", 20)
+    if wait_for(r"^e2, Tốt trắng", 20) is None:
+        # Ván cũ còn lưu trên máy: bắt đầu ván mới
+        tap(r"^Ván mới$", 10)
+        tap(r"^Ván mới$", 10)  # hộp xác nhận
+        if wait_for(r"^e2, Tốt trắng", 15) is None:
+            raise RuntimeError("Không mở được bàn cờ hai người một máy")
+    root = dump()
+    a8 = center(find(r"^a8(,|$)", root))
+    h1 = center(find(r"^h1(,|$)", root))
+    cell = (h1[0] - a8[0]) / 7
+    xy = lambda sq: (int(a8[0] + (ord(sq[0]) - 97) * cell), int(a8[1] + (8 - int(sq[1])) * cell))
+    for m in LOCAL_PROMO:
+        tap_xy(*xy(m[0:2]))
+        tap_xy(*xy(m[2:4]))
+        if len(m) == 5:
+            tap(rf"^{PROMO[m[4]]}$", 10)
+        time.sleep(0.9)
+    time.sleep(1.5)
+    root = dump()
+    if find(r"^a8, Hậu trắng", root) is None or find(r"^b8, Xe trắng", root) is None:
+        raise RuntimeError("Thế cờ sau khi phong cấp không đúng (a8 Hậu, b8 Xe)")
+    w, _, px = screen_pixels()
+    half = int(cell * 0.42)
+    box = lambda sq: (xy(sq)[0] - half, xy(sq)[1] - half, xy(sq)[0] + half, xy(sq)[1] + half)
+    on_a8 = white_share(px, w, box("a8"))
+    on_b8 = white_share(px, w, box("b8"))
+    on_e4 = white_share(px, w, box("e4"))  # ô trống để so
+    log(f"   điểm ảnh trắng: a8 {on_a8:.2f}, b8 {on_b8:.2f}, ô trống e4 {on_e4:.2f}")
+    if on_a8 < 0.06 or on_b8 < 0.06 or on_e4 > 0.03:
+        raise RuntimeError(f"Quân hiện sai chỗ sau khi phong cấp (a8 {on_a8:.2f}, b8 {on_b8:.2f}, e4 {on_e4:.2f})")
+    back()
+    if wait_for(r"^Hai người một máy", 10) is None:
+        raise RuntimeError("Không quay lại được trang Cờ vua")
+    back()
+    if wait_for(HUB, 10) is None:
+        raise RuntimeError("Không về được mục Trò chơi")
 
 
 def s_blocks():
@@ -909,6 +978,7 @@ def main():
         step("Quiz hôm nay: cờ caro, Xếp Khối", s_quiz_others)
         step("Cờ vua với máy (có âm thanh)", s_chess_bot)
         step("Rời ván cờ", s_chess_back)
+        step("Cờ vua hai người một máy: phong cấp (lỗi bản 0.6)", s_chess_local_promo)
         step("Xếp Khối (có âm thanh)", s_blocks)
         step("Thoát Xếp Khối", s_blocks_back)
         step("Chuỗi hằng ngày của các game", s_streaks_all)

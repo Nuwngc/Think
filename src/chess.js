@@ -21,24 +21,11 @@ const MAX_PENDING = 6;
 
 /* ---------------- Máy cờ (AI) ---------------- */
 
-const SOURCES = {
-  jce: { name: 'js-chess-engine', url: 'https://github.com/josefjadrny/js-chess-engine', license: 'MIT' },
-  garbo: { name: 'GarboChess-JS', url: 'https://github.com/glinscott/Garbochess-JS', license: 'BSD' },
-  stockfish: { name: 'Stockfish 11', url: 'https://github.com/official-stockfish/Stockfish', license: 'GPL-3.0' },
-};
-
-const BOTS = [
-  { id: 'jce-1', name: 'Gà Mờ', elo: 500, engine: 'jce', level: 1, randomness: 120, movetime: 600, about: 'Mới học đi quân, hay đi nước ngẫu hứng.' },
-  { id: 'jce-2', name: 'Tập Sự', elo: 800, engine: 'jce', level: 2, randomness: 40, movetime: 700, about: 'Biết ăn quân, ít nhìn xa.' },
-  { id: 'jce-3', name: 'Học Trò', elo: 1000, engine: 'jce', level: 3, randomness: 20, movetime: 800, about: 'Đánh cẩn thận hơn, hợp để luyện tập.' },
-  { id: 'sf-3', name: 'Stockfish · Dễ', elo: 1300, engine: 'stockfish', skill: 3, movetime: 400, about: 'Máy mạnh nhất thế giới, đã giảm sức.' },
-  { id: 'garbo', name: 'GarboChess', elo: 1600, engine: 'garbo', movetime: 900, about: 'Máy cờ JavaScript cổ điển của Gary Linscott.' },
-  { id: 'sf-8', name: 'Stockfish · Vừa', elo: 1800, engine: 'stockfish', skill: 8, movetime: 700, about: 'Đánh chắc tay, ít sai lầm lớn.' },
-  { id: 'sf-14', name: 'Stockfish · Khó', elo: 2300, engine: 'stockfish', skill: 14, movetime: 1000, about: 'Mạnh cỡ kiện tướng.' },
-  { id: 'sf-20', name: 'Stockfish · Mạnh nhất', elo: 3000, engine: 'stockfish', skill: 20, movetime: 1500, about: 'Hết sức. Thắng được là huyền thoại.' },
-];
-const botById = new Map(BOTS.map((b) => [b.id, b]));
-const botPublic = (b) => ({ id: b.id, name: b.name, elo: b.elo, about: b.about, source: SOURCES[b.engine] });
+// Danh sách máy, gu chơi, câu nói: src/chess-bots.js
+const bots = require('./chess-bots');
+const { BOTS, botPublic } = bots;
+const botById = { get: (id) => bots.botById(id) };
+const openings = require('./chess-openings');
 
 /* ---------------- Tiện ích ---------------- */
 
@@ -90,6 +77,42 @@ function clocksOf(g, now) {
   return clocks;
 }
 
+// Tên khai cuộc của ván (sách khai cuộc lichess, src/chess-openings.js): thế cờ có tên gần nhất trong 30 nước đầu
+const OPENING_PLIES = 30;
+const openingCache = new Map();
+function openingOf(moves) {
+  if (!moves.length) return null;
+  const key = moves.slice(0, OPENING_PLIES).join(' ');
+  if (openingCache.has(key)) return openingCache.get(key);
+  let found = null;
+  try {
+    const book = openings.load();
+    const board = new openings.Board();
+    for (const m of moves.slice(0, OPENING_PLIES)) {
+      board.move(m);
+      const fen = board.key();
+      if (!book.has(fen)) break; // ra khỏi sách: giữ tên gần nhất
+      const n = book.name(fen);
+      if (n) found = { eco: n.eco, name: n.name };
+    }
+  } catch {
+    found = null;
+  }
+  if (openingCache.size > 2000) openingCache.delete(openingCache.keys().next().value);
+  openingCache.set(key, found);
+  return found;
+}
+
+function readSay(text) {
+  if (!text) return null;
+  try {
+    const v = JSON.parse(text);
+    return v && typeof v.text === 'string' ? { ply: Number(v.ply) || 0, text: v.text, event: v.event || null } : null;
+  } catch {
+    return null;
+  }
+}
+
 function serialize(g, now = Date.now()) {
   const moves = movesOf(g);
   const active = g.status === 'active';
@@ -124,6 +147,11 @@ function serialize(g, now = Date.now()) {
     startedAt: g.started_at || null,
     endedAt: g.ended_at || null,
     expiresAt: g.status === 'challenge' ? g.created_at + CHALLENGE_TTL : null,
+    opening: openingOf(moves),
+    // Ván với máy: câu máy vừa nói, số lần dùng gợi ý / đi lại
+    botSay: bot ? readSay(g.bot_say) : null,
+    hints: g.hints || 0,
+    takebacks: g.takebacks || 0,
   };
 }
 
@@ -175,11 +203,44 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     notify(uid, { type: 'chess', ...payload }).catch((err) => console.warn('[push]', err.message));
   };
 
+  /* ----- Máy nói ----- */
+
+  // Điều máy nhớ trong ván đang chơi: điểm thế cờ lần trước (để biết bạn vừa đi hớ), đã than "khó quá" chưa
+  const botMemory = new Map();
+  function sayJson(g, event, ply) {
+    const bot = g.bot ? botById.get(g.bot) : null;
+    const text = bot ? bots.lineFor(bot, event) : null;
+    return text ? JSON.stringify({ ply, text, event }) : null;
+  }
+  function botSay(g, event, ply) {
+    const json = sayJson(g, event, ply);
+    if (json) run('UPDATE chess_games SET bot_say = ? WHERE id = ?', json, g.id);
+    return Boolean(json);
+  }
+
+  /** Sau nước của máy: chọn câu để nói (nếu có). cp: điểm thế cờ theo máy trước khi đi (máy có tính cách mới có) */
+  function botReact(g, played, cp, ply) {
+    const mem = botMemory.get(g.id) || { cp: null, sadSaid: false };
+    let event = null;
+    if (cp != null && mem.cp != null && cp - mem.cp >= 250 && cp >= 150) event = 'blunder';
+    else if (cp != null && cp <= -350 && !mem.sadSaid) {
+      event = 'losing';
+      mem.sadSaid = true;
+    } else if (played.promotion) event = 'promote';
+    else if (played.san.includes('+') && Math.random() < 0.6) event = 'check';
+    else if (played.captured && played.captured !== 'p' && Math.random() < 0.6) event = 'capture';
+    if (cp != null) mem.cp = cp;
+    botMemory.set(g.id, mem);
+    if (event && botSay(g, event, ply)) return true;
+    return false;
+  }
+
   /* ----- Kết thúc ván, cập nhật ELO ----- */
 
   function finish(g, result, reason, now = Date.now()) {
     clearTimer(g.id);
     boards.delete(g.id);
+    botMemory.delete(g.id);
     const clocks = clocksOf(g, now);
     const aborted = result == null;
     const rated = !aborted && g.rated && !g.bot && g.white_id != null && g.black_id != null;
@@ -212,12 +273,20 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
         save(w, dw, score);
         save(b, db, 1 - score);
       }
+      // Máy nói câu cuối ván (thắng / thua / hòa)
+      let say = null;
+      if (g.bot && !aborted) {
+        const botWhite = g.white_id == null;
+        const ev = result === '1/2-1/2' ? 'draw' : (result === '1-0') === botWhite ? 'win' : 'lose';
+        say = sayJson(g, ev, movesOf(g).length);
+      }
       run(
         `UPDATE chess_games SET status = ?, result = ?, reason = ?, ended_at = ?, updated_at = ?, draw_offer = NULL,
-           white_ms = ?, black_ms = ?, white_rating = ?, black_rating = ?, white_delta = ?, black_delta = ?
+           white_ms = ?, black_ms = ?, white_rating = ?, black_rating = ?, white_delta = ?, black_delta = ?,
+           bot_say = COALESCE(?, bot_say)
          WHERE id = ?`,
         aborted ? 'aborted' : 'finished', result, reason, now, now,
-        clocks ? clocks.w : g.white_ms, clocks ? clocks.b : g.black_ms, wr, br, dw, db, g.id
+        clocks ? clocks.w : g.white_ms, clocks ? clocks.b : g.black_ms, wr, br, dw, db, say, g.id
       );
     });
     const done = loadGame(g.id);
@@ -288,7 +357,8 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
 
   /* ----- Đi một nước ----- */
 
-  function applyMove(g, uci, color, now = Date.now()) {
+  /** onPlayed(played, ply): gọi ngay sau khi ghi nước đi, trước khi báo cho hai bên (máy chọn câu nói ở đây) */
+  function applyMove(g, uci, color, now = Date.now(), onPlayed = null) {
     if (g.status !== 'active') throw new ChessError(409, 'Ván cờ đã kết thúc.');
     const chess = boardOf(g);
     if (chess.turn() !== color) throw new ChessError(409, 'Chưa tới lượt bạn.');
@@ -333,6 +403,13 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
        WHERE id = ?`,
       moves, chess.fen(), whiteMs, blackMs, now, drawOffer, now, g.id
     );
+    if (onPlayed) {
+      try {
+        onPlayed(played, ply + 1);
+      } catch (err) {
+        console.warn('[chess] Lỗi sau nước đi:', err.message);
+      }
+    }
     let next = loadGame(g.id);
 
     let result = null;
@@ -357,7 +434,7 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
       next = finish(next, result, reason, now);
       const oppId = playerId(next, other(color));
       if (reason === 'checkmate') pushIfAway(oppId, { title: 'Chiếu hết!', body: `${sideName(next, color)} đã chiếu hết bạn.`, tag: `chess-g-${g.id}`, url: `/#/chess/g/${g.id}`, gameId: g.id });
-      return { game: next, san: played.san };
+      return { game: next, san: played.san, played };
     }
     arm(next);
     emitGame(next);
@@ -372,7 +449,7 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
       });
     }
     scheduleBot(next);
-    return { game: next, san: played.san };
+    return { game: next, san: played.san, played };
   }
 
   /* ----- Máy đi ----- */
@@ -402,15 +479,18 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
 
     async function botTurn() {
       let uci = null;
+      let cp = null;
       let movetime = bot.movetime;
       if (g.base_ms && ply >= 2) {
         const left = (color === 'w' ? g.white_ms : g.black_ms) - (Date.now() - g.turn_started_at);
         movetime = Math.max(80, Math.min(bot.movetime, Math.floor(left / 30 + g.inc_ms * 0.7)));
       }
       try {
-        uci = await engine.bestMove({
-          engine: bot.engine, fen: g.fen, moves: movesOf(g), level: bot.level, randomness: bot.randomness, skill: bot.skill, movetime,
-        });
+        const r = await engine.bestMove({ ...bots.jobFor(bot), fen: g.fen, moves: movesOf(g), movetime });
+        if (r && typeof r === 'object') {
+          uci = r.move;
+          cp = Number.isFinite(r.cp) ? r.cp : null;
+        } else uci = r;
       } catch (err) {
         console.warn('[chess] Máy cờ lỗi, đi nước ngẫu nhiên:', err.message);
       }
@@ -419,13 +499,19 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       botTimers.delete(g.id);
       const fresh = loadGame(g.id);
-      if (!fresh || fresh.status !== 'active' || movesOf(fresh).length !== ply) return;
+      if (!fresh || fresh.status !== 'active') return;
+      if (fresh.moves !== g.moves) {
+        // Ván đã đổi trong lúc máy nghĩ (người chơi đi lại nước rồi đi nước khác): xem lại có tới lượt máy không
+        scheduleBot(fresh);
+        return;
+      }
+      const react = (played, n) => botReact(fresh, played, cp, n);
       try {
-        applyMove(fresh, uci || randomMove(fresh), color);
+        applyMove(fresh, uci || randomMove(fresh), color, Date.now(), react);
       } catch (err) {
         try {
           const again = loadGame(g.id);
-          if (again && again.status === 'active' && movesOf(again).length === ply) applyMove(again, randomMove(again), color);
+          if (again && again.status === 'active' && again.moves === g.moves) applyMove(again, randomMove(again), color, Date.now(), react);
         } catch (err2) {
           console.warn('[chess] Máy không đi được:', err.message, err2.message);
         }
@@ -503,6 +589,9 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     res.json({
       rating: ratingPublic(ratingOf(uid)),
       bots: BOTS.map(botPublic),
+      botTiers: bots.TIERS.map((t) => ({ id: t.id, name: t.name })),
+      customElo: { min: bots.CUSTOM_MIN, max: bots.CUSTOM_MAX, step: 50 },
+      beaten: beatenBots(uid),
       baseMinutes: BASE_MINUTES,
       challenges: challenges.map((g) => serialize(g, now)),
       active: active.map((g) => serialize(g, now)),
@@ -655,12 +744,82 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
         tc.base_ms || null, tc.base_ms || null, now, now, now, now
       ).lastInsertRowid
     );
+    botSay({ id, bot: bot.id }, 'hello', 0);
     const g = loadGame(id);
     arm(g);
     emitGame(g);
     scheduleBot(g);
     return g;
   }
+
+  /** Các máy người này đã thắng mà không dùng gợi ý / đi lại (vương miện trong danh sách máy) */
+  function beatenBots(uid) {
+    return all(
+      `SELECT DISTINCT bot FROM chess_games WHERE bot IS NOT NULL AND status = 'finished' AND hints = 0 AND takebacks = 0
+         AND ((white_id = ? AND result = '1-0') OR (black_id = ? AND result = '0-1'))`,
+      uid, uid
+    ).map((r) => r.bot).filter((id) => !id.startsWith('custom-'));
+  }
+
+  /** Ván với máy của người này, đang tới lượt họ (gợi ý / đi lại) */
+  function myBotGame(req) {
+    const g = mine(req, req.params.id);
+    const color = colorOf(g, req.user.id);
+    if (!color || g.status !== 'active') throw new ChessError(409, 'Ván cờ đã kết thúc.');
+    if (!g.bot) throw new ChessError(403, 'Chỉ dùng được khi chơi với máy.');
+    return { g, color };
+  }
+
+  // Gợi ý nước đi (Stockfish mạnh nhất nghĩ nhanh). Ván dùng gợi ý không được tính vương miện thắng máy.
+  app.post('/api/chess/games/:id/hint', ...auth, handle(async (req, res) => {
+    const { g, color } = myBotGame(req);
+    if (turnOf(g) !== color) throw new ChessError(409, 'Chờ máy đi xong đã nhé.');
+    const moves = movesOf(g);
+    let move = null;
+    try {
+      const r = await engine.evaluate({ fen: g.fen, moves, movetime: 700 });
+      move = r && r.move;
+    } catch (err) {
+      console.warn('[chess] Gợi ý lỗi:', err.message);
+    }
+    if (!move || !UCI.test(move)) throw new ChessError(503, 'Máy gợi ý đang bận. Thử lại sau giây lát.');
+    const fresh = loadGame(g.id);
+    if (!fresh || fresh.moves !== g.moves || fresh.status !== 'active') throw new ChessError(409, 'Bàn cờ vừa thay đổi.');
+    run('UPDATE chess_games SET hints = hints + 1, updated_at = ? WHERE id = ?', Date.now(), g.id);
+    const next = loadGame(g.id);
+    emitGame(next);
+    res.json({ move, game: serialize(next) });
+  }));
+
+  // Đi lại: bỏ nước vừa đi của mình (và nước máy đáp lại nếu có) để đi lại nước khác
+  app.post('/api/chess/games/:id/takeback', ...auth, handle((req, res) => {
+    const { g, color } = myBotGame(req);
+    const moves = movesOf(g);
+    // Tới lượt mình: bỏ 2 nước (máy + mình). Máy đang nghĩ: bỏ 1 nước (của mình)
+    const drop = turnOf(g) === color ? 2 : 1;
+    if (moves.length < drop || (moves.length - drop) % 2 !== (color === 'w' ? 0 : 1)) {
+      throw new ChessError(409, 'Chưa có nước nào của bạn để đi lại.');
+    }
+    const keep = moves.slice(0, moves.length - drop);
+    const chess = new Chess();
+    for (const m of keep) {
+      const p = UCI.exec(m);
+      chess.move({ from: p[1], to: p[2], promotion: p[3] });
+    }
+    const now = Date.now();
+    boards.delete(g.id);
+    botMemory.delete(g.id);
+    run(
+      `UPDATE chess_games SET moves = ?, fen = ?, turn_started_at = ?, draw_offer = NULL, bot_say = NULL,
+         takebacks = takebacks + 1, updated_at = ? WHERE id = ?`,
+      keep.join(' '), chess.fen(), now, now, g.id
+    );
+    const next = loadGame(g.id);
+    arm(next);
+    emitGame(next);
+    scheduleBot(next);
+    res.json({ game: serialize(next) });
+  }));
 
   app.post('/api/chess/bot', ...auth, handle((req, res) => res.json({ game: serialize(createBotGame(req.user.id, req.body)) })));
 

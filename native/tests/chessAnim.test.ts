@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
 import { duration, plan, squareAt, squareXY } from "../src/chess/anim";
+import { makeLayout } from "../src/chess/layout";
 
 const require = createRequire(import.meta.url);
 // Bản web: hai bản phải tính y hệt nhau
@@ -70,5 +71,49 @@ describe("chuyển động quân cờ trong app", () => {
     const b = squareXY("g5", cell, "b");
     const off = web.offset("e2", "g5", "b");
     expect({ dx: off.dx * cell, dy: off.dy * cell }).toEqual({ dx: a.x - b.x, dy: a.y - b.y });
+  });
+});
+
+describe("lớp quân của bàn cờ", () => {
+  it("tốt phong cấp: Hậu nằm ở ô phong cấp, Xe vừa đi vẫn ở ô mới, thứ tự vẽ các quân không đổi (lỗi bản 0.6)", () => {
+    // Xe trắng a8 che trước tốt a7: đi Xe a8→d8, đen đi Vua, rồi tốt a7 phong Hậu
+    const c = new Chess("R7/P5k1/8/8/8/8/1KP5/8 w - - 0 70");
+    let L = makeLayout(null, c.fen(), "w", 40, null);
+    const ids = (l: typeof L) => l.sprites.map((x) => x.id);
+    for (const uci of ["a8d8", "g7g6", "a7a8q", "g6h6"]) {
+      c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+      const before = ids(L);
+      L = makeLayout(L, c.fen(), "w", 40, uci);
+      // Các quân còn lại giữ đúng thứ tự cũ (React không phải dời quân nào)
+      const kept = ids(L).filter((id) => before.includes(id));
+      expect(kept).toEqual(before.filter((id) => kept.includes(id)));
+      expect(ids(L)).toEqual([...ids(L)].sort((a, b) => a - b));
+    }
+    const at = (sq: string) => L.sprites.filter((x) => x.sq === sq).map((x) => x.code);
+    expect(at("a8")).toEqual(["wQ"]);
+    expect(at("d8")).toEqual(["wR"]);
+    expect(at("h6")).toEqual(["bK"]);
+    expect(L.sprites).toHaveLength(5);
+  });
+
+  it("không bao giờ có hai quân cùng id (xem lại ván nhảy nhiều nước)", () => {
+    const rand = rng(11);
+    for (let game = 0; game < 10; game++) {
+      const c = new Chess();
+      const fens = [c.fen()];
+      for (let i = 0; i < 80 && !c.isGameOver(); i++) {
+        const moves = c.moves({ verbose: true });
+        c.move(moves[Math.floor(rand() * moves.length)]);
+        fens.push(c.fen());
+      }
+      let L = makeLayout(null, fens[0], "w", 40, null);
+      for (let k = 0; k < 60; k++) {
+        const fen = fens[Math.floor(rand() * fens.length)];
+        L = makeLayout(L, fen, "w", 40, null);
+        const list = L.sprites.map((x) => x.id);
+        expect(new Set(list).size).toBe(list.length);
+        expect(L.sprites.length).toBe([...new Chess(fen).board().flat()].filter(Boolean).length);
+      }
+    }
   });
 });

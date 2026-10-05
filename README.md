@@ -21,7 +21,8 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - **Đóng băng chuỗi** ❄️ (mục 21, mới ở 2.5.0): mỗi tuần được 1 lượt (giữ tối đa 2), lỡ quên chơi một ngày thì tự dùng để chuỗi không bị đứt.
 - **Quiz hằng ngày + Thử thách nhanh** (mục 22, mới ở 2.4.0): Cờ vua, Xếp Khối, Cờ caro mỗi game có **một câu đố mỗi ngày** cho cả nhóm cùng giải (xem ai giải nhanh nhất) và **200 màn thử thách** mở dần, mỗi màn 1–3 sao, bảng xếp hạng sao; thêm màn được bất cứ lúc nào. Chơi được khi mất mạng (Xếp Khối, cờ caro), có trên web và App Think Beta.
 - **Chuỗi hằng ngày** (mục 21, mới ở 2.3.0): mỗi game (Nông trại, Xếp Khối, Cờ vua, Cờ caro) có **chuỗi ngày chơi liên tiếp** riêng 🔥 và một chuỗi chung; thẻ game hiện số ngày, có lịch 7 ngày, mốc 3 / 7 / 14 / 30… ngày được chúc mừng, buổi tối nhắc nếu chuỗi sắp đứt. Game nào thêm sau này cũng phải có chuỗi.
-- **Cờ vua** (mục 14): thách đấu bạn bè, chọn thời gian (1+0 … 30+0 hoặc không giới hạn), đồng hồ do máy chủ giữ, **quân cờ trượt mượt và kéo thả bằng ngón tay như chess.com**, **điểm ELO và bảng xếp hạng**, chơi với 8 máy cờ mã nguồn mở (có Stockfish), **xem lại ván**, **đánh giá ván kiểu Game Review**: mỗi nước được xếp loại **Thiên tài !!, Tuyệt vời !, Tốt nhất, Rất tốt, Tốt, Theo sách, Thiếu chính xác ?!, Sai lầm ?, Bỏ lỡ, Sai lầm nghiêm trọng ??**, có thanh đánh giá, nhận xét từng nước, tên khai cuộc. Âm thanh quân gỗ giòn kiểu các trang cờ lớn. Có trên cả web lẫn App Think Beta.
+- **Cờ vua 2.6.0** (mục 14): **18 máy cờ có tính cách** (Mầm Non ~250 → Đại Kiện Tướng ~2600, Stockfish mạnh nhất ~3000), **máy tự chọn sức** 300–2800 ELO, máy **nói chuyện** trong ván, **gợi ý** và **đi lại** khi chơi với máy, **vương miện** 👑 cho mỗi máy đã hạ, **tên khai cuộc** ngay trong ván, chế độ **hai người một máy** (không cần mạng); sửa lỗi phong cấp làm quân hiện sai chỗ trong app.
+- **Cờ vua** (mục 14): thách đấu bạn bè, chọn thời gian (1+0 … 30+0 hoặc không giới hạn), đồng hồ do máy chủ giữ, **quân cờ trượt mượt và kéo thả bằng ngón tay như chess.com**, **điểm ELO và bảng xếp hạng**, chơi với máy (có Stockfish), **xem lại ván**, **đánh giá ván kiểu Game Review**: mỗi nước được xếp loại **Thiên tài !!, Tuyệt vời !, Tốt nhất, Rất tốt, Tốt, Theo sách, Thiếu chính xác ?!, Sai lầm ?, Bỏ lỡ, Sai lầm nghiêm trọng ??**, có thanh đánh giá, nhận xét từng nước, tên khai cuộc. Âm thanh quân gỗ giòn kiểu các trang cờ lớn. Có trên cả web lẫn App Think Beta.
 - **Xếp Khối** (mục 16): game xếp khối 8×8 (kiểu Block Blast) có combo, hiệu ứng nổ, âm thanh, **chơi được khi mất mạng** (kể cả lúc máy chủ đang ngủ), điểm tự gửi lên **bảng xếp hạng** tuần này / mọi lúc khi có mạng.
 - **Cờ caro** (mục 17, mới ở 2.1.0): bàn 15×15, luật tự do hoặc chặn hai đầu, **chơi với máy** 3 mức (chạy trên máy, không cần mạng), **thách đấu bạn bè** có giờ mỗi nước, **điểm ELO** và bảng xếp hạng. Có trên web và App Think Beta.
 - **Chat 2.1.0** (mục 18): **chủ đề** cho từng cuộc trò chuyện, **biểu tượng gửi nhanh** (👍 kiểu Messenger), **sửa tin nhắn**, **ghim tin nhắn**, **tìm tin nhắn** không cần dấu, **chuyển tiếp**, **tắt thông báo** từng cuộc trò chuyện (1 giờ / 8 giờ / 24 giờ / đến khi bật lại), **ghim cuộc trò chuyện** lên đầu, **@nhắc tên** trong nhóm, **bình chọn**, xem **ảnh đã gửi**.
@@ -382,15 +383,33 @@ Mục **Cờ vua** (trong tab Trò chơi) có trên bản web và App Think Beta
 - **Đồng hồ** chạy trên máy chủ nên không gian lận được, mạng chập chờn cũng không lệch. Ván có giờ: mỗi bên phải đi nước đầu trong 1 phút, không thì ván tự hủy (không ai mất điểm). Hết giờ là thua, trừ khi đối thủ không còn đủ quân để chiếu hết (hòa).
 - **Luật đầy đủ**: nhập thành, bắt tốt qua đường, phong cấp (chọn quân), chiếu hết, hòa pat, không đủ quân, lặp lại 3 lần, luật 50 nước, mời hòa, đầu hàng, hủy ván khi chưa ai đi, đấu lại (đổi màu).
 - **ELO**: ai cũng bắt đầu từ 1200. Chỉ ván **người với người** có bật "Tính điểm" mới cộng/trừ điểm (hệ số K = 40 trong 20 ván đầu, sau đó 20). Dấu **?** cạnh điểm là điểm tạm (dưới 10 ván). **Bảng xếp hạng** ở nút biểu đồ trên đầu tab.
-- **Chơi với máy** (không tính điểm), máy chạy trên máy chủ:
+- **Chơi với máy** (không tính điểm), máy chạy trên máy chủ. Danh sách chia 4 nhóm **Mới chơi / Trung bình / Nâng cao / Chuyên gia**:
 
-  | Máy | Sức cờ ước lượng | Mã nguồn | Giấy phép |
+  | Máy | Sức cờ ước lượng | Gu chơi | Cách chạy |
   |---|---|---|---|
-  | Gà Mờ, Tập Sự, Học Trò | ~500, ~800, ~1000 | [js-chess-engine](https://github.com/josefjadrny/js-chess-engine) | MIT |
-  | GarboChess | ~1600 | [GarboChess-JS](https://github.com/glinscott/Garbochess-JS) (chép vào `src/engines/`) | BSD |
-  | Stockfish · Dễ / Vừa / Khó / Mạnh nhất | ~1300 → ~3000 | [Stockfish 11](https://github.com/official-stockfish/Stockfish) (bản WebAssembly của [stockfish.js](https://github.com/nmrugg/stockfish.js)) | GPL-3.0 |
+  | 🐣 Mầm Non | ~250 | đi đâu cũng được | máy có tính cách |
+  | 🐔 Gà Mờ, 🐤 Tập Sự, 🎒 Học Trò | ~500, ~800, ~1000 | | [js-chess-engine](https://github.com/josefjadrny/js-chess-engine) (MIT) |
+  | 🐢 Tốt Lì | ~650 | mê đẩy tốt | máy có tính cách |
+  | 🐴 Mã Phi | ~900 | thích nhảy mã | máy có tính cách |
+  | 🐯 Hậu Liều | ~1100 | tung Hậu sớm, đánh ào ạt | máy có tính cách |
+  | 🐻 Thủ Thành | ~1250 | nhập thành sớm, thích đổi quân | máy có tính cách |
+  | 🐺 Cáo Già | ~1450 | hay chiếu, gài bẫy | máy có tính cách |
+  | GarboChess | ~1600 | | [GarboChess-JS](https://github.com/glinscott/Garbochess-JS) (BSD, chép vào `src/engines/`) |
+  | 🐼 Tượng Đôi | ~1700 | thích cặp Tượng | máy có tính cách |
+  | 🌀 Bão Táp | ~2000 | dồn quân đánh Vua | máy có tính cách |
+  | 🐲 Rồng Lửa | ~2200 | sắc bén, ít sai | máy có tính cách |
+  | Stockfish · Dễ / Vừa / Khó, 👑 Đại Kiện Tướng, Stockfish · Mạnh nhất | ~1300, ~1800, ~2300, ~2600, ~3000 | | [Stockfish 11](https://github.com/official-stockfish/Stockfish) giảm sức bằng Skill Level (bản WebAssembly của [stockfish.js](https://github.com/nmrugg/stockfish.js), GPL-3.0) |
+  | 🎯 Máy tùy chỉnh | 300–2800 (bạn chọn, bước 50) | cân bằng | máy có tính cách |
 
-  Máy cờ chạy trong một luồng riêng, lần lượt từng ván, nên Render Free (0,1 CPU) vẫn chịu được; máy mạnh nhất nghĩ khoảng 1,5 giây mỗi nước.
+  **Máy có tính cách** (`src/chess-bots.js`, `runStyle` trong `src/chess-worker.js`): Stockfish xem vài nước tốt nhất (MultiPV) ở độ sâu vừa với sức cờ, rồi máy chọn theo gu riêng (cộng điểm cho nước đẩy tốt, nhảy mã, chiếu…), có độ "phóng tay" và tỉ lệ đi hớ giảm dần theo ELO (bảng `LEVELS`). Máy từ 1100 ELO trở lên không bao giờ bỏ qua nước chiếu hết trong 1–2 nước. Đã cho các máy đấu thử với nhau: máy ELO cao hơn thắng gần như mọi ván.
+
+  - **Máy nói chuyện**: chào đầu ván, chiếu tướng, ăn quân, phong cấp, nhận ra bạn vừa đi hớ, than khi đang thua, chúc mừng / phục thù cuối ván. Câu nói hiện trong bong bóng cạnh tên máy khoảng 7 giây. Mỗi máy có câu riêng (`OWN` trong `src/chess-bots.js`).
+  - **Gợi ý** (nút bóng đèn): Stockfish mạnh nhất nghĩ nhanh rồi vẽ mũi tên nước nên đi. **Đi lại**: bỏ nước vừa đi của mình (và nước máy đáp) để đi nước khác, kể cả lúc máy đang nghĩ.
+  - **Vương miện** 👑: thắng một máy mà **không dùng gợi ý, không đi lại** là nhận vương miện của máy đó (hiện trong danh sách máy, đếm ở thành tựu **Thuần phục máy**). Máy tùy chỉnh không tính vương miện.
+
+  Máy cờ chạy trong một luồng riêng, lần lượt từng việc, nên Render Free (0,1 CPU) vẫn chịu được; máy mạnh nhất nghĩ khoảng 1,5 giây mỗi nước.
+- **Tên khai cuộc** hiện ngay trong ván (dưới danh sách nước đi), lấy từ sách khai cuộc lichess, ví dụ "Sicilian Defense (B20)".
+- **Hai người một máy** (nút trên đầu mục Cờ vua; web: `#/chess/local`): hai bạn ngồi cạnh nhau, đưa máy cho nhau sau mỗi nước. Luật chạy ngay trên máy, **không cần mạng**, không tính điểm; có đi lại, đầu hàng, ván mới, **tự xoay bàn cờ** (bên tới lượt luôn ở phía dưới). Ván lưu trên máy, thoát ra vào lại vẫn chơi tiếp.
 - **Xem lại ván**: mọi ván đã xong nằm trong **Lịch sử** (nút ở mục "Ván gần đây"). Mở một ván để xem từng nước (nút ‹ ›, trên máy tính dùng phím ← → Home End) hoặc bấm **Xem lại từ đầu** để tự chạy mỗi giây một nước.
 - **Đánh giá ván** (ván đã xong, kiểu "Game Review"): bấm **Đánh giá ván đấu**. Máy chủ cho Stockfish chấm từng thế cờ (khoảng 1 phút, xong có thông báo), rồi hiện:
   - **huy hiệu loại nước** ngay trên ô vừa đi tới và trong danh sách nước: **Thiên tài !!** (thí quân mà vẫn là nước tốt nhất), **Tuyệt vời !** (nước duy nhất giữ được thế cờ), **Tốt nhất ★**, **Rất tốt**, **Tốt**, **Theo sách** (nước khai cuộc có tên), **Thiếu chính xác ?!**, **Sai lầm ?**, **Bỏ lỡ ✕** (đối thủ vừa sai mà không tận dụng, hoặc bỏ lỡ chiếu hết), **Sai lầm nghiêm trọng ??**; nước chỉ có một cách đi là **Bắt buộc**;
@@ -400,7 +419,7 @@ Mục **Cờ vua** (trong tab Trò chơi) có trên bản web và App Think Beta
 
   Cách xếp loại: so khả năng thắng (theo điểm Stockfish) trước và sau nước đi, ngưỡng tụt 2 / 5 / 10 / 20 điểm phần trăm cho Rất tốt / Tốt / Thiếu chính xác / Sai lầm / Sai lầm nghiêm trọng. Máy chấm hai nước tốt nhất mỗi thế cờ (MultiPV 2) để biết nước nào là "nước duy nhất". Nước đã đi được chấm cùng thế cờ gốc với nước tốt nhất (lệnh `searchmoves`) nên không bị báo sai vì độ sâu tìm kiếm. Sách khai cuộc lấy từ [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings) (CC0), gọn trong `src/chess-openings.tsv` (tạo lại bằng `scripts/build-openings.js`). Ván đã phân tích từ bản cũ tự được xếp loại lại khi mở. Mỗi ván chỉ phân tích một lần; ván đang chơi không phân tích được (tránh gian lận).
 - **Tùy chọn bàn cờ** (nút ⚙ trên đầu mục Cờ vua và trong ván): bật/tắt **chỉ dẫn nước đi** (chấm ở ô đi được), **tô màu nước vừa đi**, **tọa độ bàn cờ**, **mũi tên gợi ý khi phân tích**, **quân trượt khi đi**, **âm thanh**. Lưu riêng trên từng máy.
-- **Đi quân kiểu chess.com**: chạm quân rồi chạm ô đích, hoặc **kéo quân bằng ngón tay** (quân nhấc lên to hơn, ô dưới ngón tay có viền sáng; thả ra ngoài hay vào ô không đi được thì quân trượt về chỗ cũ). Mọi nước đi — của mình, của đối thủ, của máy, khi xem lại ván hay nhảy về đầu ván — đều **trượt mượt** từ ô đi tới ô đến (nhập thành: vua và xe cùng trượt), quân bị ăn mờ dần. Tắt được ở **Quân trượt khi đi**; máy bật "giảm chuyển động" thì tự tắt. Cách tính quân nào trượt đi đâu nằm ở `public/chess-anim.js` (web) và `native/src/chess/anim.ts` (app), có kiểm thử so khớp hai bản.
+- **Đi quân kiểu chess.com**: chạm quân rồi chạm ô đích, hoặc **kéo quân bằng ngón tay** (quân nhấc lên to hơn, ô dưới ngón tay có viền sáng; thả ra ngoài hay vào ô không đi được thì quân trượt về chỗ cũ). Mọi nước đi — của mình, của đối thủ, của máy, khi xem lại ván hay nhảy về đầu ván — đều **trượt mượt** từ ô đi tới ô đến (nhập thành: vua và xe cùng trượt), quân bị ăn mờ dần. Tắt được ở **Quân trượt khi đi**; máy bật "giảm chuyển động" thì tự tắt. Cách tính quân nào trượt đi đâu nằm ở `public/chess-anim.js` (web) và `native/src/chess/anim.ts` (app), có kiểm thử so khớp hai bản. Trong app, quân trượt bằng luồng JS (không dùng native driver) và các quân giữ nguyên thứ tự vẽ (`native/src/chess/layout.ts`): ở bản 0.6, với kiến trúc mới của React Native, phong cấp làm React xếp lại các quân nên Xe vừa đi bị kéo về ô cũ, che mất Hậu. Bước kiểm tra APK bày lại đúng thế cờ đó và đọc điểm ảnh trên máy ảo.
 - **Âm thanh** (phong cách các trang cờ lớn): tiếng quân gỗ giòn khi đi — **nước của mình và của đối thủ nghe khác nhau** —, ăn quân ("cạch"), nhập thành (hai tiếng), chiếu tướng, phong cấp, **còn 10 giây** (tích tắc), đi sai (kéo quân vào ô không đi được), bắt đầu và kết thúc ván. Các tiếng này tự tổng hợp bằng `scripts/chess-sounds.py` (mô phỏng quân gỗ va bàn gỗ, không lấy file của trang nào), dùng chung cho web (`public/chess/sounds/`) và app (`native/assets/sounds/`).
 - Luật cờ dùng [chess.js](https://github.com/jhlywa/chess.js) (BSD-2-Clause) ở cả máy chủ, web và app. Hình quân cờ là bộ **cburnett** của Colin M.L. Burnett (GPLv2+, xem `public/chess/pieces/LICENSE.txt`).
 
@@ -522,13 +541,14 @@ Có trên bản web và App Think Beta (nghe chéo được: ghi trên web, nghe
 
 ## 24. Thành tựu
 
-Trang cá nhân (web và App Think Beta) có mục **Thành tựu**: 12 huy hiệu, mỗi huy hiệu 3 bậc **Đồng / Bạc / Vàng**. Chạm một huy hiệu để xem cách đạt và còn thiếu bao nhiêu; huy hiệu chưa đạt có thanh tiến độ.
+Trang cá nhân (web và App Think Beta) có mục **Thành tựu**: 13 huy hiệu, mỗi huy hiệu 3 bậc **Đồng / Bạc / Vàng**. Chạm một huy hiệu để xem cách đạt và còn thiếu bao nhiêu; huy hiệu chưa đạt có thanh tiến độ.
 
 | Huy hiệu | Đồng / Bạc / Vàng |
 |---|---|
 | 🔥 Lửa bền bỉ — chơi game nhiều ngày liên tiếp (kỷ lục chuỗi chung) | 3 / 7 / 30 ngày |
 | 🏆 Kỳ thủ — thắng ván cờ vua (cả với máy) | 1 / 10 / 50 ván |
 | 👑 Cao thủ cờ vua — điểm ELO cao nhất | 1300 / 1500 / 1800 |
+| 🐲 Thuần phục máy — số máy cờ khác nhau đã thắng không dùng gợi ý / đi lại (mới ở 2.6.0) | 1 / 6 / 12 máy |
 | 🎯 Vua caro — thắng cờ caro với bạn bè | 1 / 10 / 50 ván |
 | 🎮 Thợ xếp khối — kỷ lục một ván Xếp Khối | 1.000 / 5.000 / 20.000 điểm |
 | ⭐ Nhà giải đố — sao Thử thách nhanh | 30 / 150 / 450 sao |
@@ -556,6 +576,7 @@ src/chess.js         Cờ vua: thách đấu, đồng hồ, ELO, bảng xếp h�
 src/chess-engine.js  Hàng đợi gửi việc cho máy cờ; src/chess-worker.js chạy máy cờ trong luồng riêng
 src/chess-analysis.js Đánh giá ván đã xong bằng Stockfish (xếp loại thiên tài … sai lầm nghiêm trọng, độ chính xác)
 src/chess-openings.js Sách khai cuộc (dữ liệu src/chess-openings.tsv, lichess-org/chess-openings, CC0)
+src/chess-bots.js    Danh sách máy cờ, gu chơi, độ khó theo ELO, máy tự chọn sức, câu nói của máy
 src/games.js         Trò chơi trên máy (Xếp Khối): điểm, bảng xếp hạng tuần / mọi lúc (API /api/games)
 src/social.js        Trang cá nhân và bảng tin: bài đăng, thả tim, bình luận (API /api/posts)
 src/caro.js          Cờ caro: thách đấu, giờ mỗi nước, ELO, bảng xếp hạng (API /api/caro)

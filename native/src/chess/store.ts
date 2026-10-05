@@ -13,6 +13,18 @@ type State = {
   error: string | null;
   rating: ChessRating | null;
   bots: ChessBot[];
+  /** Nhóm máy theo sức cờ */
+  botTiers: { id: string; name: string }[];
+  /** Máy tự chọn sức: khoảng ELO (null = máy chủ cũ chưa có) */
+  customElo: { min: number; max: number; step: number } | null;
+  /** Các máy đã thắng không cần gợi ý / đi lại (vương miện) */
+  beaten: string[];
+  /** Gợi ý vừa xin (mũi tên trên bàn cờ) */
+  hint: { gameId: number; ply: number; move: string } | null;
+  /** Đang xin gợi ý / đi lại */
+  helping: Record<number, boolean>;
+  /** Đang mở ván hai người một máy */
+  localOpen: boolean;
   games: Record<number, ChessGame>;
   /** Giờ trên máy lúc nhận trạng thái ván (để chạy đồng hồ) */
   receivedAt: Record<number, number>;
@@ -35,6 +47,12 @@ export const useChess = create<State>(() => ({
   error: null,
   rating: null,
   bots: [],
+  botTiers: [],
+  customElo: null,
+  beaten: [],
+  hint: null,
+  helping: {},
+  localOpen: false,
   games: {},
   receivedAt: {},
   leaderboard: null,
@@ -77,6 +95,12 @@ export function resetChess() {
     error: null,
     rating: null,
     bots: [],
+    botTiers: [],
+    customElo: null,
+    beaten: [],
+    hint: null,
+    helping: {},
+    localOpen: false,
     games: {},
     receivedAt: {},
     leaderboard: null,
@@ -99,14 +123,28 @@ function upsert(list: ChessGame[]) {
       const prev = games[g.id];
       if (prev) {
         // Bản cũ đến trễ (phản hồi của lần tải đang dở, sự kiện đến không theo thứ tự): bỏ qua
-        if (stageOf(g) < stageOf(prev)) continue;
-        if (g.status === "active" && prev.status === "active" && prev.moves.length > g.moves.length) continue;
+        if (!isNewer(prev, g)) continue;
       }
       games[g.id] = g;
       receivedAt[g.id] = now;
     }
     return { games, receivedAt };
   });
+}
+
+/**
+ * Bản `g` có mới hơn bản đang có không. Ván đi lại nước (takebacks tăng) thì ít nước hơn mà vẫn mới hơn;
+ * bản đến trễ của trước lần đi lại thì bỏ.
+ */
+export function isNewer(prev: ChessGame, g: ChessGame) {
+  if (stageOf(g) < stageOf(prev)) return false;
+  if (g.status === "active" && prev.status === "active") {
+    const a = prev.takebacks || 0;
+    const b = g.takebacks || 0;
+    if (b !== a) return b > a;
+    if (prev.moves.length > g.moves.length) return false;
+  }
+  return true;
 }
 
 let loadAgain = false;
@@ -127,7 +165,16 @@ export async function loadChess() {
       const keep = new Set(s.history.ids);
       const games: Record<number, ChessGame> = {};
       for (const g of Object.values(s.games)) if (fresh.has(g.id) || g.id === s.openId || keep.has(g.id)) games[g.id] = g;
-      return { games, rating: data.rating, bots: data.bots, loaded: true, error: null };
+      return {
+        games,
+        rating: data.rating,
+        bots: data.bots,
+        botTiers: data.botTiers || [],
+        customElo: data.customElo || null,
+        beaten: data.beaten || [],
+        loaded: true,
+        error: null,
+      };
     });
     upsert(list);
   } catch (err) {
@@ -260,6 +307,47 @@ export async function playMove(id: number, uci: string) {
   } finally {
     set((s) => ({ sending: { ...s.sending, [id]: false } }));
   }
+}
+
+/** Ván với máy: xin gợi ý (mũi tên nước tốt nhất). Ván dùng gợi ý không được tính vương miện. */
+export async function askHint(id: number) {
+  const g = get().games[id];
+  if (!g || get().helping[id]) return;
+  set((s) => ({ helping: { ...s.helping, [id]: true } }));
+  try {
+    const res = await api.chessHint(id);
+    upsert([res.game]);
+    set({ hint: { gameId: id, ply: res.game.moves.length, move: res.move } });
+  } catch (err) {
+    if (err instanceof ApiError && err.data?.game) upsert([err.data.game as ChessGame]);
+    bridge.toast(err instanceof Error ? err.message : "Chưa lấy được gợi ý.");
+  } finally {
+    set((s) => ({ helping: { ...s.helping, [id]: false } }));
+  }
+}
+
+/** Ván với máy: đi lại nước vừa đi */
+export async function takeBack(id: number) {
+  if (get().helping[id] || get().sending[id]) return;
+  set((s) => ({ helping: { ...s.helping, [id]: true } }));
+  try {
+    const res = await api.chessTakeback(id);
+    upsert([res.game]);
+    set({ hint: null });
+  } catch (err) {
+    if (err instanceof ApiError && err.data?.game) upsert([err.data.game as ChessGame]);
+    bridge.toast(err instanceof Error ? err.message : "Chưa đi lại được.");
+  } finally {
+    set((s) => ({ helping: { ...s.helping, [id]: false } }));
+  }
+}
+
+/** Mở / đóng ván hai người một máy (LocalGame.tsx) */
+export function openLocal() {
+  set({ localOpen: true, openId: null });
+}
+export function closeLocal() {
+  set({ localOpen: false });
 }
 
 async function act(fn: () => Promise<{ game: ChessGame }>) {

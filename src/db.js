@@ -223,6 +223,10 @@ ensureColumn('conversations', 'emoji', 'emoji TEXT');
 ensureColumn('messages', 'audio', 'audio TEXT');
 ensureColumn('messages', 'audio_ms', 'audio_ms INTEGER');
 ensureColumn('messages', 'audio_wave', 'audio_wave TEXT');
+// 2.6.0: cờ vua — câu nói gần nhất của máy, số lần dùng gợi ý / đi lại trong ván với máy
+ensureColumn('chess_games', 'bot_say', 'bot_say TEXT');
+ensureColumn('chess_games', 'hints', 'hints INTEGER NOT NULL DEFAULT 0');
+ensureColumn('chess_games', 'takebacks', 'takebacks INTEGER NOT NULL DEFAULT 0');
 if (!db.prepare('PRAGMA table_info(messages)').all().some((c) => c.name === 'updated_at')) {
   // Thời điểm tin nhắn thay đổi lần cuối (thu hồi, cảm xúc, dọn ảnh) để máy người dùng đồng bộ
   db.exec('ALTER TABLE messages ADD COLUMN updated_at INTEGER');

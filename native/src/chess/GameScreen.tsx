@@ -13,7 +13,7 @@ import { SideAvatar, useNow, useSide } from "./parts";
 import { loadPrefs, usePrefs } from "./prefs";
 import { PrefsSheet } from "./Sheets";
 import { holdSounds, playSound, soundForSan } from "./sound";
-import { abort, answerChallenge, closeGame, draw, loadGameFresh, playMove, rematch, resign, useChess } from "./store";
+import { abort, answerChallenge, askHint, closeGame, draw, loadGameFresh, playMove, rematch, resign, takeBack, useChess } from "./store";
 import type { ChessGame, Color } from "./types";
 
 // Màn hình một ván cờ: bàn cờ, đồng hồ hai bên, danh sách nước đi, mời hòa / đầu hàng, kết quả.
@@ -85,6 +85,8 @@ function Game({ g }: { g: ChessGame }) {
   const [playing, setPlaying] = useState(false);
   const [bestView, setBestView] = useState(false);
   const prefs = usePrefs();
+  const hint = useChess((st) => (st.hint && st.hint.gameId === g.id ? st.hint : null));
+  const helping = useChess((st) => Boolean(st.helping[g.id]));
   const analysis = useChess((st) => st.analyses[g.id]);
   const result = analysis?.status === "done" ? analysis.result : undefined;
 
@@ -198,6 +200,21 @@ function Game({ g }: { g: ChessGame }) {
     }
   }, [total, active, mine, g.turn, san, opp.name]);
 
+  // Câu máy vừa nói: hiện trong bong bóng cạnh tên máy khoảng 7 giây (nói lúc nào thì hiện lúc đó)
+  const say = g.botSay && live && (g.botSay.ply === total || !active) ? g.botSay : null;
+  const sayKey = say ? `${g.id}:${say.ply}:${say.text}` : null;
+  const [sayShown, setSayShown] = useState<string | null>(null);
+  useEffect(() => {
+    if (!sayKey) return;
+    setSayShown(sayKey);
+    const t = setTimeout(() => setSayShown((k) => (k === sayKey ? null : k)), 7000);
+    return () => clearTimeout(t);
+  }, [sayKey]);
+  const sayText = say && sayShown === sayKey ? say.text : null;
+  const hintArrow = hint && live && active && hint.ply === total && g.turn === mine ? hint.move : null;
+  const canTakeBack = active && mine && g.bot && total >= (mine === "w" ? 1 : 2);
+  const helped = (g.hints || 0) + (g.takebacks || 0) > 0;
+
   async function run(key: string, fn: () => Promise<unknown>) {
     setBusy(key);
     try {
@@ -237,7 +254,7 @@ function Game({ g }: { g: ChessGame }) {
         }
       />
 
-      <PlayerBar g={g} color={top} elapsed={elapsed} captured={mat.captured[top]} lead={mat.lead[top]} />
+      <PlayerBar g={g} color={top} elapsed={elapsed} captured={mat.captured[top]} lead={mat.lead[top]} say={g.botColor === top ? sayText : null} sayBelow />
       <View style={{ flexDirection: "row", justifyContent: "center", gap: 4 }}>
         {review ? <EvalBar pos={showBest ? beforePos : review.positions[ply]} height={size} orientation={bottom} /> : null}
         <Board
@@ -252,11 +269,11 @@ function Game({ g }: { g: ChessGame }) {
           showLast={prefs.lastMove}
           coords={prefs.coords}
           animate={prefs.anim}
-          arrow={review && prefs.arrows ? (showBest ? beforePos?.best : ply < total ? review.positions[ply]?.best : null) : null}
+          arrow={review && prefs.arrows ? (showBest ? beforePos?.best : ply < total ? review.positions[ply]?.best : null) : hintArrow}
           badge={showBest && beforePos?.best ? { sq: beforePos.best.slice(2, 4), cls: "best" } : reviewMove ? { sq: reviewMove.uci.slice(2, 4), cls: reviewMove.cls } : null}
         />
       </View>
-      <PlayerBar g={g} color={bottom} elapsed={elapsed} captured={mat.captured[bottom]} lead={mat.lead[bottom]} />
+      <PlayerBar g={g} color={bottom} elapsed={elapsed} captured={mat.captured[bottom]} lead={mat.lead[bottom]} say={g.botColor === bottom ? sayText : null} />
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 12) + 8 }}>
         {/* Danh sách nước đi + nút xem lại */}
@@ -297,6 +314,14 @@ function Game({ g }: { g: ChessGame }) {
         </View>
 
         <View style={s.body}>
+          {g.opening && !review ? (
+            <View style={s.openingRow} accessibilityLabel={`Khai cuộc: ${g.opening.name}`}>
+              <Icon name="menu-book" size={16} color={c.accent} />
+              <Text style={s.openingText} numberOfLines={2}>
+                {g.opening.name} <Text style={s.muted}>({g.opening.eco})</Text>
+              </Text>
+            </View>
+          ) : null}
           {review ? (
             <>
               <ReviewCoach r={review} ply={ply} total={total} onJump={(p) => jump(p)} bestView={showBest} onToggleBest={() => setBestView((v) => !v)} />
@@ -355,6 +380,36 @@ function Game({ g }: { g: ChessGame }) {
           ) : null}
 
           {!active ? <AnalysisPanel g={g} ply={ply} onJump={(p) => jump(p)} viewer={!mine} /> : null}
+
+          {active && mine && g.bot ? (
+            <View style={s.actions}>
+              <Button
+                title="Gợi ý"
+                icon="lightbulb"
+                kind="secondary"
+                small
+                style={{ flex: 1 }}
+                disabled={!live || g.turn !== mine || sending || Boolean(hintArrow)}
+                busy={helping && busy === "hint"}
+                onPress={() => run("hint", () => askHint(g.id))}
+              />
+              <Button
+                title="Đi lại"
+                icon="undo"
+                kind="secondary"
+                small
+                style={{ flex: 1 }}
+                disabled={!canTakeBack || sending}
+                busy={helping && busy === "takeback"}
+                onPress={() => run("takeback", () => takeBack(g.id))}
+              />
+            </View>
+          ) : null}
+          {active && mine && g.bot && helped ? (
+            <Text style={s.muted}>
+              Đã dùng {g.hints || 0} gợi ý, {g.takebacks || 0} lần đi lại. Thắng ván này vẫn vui, nhưng không nhận vương miện của {g.bot.name}.
+            </Text>
+          ) : null}
 
           {active && mine ? (
             <View style={s.actions}>
@@ -423,7 +478,24 @@ function Game({ g }: { g: ChessGame }) {
 
 /* ---------------- Thanh người chơi: ảnh, tên, điểm, quân đã ăn, đồng hồ ---------------- */
 
-function PlayerBar({ g, color, elapsed, captured, lead }: { g: ChessGame; color: Color; elapsed: number; captured: string[]; lead: number }) {
+function PlayerBar({
+  g,
+  color,
+  elapsed,
+  captured,
+  lead,
+  say,
+  sayBelow,
+}: {
+  g: ChessGame;
+  color: Color;
+  elapsed: number;
+  captured: string[];
+  lead: number;
+  /** Câu máy đang nói (bong bóng), sayBelow: bong bóng nằm dưới thanh (thanh ở trên bàn cờ) */
+  say?: string | null;
+  sayBelow?: boolean;
+}) {
   const c = useColors();
   const s = useStyles(makeStyles);
   const side = useSide(g, color);
@@ -438,7 +510,24 @@ function PlayerBar({ g, color, elapsed, captured, lead }: { g: ChessGame; color:
   const isMe = side.uid === meId && !side.isBot;
 
   return (
-    <View style={s.player}>
+    <View style={[s.player, say ? s.playerTalking : null]}>
+      {say ? (
+        <View
+          pointerEvents="none"
+          style={[s.bubble, sayBelow ? { top: "88%" } : { bottom: "88%" }, { backgroundColor: c.surface, borderColor: c.line }]}
+          accessibilityLiveRegion="polite"
+          accessibilityLabel={`${side.name} nói: ${say}`}
+        >
+          <View
+            style={[
+              s.bubbleTail,
+              sayBelow ? { top: -6, borderLeftWidth: StyleSheet.hairlineWidth, borderTopWidth: StyleSheet.hairlineWidth } : { bottom: -6, borderRightWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth },
+              { backgroundColor: c.surface, borderColor: c.line },
+            ]}
+          />
+          <Text style={s.bubbleText}>{say}</Text>
+        </View>
+      ) : null}
       <SideAvatar g={g} color={color} size={36} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={s.nameRow}>
@@ -500,6 +589,15 @@ function Result({ g, mine }: { g: ChessGame; mine: Color | null }) {
           {g.result && g.result !== "1/2-1/2" ? `${g.result === "1-0" ? "Trắng" : "Đen"} thắng do ${reasonText(g.reason)}` : reasonText(g.reason)}
           {g.result ? ` · ${g.result.replace("1/2", "½").replace("1/2", "½")}` : ""}
         </Text>
+        {g.bot && mine && o === "win" ? (
+          <Text style={[s.resultSub, { color: c.text, fontWeight: "700" }]}>
+            {(g.hints || 0) + (g.takebacks || 0) > 0
+              ? `Thắng có trợ giúp (${g.hints || 0} gợi ý, ${g.takebacks || 0} lần đi lại).`
+              : g.bot.custom
+                ? "Thắng không cần trợ giúp!"
+                : `👑 Bạn nhận vương miện của ${g.bot.name}!`}
+          </Text>
+        ) : null}
       </View>
       {delta != null ? (
         <View style={{ alignItems: "flex-end" }}>
@@ -617,6 +715,26 @@ const makeStyles = (c: Colors) =>
     title: { color: c.text, fontSize: 17, fontWeight: "800" },
     sub: { color: c.muted, fontSize: 12.5 },
     player: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, paddingVertical: 7 },
+    playerTalking: { zIndex: 30, elevation: 30 },
+    bubble: {
+      position: "absolute",
+      left: 14,
+      maxWidth: 260,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 14,
+      borderWidth: StyleSheet.hairlineWidth,
+      zIndex: 30,
+      elevation: 30,
+      shadowColor: "#000",
+      shadowOpacity: 0.18,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+    },
+    bubbleTail: { position: "absolute", left: 16, width: 12, height: 12, transform: [{ rotate: "45deg" }] },
+    bubbleText: { color: c.text, fontSize: 14, fontWeight: "600", lineHeight: 19 },
+    openingRow: { flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center" },
+    openingText: { color: c.text2, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
     nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
     playerName: { color: c.text, fontSize: 15, fontWeight: "700", flexShrink: 1 },
     rating: { color: c.muted, fontSize: 13, fontWeight: "700" },

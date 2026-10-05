@@ -164,8 +164,9 @@ export function ChallengeSheet({ visible, onClose, opponentId }: { visible: bool
 export function BotSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const c = useColors();
   const s = useStyles(makeStyles);
-  const bots = useChess((st) => st.bots);
+  const { bots, tiers, custom, beaten } = useChess(useShallow((st) => ({ bots: st.bots, tiers: st.botTiers, custom: st.customElo, beaten: st.beaten })));
   const [pick, setPick] = useState<string | null>(null);
+  const [customElo, setCustomElo] = useState(1200);
   const [tc, setTc] = useState({ base: 0, inc: 0 });
   const [color, setColor] = useState<ColorPref>("white");
   const [busy, setBusy] = useState(false);
@@ -178,12 +179,21 @@ export function BotSheet({ visible, onClose }: { visible: boolean; onClose: () =
     if (!pick && bots.length) setPick(bots[Math.min(2, bots.length - 1)].id);
   }, [bots, pick]);
 
+  // Chia máy theo nhóm sức cờ (máy chủ cũ không có nhóm: một danh sách)
+  const groups = useMemo(() => {
+    if (!tiers.length) return [{ id: "all", name: "", list: bots }];
+    return tiers.map((t) => ({ ...t, list: bots.filter((b) => b.tier === t.id) })).filter((t) => t.list.length);
+  }, [bots, tiers]);
+  const crowns = useMemo(() => new Set(beaten), [beaten]);
+  const isCustom = pick === "custom";
+  const stepElo = (d: number) => custom && setCustomElo((v) => Math.max(custom.min, Math.min(custom.max, v + d)));
+
   async function start() {
     if (!pick) return;
     setBusy(true);
     setError(null);
     try {
-      await startBotGame({ bot: pick, base: tc.base, inc: tc.inc, color });
+      await startBotGame({ bot: isCustom ? `custom-${customElo}` : pick, base: tc.base, inc: tc.inc, color });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Chưa bắt đầu được ván cờ.");
@@ -199,45 +209,103 @@ export function BotSheet({ visible, onClose }: { visible: boolean; onClose: () =
       title="Chơi với máy"
       footer={<Button title="Bắt đầu" icon="play-arrow" busy={busy} disabled={!pick} onPress={start} />}
     >
-      <Text style={s.hint}>Luyện tập với các máy cờ mã nguồn mở. Ván với máy không tính điểm ELO.</Text>
-      <View style={{ gap: 6 }}>
-        {bots.map((b) => {
-          const on = pick === b.id;
-          return (
-            <Pressable
-              key={b.id}
-              onPress={() => setPick(b.id)}
-              style={[s.person, on && s.personOn]}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: on }}
-              accessibilityLabel={`${b.name}, khoảng ${b.elo} ELO. ${b.about}`}
-            >
-              <BotAvatar bot={b} size={42} />
-              <View style={{ flex: 1, gap: 1 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <Text style={[s.personName, { flexShrink: 1 }]} numberOfLines={1}>
-                    {b.name}
+      <Text style={s.hint}>
+        Mỗi máy một tính cách. Thắng không dùng gợi ý, không đi lại để nhận vương miện 👑 ({crowns.size}/{bots.length}). Ván với máy không tính điểm ELO.
+      </Text>
+      {groups.map((grp) => (
+        <View key={grp.id} style={{ gap: 6 }}>
+          {grp.name ? <Text style={s.label}>{grp.name}</Text> : null}
+          {grp.list.map((b) => {
+            const on = pick === b.id;
+            const won = crowns.has(b.id);
+            return (
+              <Pressable
+                key={b.id}
+                onPress={() => setPick(b.id)}
+                style={[s.person, on && s.personOn]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: on }}
+                accessibilityLabel={`${b.name}, khoảng ${b.elo} ELO${b.style ? `, ${b.style}` : ""}${won ? ", đã thắng" : ""}. ${b.about}`}
+              >
+                <BotAvatar bot={b} size={44} crown={won} />
+                <View style={{ flex: 1, gap: 1 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={[s.personName, { flexShrink: 1 }]} numberOfLines={1}>
+                      {b.name}
+                    </Text>
+                    <Text style={s.elo}>~{b.elo}</Text>
+                  </View>
+                  {b.style ? <Text style={s.styleTag}>{b.style}</Text> : null}
+                  <Text style={s.personSub} numberOfLines={on ? 4 : 2}>
+                    {b.about}
                   </Text>
-                  <Text style={s.elo}>~{b.elo}</Text>
+                  {on ? (
+                    <Text
+                      style={s.source}
+                      onPress={() => Linking.openURL(b.source.url)}
+                      accessibilityRole="link"
+                      accessibilityLabel={`Mã nguồn ${b.source.name}, giấy phép ${b.source.license}`}
+                    >
+                      {b.source.name} · {b.source.license} ↗
+                    </Text>
+                  ) : null}
                 </View>
-                <Text style={s.personSub} numberOfLines={2}>
-                  {b.about}
-                </Text>
-                <Text
-                  style={s.source}
-                  onPress={() => Linking.openURL(b.source.url)}
-                  accessibilityRole="link"
-                  accessibilityLabel={`Mã nguồn ${b.source.name}, giấy phép ${b.source.license}`}
-                >
-                  {b.source.name} · {b.source.license} ↗
-                </Text>
+                <Icon name={on ? "radio-button-checked" : "radio-button-unchecked"} size={22} color={on ? c.accent : c.muted} />
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
+      {bots.length === 0 ? <Text style={s.hint}>Đang tải danh sách máy…</Text> : null}
+
+      {custom ? (
+        <View style={{ gap: 6 }}>
+          <Text style={s.label}>Tự chọn sức</Text>
+          <Pressable
+            onPress={() => setPick("custom")}
+            style={[s.person, isCustom && s.personOn, { flexDirection: "column", alignItems: "stretch" }]}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: isCustom }}
+            accessibilityLabel={`Máy tự chọn sức, ${customElo} ELO`}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <BotAvatar bot={{ elo: customElo, avatar: "🎯" }} size={44} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.personName}>Máy tùy chỉnh</Text>
+                <Text style={s.personSub}>Chọn đúng sức cờ bạn muốn luyện, từ {custom.min} đến {custom.max} ELO.</Text>
               </View>
-              <Icon name={on ? "radio-button-checked" : "radio-button-unchecked"} size={22} color={on ? c.accent : c.muted} />
-            </Pressable>
-          );
-        })}
-        {bots.length === 0 ? <Text style={s.hint}>Đang tải danh sách máy…</Text> : null}
-      </View>
+              <Icon name={isCustom ? "radio-button-checked" : "radio-button-unchecked"} size={22} color={isCustom ? c.accent : c.muted} />
+            </View>
+            <View style={s.stepper}>
+              {[-200, -50].map((d) => (
+                <Pressable
+                  key={d}
+                  onPress={() => (setPick("custom"), stepElo(d))}
+                  style={[s.stepBtn, { backgroundColor: c.field }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Giảm ${-d} điểm`}
+                >
+                  <Text style={s.stepText}>{d}</Text>
+                </Pressable>
+              ))}
+              <Text style={s.stepValue} accessibilityLiveRegion="polite">
+                {customElo}
+              </Text>
+              {[50, 200].map((d) => (
+                <Pressable
+                  key={d}
+                  onPress={() => (setPick("custom"), stepElo(d))}
+                  style={[s.stepBtn, { backgroundColor: c.field }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Tăng ${d} điểm`}
+                >
+                  <Text style={s.stepText}>+{d}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </Pressable>
+        </View>
+      ) : null}
 
       <Text style={s.label}>Thời gian mỗi bên</Text>
       <TimePicker value={tc} onChange={setTc} />
@@ -259,6 +327,11 @@ const makeStyles = (c: Colors) =>
     personName: { color: c.text, fontSize: 15.5, fontWeight: "700" },
     personSub: { color: c.muted, fontSize: 13 },
     elo: { color: c.accent, fontSize: 13, fontWeight: "800" },
+    styleTag: { color: c.text2, fontSize: 12.5, fontWeight: "700" },
+    stepper: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 },
+    stepBtn: { minWidth: 52, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+    stepText: { color: c.text, fontSize: 14, fontWeight: "800" },
+    stepValue: { color: c.accent, fontSize: 22, fontWeight: "900", minWidth: 64, textAlign: "center", fontVariant: ["tabular-nums"] },
     source: { color: c.accent, fontSize: 12, fontWeight: "600", marginTop: 2, alignSelf: "flex-start" },
     search: { height: 42, borderRadius: 12, backgroundColor: c.field, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, gap: 8 },
     searchInput: { flex: 1, color: c.text, fontSize: 15, paddingVertical: 0 },
