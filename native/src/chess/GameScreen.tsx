@@ -11,9 +11,9 @@ import { Board, PieceImage } from "./Board";
 import { clockText, material, MOVE_CLASS, myColor, NOTABLE, opponentColor, outcomeFor, reasonText, replay, resultTitle, tcLabel } from "./format";
 import { SideAvatar, useNow, useSide } from "./parts";
 import { loadPrefs, usePrefs } from "./prefs";
-import { PrefsSheet } from "./Sheets";
+import { PhrasesSheet, PrefsSheet } from "./Sheets";
 import { holdSounds, playSound, soundForSan } from "./sound";
-import { abort, answerChallenge, askHint, closeGame, draw, loadGameFresh, playMove, rematch, resign, takeBack, useChess } from "./store";
+import { abort, answerChallenge, askHint, closeGame, draw, loadGameFresh, openAnalysis, playMove, rematch, resign, takeBack, useChess } from "./store";
 import type { ChessGame, Color } from "./types";
 
 // Màn hình một ván cờ: bàn cờ, đồng hồ hai bên, danh sách nước đi, mời hòa / đầu hàng, kết quả.
@@ -107,7 +107,7 @@ function Game({ g }: { g: ChessGame }) {
   const top = opponentColor(bottom);
   const active = g.status === "active";
   const running = active && (g.clocks != null || g.firstMoveDeadline != null);
-  const now = useNow(running, 200);
+  const now = useNow(running, g.daily ? 20000 : 200);
   const elapsed = Math.max(0, now - receivedAt);
 
   const { san, fens } = useMemo(() => replay(g.moves), [g.moves]);
@@ -138,7 +138,7 @@ function Game({ g }: { g: ChessGame }) {
   }, [total, live, ply]);
 
   // Còn 10 giây: tiếng tích tắc (một lần mỗi ván)
-  const myMs = mine && g.clocks ? Math.max(0, g.clocks[mine] - (g.turn === mine && g.moves.length >= 2 ? elapsed : 0)) : null;
+  const myMs = mine && g.clocks ? Math.max(0, g.clocks[mine] - (g.turn === mine && (g.moves.length >= 2 || g.daily) ? elapsed : 0)) : null;
   const lowWarned = useRef(false);
   useEffect(() => {
     if (!active || !mine || g.turn !== mine || g.base < 30000 || myMs == null || myMs <= 0 || myMs > 10000 || lowWarned.current) return;
@@ -201,8 +201,19 @@ function Game({ g }: { g: ChessGame }) {
   }, [total, active, mine, g.turn, san, opp.name]);
 
   // Câu máy vừa nói: hiện trong bong bóng cạnh tên máy khoảng 7 giây (nói lúc nào thì hiện lúc đó)
-  const say = g.botSay && live && (g.botSay.ply === total || !active) ? g.botSay : null;
-  const sayKey = say ? `${g.id}:${say.ply}:${say.text}` : null;
+  // Câu nói nhanh của bạn bè: chỉ hiện câu mới (mở lại ván sau một lúc thì không hiện lại câu cũ)
+  const talk =
+    !prefs.talk || !live
+      ? null
+      : g.bot
+        ? g.botSay && (g.botSay.ply === total || !active)
+          ? { color: g.botColor as Color, text: g.botSay.text, key: `${g.id}:bot:${g.botSay.ply}:${g.botSay.text}`, fresh: true }
+          : null
+        : g.chat
+          ? { color: g.chat.color, text: g.chat.text, key: `${g.id}:chat:${g.chat.at}`, fresh: g.serverNow - g.chat.at < 10000 }
+          : null;
+  const say = talk && talk.fresh ? talk : null;
+  const sayKey = say ? say.key : null;
   const [sayShown, setSayShown] = useState<string | null>(null);
   useEffect(() => {
     if (!sayKey) return;
@@ -211,6 +222,9 @@ function Game({ g }: { g: ChessGame }) {
     return () => clearTimeout(t);
   }, [sayKey]);
   const sayText = say && sayShown === sayKey ? say.text : null;
+  const [phrasesOpen, setPhrasesOpen] = useState(false);
+  const phrases = useChess((st) => st.phrases);
+  const canTalk = Boolean(mine && !g.bot && phrases.length && (active || Date.now() - (g.endedAt || 0) < 30 * 60000));
   const hintArrow = hint && live && active && hint.ply === total && g.turn === mine ? hint.move : null;
   const canTakeBack = active && mine && g.bot && total >= (mine === "w" ? 1 : 2);
   const helped = (g.hints || 0) + (g.takebacks || 0) > 0;
@@ -254,7 +268,7 @@ function Game({ g }: { g: ChessGame }) {
         }
       />
 
-      <PlayerBar g={g} color={top} elapsed={elapsed} captured={mat.captured[top]} lead={mat.lead[top]} say={g.botColor === top ? sayText : null} sayBelow />
+      <PlayerBar g={g} color={top} elapsed={elapsed} captured={mat.captured[top]} lead={mat.lead[top]} say={say && say.color === top ? sayText : null} sayBelow />
       <View style={{ flexDirection: "row", justifyContent: "center", gap: 4 }}>
         {review ? <EvalBar pos={showBest ? beforePos : review.positions[ply]} height={size} orientation={bottom} /> : null}
         <Board
@@ -273,7 +287,7 @@ function Game({ g }: { g: ChessGame }) {
           badge={showBest && beforePos?.best ? { sq: beforePos.best.slice(2, 4), cls: "best" } : reviewMove ? { sq: reviewMove.uci.slice(2, 4), cls: reviewMove.cls } : null}
         />
       </View>
-      <PlayerBar g={g} color={bottom} elapsed={elapsed} captured={mat.captured[bottom]} lead={mat.lead[bottom]} say={g.botColor === bottom ? sayText : null} />
+      <PlayerBar g={g} color={bottom} elapsed={elapsed} captured={mat.captured[bottom]} lead={mat.lead[bottom]} say={say && say.color === bottom ? sayText : null} />
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 12) + 8 }}>
         {/* Danh sách nước đi + nút xem lại */}
@@ -373,14 +387,18 @@ function Game({ g }: { g: ChessGame }) {
                   setPlaying(true);
                 }}
               />
+              <Button title="Phân tích" icon="insights" kind="secondary" small style={{ flex: 1 }} onPress={() => openAnalysis(g.moves, ply, bottom)} />
               <Text style={[s.muted, { alignSelf: "center" }]}>
-                Nước {ply}/{total}
+                {ply}/{total}
               </Text>
             </View>
           ) : null}
 
           {!active ? <AnalysisPanel g={g} ply={ply} onJump={(p) => jump(p)} viewer={!mine} /> : null}
 
+          {canTalk ? (
+            <Button title="Nói nhanh" icon="chat-bubble-outline" kind="secondary" small style={{ alignSelf: "center" }} onPress={() => setPhrasesOpen(true)} />
+          ) : null}
           {active && mine && g.bot ? (
             <View style={s.actions}>
               <Button
@@ -472,6 +490,7 @@ function Game({ g }: { g: ChessGame }) {
         </View>
       </ScrollView>
       <PrefsSheet visible={prefsOpen} onClose={() => setPrefsOpen(false)} />
+      <PhrasesSheet visible={phrasesOpen} onClose={() => setPhrasesOpen(false)} gameId={g.id} to={opp.name} />
     </View>
   );
 }
@@ -502,7 +521,7 @@ function PlayerBar({
   const meId = useStore((st) => st.me?.id ?? 0);
   const active = g.status === "active";
   const turn = active && g.turn === color;
-  const ticking = turn && g.clocks != null && g.moves.length >= 2;
+  const ticking = turn && g.clocks != null && (g.moves.length >= 2 || Boolean(g.daily));
   const ms = g.clocks ? Math.max(0, g.clocks[color] - (ticking ? elapsed : 0)) : null;
   const low = ms != null && ms < 20000 && g.base >= 60000;
   const rating = g.status === "finished" && g.rated ? g.ratings[color] : g.live[color];

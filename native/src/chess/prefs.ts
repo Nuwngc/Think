@@ -16,9 +16,25 @@ export type ChessPrefs = {
   anim: boolean;
   /** Tiếng quân cờ, tiếng bắt đầu / kết thúc ván */
   sound: boolean;
+  /** Bong bóng câu nói của máy và câu nói nhanh của bạn bè */
+  talk: boolean;
+  /** Màu bàn cờ (BOARD_THEMES) */
+  theme: string;
 };
 
-export const DEFAULT_PREFS: ChessPrefs = { hints: true, lastMove: true, coords: true, arrows: true, anim: true, sound: true };
+/** Màu bàn cờ; giống BOARD_THEMES trong public/chess-ui.js */
+export const BOARD_THEMES = [
+  { id: "green", name: "Xanh lá", light: "#EEEED2", dark: "#6E9C84" },
+  { id: "wood", name: "Gỗ", light: "#F0D9B5", dark: "#B58863" },
+  { id: "blue", name: "Xanh biển", light: "#DEE3E6", dark: "#8CA2AD" },
+  { id: "purple", name: "Tím", light: "#ECE6F2", dark: "#9A82B8" },
+  { id: "coral", name: "San hô", light: "#F5E6D8", dark: "#CF8467" },
+  { id: "night", name: "Đêm", light: "#A3AFBA", dark: "#56657A" },
+] as const;
+
+export const themeOf = (id: string) => BOARD_THEMES.find((t) => t.id === id) || BOARD_THEMES[0];
+
+export const DEFAULT_PREFS: ChessPrefs = { hints: true, lastMove: true, coords: true, arrows: true, anim: true, sound: true, talk: true, theme: "green" };
 
 const KEY = "think.chessPrefs";
 
@@ -38,8 +54,9 @@ export function loadPrefs() {
         const saved = JSON.parse(raw) as Partial<ChessPrefs>;
         const next: Partial<ChessPrefs> = {};
         for (const k of Object.keys(DEFAULT_PREFS) as (keyof ChessPrefs)[]) {
-          if (typeof saved[k] === "boolean" && !touched.has(k)) next[k] = saved[k] as boolean;
+          if (k !== "theme" && typeof saved[k] === "boolean" && !touched.has(k)) (next as Record<string, boolean>)[k] = saved[k] as boolean;
         }
+        if (!touched.has("theme") && BOARD_THEMES.some((t) => t.id === saved.theme)) next.theme = saved.theme;
         usePrefs.setState(next);
       } catch {
         /* dùng mặc định */

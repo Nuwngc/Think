@@ -7,6 +7,7 @@ import { ClassBadge } from "./Analysis";
 import { squareAt, squares, squareXY } from "./anim";
 import { makeLayout, type Layout, type Sprite } from "./layout";
 import { PIECES } from "./pieces";
+import { themeOf, usePrefs } from "./prefs";
 import type { Color, MoveClass } from "./types";
 
 // Bàn cờ (kiểu chess.com): chạm quân để chọn (hiện chấm ở các ô đi được) rồi chạm ô đích, hoặc kéo quân bằng ngón tay.
@@ -35,6 +36,8 @@ export function PieceImage({ code, size }: { code: string; size: number }) {
 type SquareProps = {
   sq: Square;
   light: boolean;
+  /** Màu ô sáng / tối (theo Tùy chọn → Màu bàn cờ) */
+  colors: { light: string; dark: string };
   size: number;
   mark: "last" | "sel" | "check" | null;
   hover: boolean;
@@ -45,12 +48,12 @@ type SquareProps = {
 };
 
 // Ô bàn cờ (nền, tô màu, tọa độ). Quân cờ vẽ ở lớp riêng phía trên để trượt được.
-const SquareView = memo(function SquareView({ sq, light, size, mark, hover, fileLabel, rankLabel, label, onPress }: SquareProps) {
-  const coordColor = light ? BOARD_COLORS.dark : BOARD_COLORS.light;
+const SquareView = memo(function SquareView({ sq, light, colors, size, mark, hover, fileLabel, rankLabel, label, onPress }: SquareProps) {
+  const coordColor = light ? colors.dark : colors.light;
   return (
     <Pressable
       onPress={() => onPress(sq)}
-      style={{ width: size, height: size, backgroundColor: light ? BOARD_COLORS.light : BOARD_COLORS.dark }}
+      style={{ width: size, height: size, backgroundColor: light ? colors.light : colors.dark }}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
@@ -187,6 +190,11 @@ export function Board({
   highlight,
 }: BoardProps) {
   const cell = Math.floor(size / 8);
+  const themeId = usePrefs((p) => p.theme);
+  const colors = useMemo(() => {
+    const t = themeOf(themeId);
+    return { light: t.light, dark: t.dark };
+  }, [themeId]);
   const chess = useMemo(() => {
     try {
       return new Chess(fen);
@@ -453,6 +461,7 @@ export function Board({
                 key={sq}
                 sq={sq}
                 light={(r + f) % 2 === 0}
+                colors={colors}
                 size={cell}
                 mark={mark}
                 hover={dragId != null && hover === sq}

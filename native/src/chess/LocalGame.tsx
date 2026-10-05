@@ -11,7 +11,7 @@ import { localState, localStatusText } from "./local";
 import { usePrefs } from "./prefs";
 import { PrefsSheet } from "./Sheets";
 import { holdSounds, playSound, soundForSan } from "./sound";
-import { closeLocal } from "./store";
+import { closeLocal, openAnalysis } from "./store";
 import type { Color } from "./types";
 
 // Hai người một máy: hai bạn ngồi cạnh nhau, đưa máy cho nhau sau mỗi nước. Chơi được khi mất mạng, không tính điểm.
@@ -156,6 +156,7 @@ export function LocalGame() {
               />
             )}
           </View>
+          {total > 0 ? <Button title="Phân tích ván này" icon="insights" kind="secondary" small onPress={() => openAnalysis(st.moves, total, bottom)} /> : null}
           {!over && total > 0 ? (
             <Button
               title="Ván mới"

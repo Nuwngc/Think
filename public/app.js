@@ -463,6 +463,7 @@
     const hash = location.hash || '#/';
     const chessGame = /^#\/chess\/g\/(\d+)$/.exec(hash);
     const chessLocal = hash === '#/chess/local'; // cờ vua hai người một máy
+    const chessAnalysis = hash === '#/chess/analysis'; // bàn phân tích
     // Cờ caro: #/caro (trang caro), #/caro/bot (ván với máy), #/caro/g/12 (ván / lời thách đấu)
     const caroPage = /^#\/caro(?:\/(bot)|\/g\/(\d+))?$/.exec(hash);
     // Trang cá nhân của một người (#/u/5) mở ở cột phải; bài đăng (#/p/9, từ thông báo) mở bình luận
@@ -476,7 +477,7 @@
     const puzzleTarget = quizPage ? { kind: 'quiz', game: quizPage[1] }
       : levelsPage ? (levelsPage[2] ? { kind: 'level', game: levelsPage[1], level: Number(levelsPage[2]) } : { kind: 'map', game: levelsPage[1] })
         : null;
-    const gamesView = hash === '#/chess' || chessGame || chessLocal ? 'chess' : caroPage ? 'caro' : hash === '#/blocks' ? 'blocks' : farmPage ? 'farm' : puzzleTarget ? 'puzzle' : hash === '#/games' ? 'hub' : null;
+    const gamesView = hash === '#/chess' || chessGame || chessLocal || chessAnalysis ? 'chess' : caroPage ? 'caro' : hash === '#/blocks' ? 'blocks' : farmPage ? 'farm' : puzzleTarget ? 'puzzle' : hash === '#/games' ? 'hub' : null;
     const tab = hash === '#/me' || hash === '#/settings' || postPage ? 'me'
       : hash === '#/admin' ? 'admin'
         : gamesView ? 'games'
@@ -511,7 +512,7 @@
     else if (!sheet) closeConversation();
     showTab(tab);
     showMeView(hash === '#/settings' ? 'settings' : 'profile');
-    if (chess) chess.route(tab === 'games' && gamesView === 'chess', chessGame ? Number(chessGame[1]) : chessLocal ? 'local' : null);
+    if (chess) chess.route(tab === 'games' && gamesView === 'chess', chessGame ? Number(chessGame[1]) : chessLocal ? 'local' : chessAnalysis ? 'analysis' : null);
     if (games) games.route(tab === 'games' ? gamesView : null, farmPage && farmPage[1] ? Number(farmPage[1]) : null);
     if (social) {
       social.route(userPage ? Number(userPage[1]) : null);

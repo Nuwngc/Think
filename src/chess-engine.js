@@ -55,6 +55,7 @@ function runJob(job, timeoutMs) {
       if (worker === w) worker = null;
       w.terminate().catch(() => {});
     }, timeoutMs);
+    timer.unref?.(); // việc đang chờ không giữ tiến trình sống (máy chủ đã có kết nối mạng giữ rồi)
     pending.set(id, { resolve, reject, timer });
     w.postMessage({ ...job, id });
   });
@@ -79,6 +80,7 @@ function evaluate({ fen, moves, movetime, depth, fresh, searchmoves, multipv }) 
 function stop() {
   if (worker) worker.terminate().catch(() => {});
   worker = null;
+  failAll(new Error('Đã dừng máy cờ'));
 }
 
 module.exports = { bestMove, evaluate, stop };

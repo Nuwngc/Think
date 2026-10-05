@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useStore } from "../store";
 import { useColors } from "../theme";
 import { Avatar, Icon } from "../ui";
-import { TIME_CONTROLS } from "./format";
+import { DAILY_DAYS, TIME_CONTROLS } from "./format";
 import type { ChessBot, ChessGame, Color } from "./types";
 
 /** Giờ hiện tại, tự cập nhật (để chạy đồng hồ, đếm ngược) */
@@ -73,16 +73,39 @@ export function SideAvatar({ g, color, size = 40 }: { g: ChessGame; color: Color
 
 /* ---------------- Chọn thời gian, màu quân ---------------- */
 
-export function TimePicker({ value, onChange }: { value: { base: number; inc: number }; onChange: (v: { base: number; inc: number }) => void }) {
+export type TimeValue = { base: number; inc: number; days?: number | null };
+
+/** Chọn thời gian; daily: có thêm các ô "Theo ngày" (chỉ khi thách đấu bạn bè) */
+export function TimePicker({ value, onChange, daily }: { value: TimeValue; onChange: (v: TimeValue) => void; daily?: boolean }) {
   const c = useColors();
   return (
     <View style={styles.grid}>
+      {daily
+        ? DAILY_DAYS.map((d) => {
+            const on = value.days === d;
+            return (
+              <Pressable
+                key={`d${d}`}
+                onPress={() => onChange({ base: 0, inc: 0, days: d })}
+                style={[styles.tc, { backgroundColor: on ? c.jade : c.field }]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: on }}
+                accessibilityLabel={`Cờ theo ngày: ${d} ngày mỗi nước`}
+              >
+                <Text style={[styles.tcLabel, { color: on ? c.onJade : c.text, fontSize: 16 }]}>{d} ngày</Text>
+                <Text style={[styles.tcKind, { color: on ? c.onJade : c.muted }]} numberOfLines={1}>
+                  Theo ngày
+                </Text>
+              </Pressable>
+            );
+          })
+        : null}
       {TIME_CONTROLS.map((t) => {
-        const on = t.base === value.base && t.inc === value.inc;
+        const on = !value.days && t.base === value.base && t.inc === value.inc;
         return (
           <Pressable
             key={t.label}
-            onPress={() => onChange({ base: t.base, inc: t.inc })}
+            onPress={() => onChange({ base: t.base, inc: t.inc, days: null })}
             style={[styles.tc, { backgroundColor: on ? c.jade : c.field }]}
             accessibilityRole="radio"
             accessibilityState={{ checked: on }}

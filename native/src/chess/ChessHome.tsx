@@ -12,7 +12,8 @@ import { Avatar, Button, Icon, IconButton, Sheet, useStyles, type IconName } fro
 import { clockText, myColor, opponentColor, outcomeFor, reasonText, tcLabel } from "./format";
 import { SideAvatar, useNow, useSide } from "./parts";
 import { BotSheet, ChallengeSheet, HistorySheet, PrefsSheet } from "./Sheets";
-import { answerChallenge, loadChess, loadLeaderboard, openGame, openLocal, useChess } from "./store";
+import { answerChallenge, loadChess, loadLeaderboard, openAnalysis, openGame, openLocal, openStats, useChess } from "./store";
+import { StatsSheet } from "./Stats";
 import type { ChessGame, ChessRating } from "./types";
 
 // Tab Cờ vua: điểm của tôi, câu đố (quiz hôm nay, thử thách nhanh), lời thách đấu, ván đang chơi, bảng xếp hạng, ván gần đây.
@@ -108,17 +109,11 @@ export function ChessHome() {
             <HeroButton title="Thách đấu" icon="sports-kabaddi" solid onPress={() => setChallengeOpen(true)} />
             <HeroButton title="Chơi với máy" icon="smart-toy" onPress={() => setBotOpen(true)} />
           </View>
-          <Pressable
-            onPress={openLocal}
-            accessibilityRole="button"
-            accessibilityLabel="Hai người một máy: chơi cùng bạn ngồi cạnh, không cần mạng"
-            style={({ pressed }) => [s.localRow, { opacity: pressed ? 0.8 : 1 }]}
-          >
-            <Icon name="people" size={20} color="#FFFFFF" />
-            <Text style={s.localText}>Hai người một máy</Text>
-            <Text style={s.crownText}>Không cần mạng</Text>
-            <Icon name="chevron-right" size={20} color="rgba(255,255,255,0.8)" />
-          </Pressable>
+          <View style={s.links}>
+            <HeroLink icon="people" title="Hai người một máy" onPress={openLocal} />
+            <HeroLink icon="insights" title="Bàn phân tích" onPress={() => openAnalysis()} />
+            <HeroLink icon="bar-chart" title="Thống kê" onPress={() => openStats(meId)} />
+          </View>
         </View>
 
         {/* Câu đố cờ vua: quiz hôm nay + thử thách nhanh */}
@@ -185,6 +180,7 @@ export function ChessHome() {
       <ChallengeSheet visible={challengeOpen} onClose={() => setChallengeOpen(false)} />
       <BotSheet visible={botOpen} onClose={() => setBotOpen(false)} />
       <LeaderboardSheet visible={boardOpen} onClose={() => setBoardOpen(false)} />
+      <StatsSheet />
       <PrefsSheet visible={prefsOpen} onClose={() => setPrefsOpen(false)} />
       <HistorySheet
         visible={historyOpen}
@@ -192,6 +188,18 @@ export function ChessHome() {
         renderRow={(g) => <RecentRow g={g} meId={meId} onOpen={() => setHistoryOpen(false)} />}
       />
     </View>
+  );
+}
+
+function HeroLink({ title, icon, onPress }: { title: string; icon: IconName; onPress: () => void }) {
+  const s = useStyles(makeStyles);
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={title} style={({ pressed }) => [s.link, { opacity: pressed ? 0.8 : 1 }]}>
+      <Icon name={icon} size={20} color="#FFFFFF" />
+      <Text style={s.linkText} numberOfLines={2}>
+        {title}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -342,7 +350,12 @@ function RankRow({ r, rank, meId }: { r: ChessRating; rank: number; meId: number
   const user = useStore((st) => st.users[r.userId]);
   const medal = rank === 1 ? "#E3B21A" : rank === 2 ? "#A9B4BA" : rank === 3 ? "#C07A3E" : null;
   return (
-    <View style={[s.row, r.userId === meId && { backgroundColor: c.jadeWash }]}>
+    <Pressable
+      onPress={() => openStats(r.userId)}
+      style={({ pressed }) => [s.row, r.userId === meId && { backgroundColor: c.jadeWash }, pressed && { opacity: 0.8 }]}
+      accessibilityRole="button"
+      accessibilityLabel={`Thống kê cờ vua của ${user?.displayName || "người dùng"}`}
+    >
       <View style={[s.rank, medal ? { backgroundColor: medal } : null]}>
         <Text style={[s.rankText, medal ? { color: "#fff" } : null]}>{rank}</Text>
       </View>
@@ -360,7 +373,7 @@ function RankRow({ r, rank, meId }: { r: ChessRating; rank: number; meId: number
         {r.rating}
         {r.provisional ? <Text style={s.rowSub}>?</Text> : null}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -400,9 +413,9 @@ const makeStyles = (c: Colors) =>
     heroStats: { color: "rgba(255,255,255,0.92)", fontSize: 13.5, lineHeight: 19 },
     heroHint: { color: "rgba(255,255,255,0.75)", fontSize: 12 },
     heroActions: { flexDirection: "row", gap: 10, marginTop: 4 },
-    localRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.1)" },
-    localText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700", flex: 1 },
-    crownText: { color: "rgba(255,255,255,0.85)", fontSize: 12.5, fontWeight: "700" },
+    links: { flexDirection: "row", gap: 8 },
+    link: { flex: 1, alignItems: "center", gap: 4, paddingVertical: 10, paddingHorizontal: 4, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.1)" },
+    linkText: { color: "#FFFFFF", fontSize: 12.5, fontWeight: "700", textAlign: "center" },
     heroButton: { flex: 1, minHeight: 46, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 10 },
     heroButtonText: { fontSize: 15, fontWeight: "800" },
     banner: { flexDirection: "row", gap: 10, alignItems: "center", paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12 },

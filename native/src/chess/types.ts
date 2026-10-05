@@ -36,6 +36,8 @@ export type ChessGame = {
   colorPref: "random" | "white" | "black";
   /** Thời gian mỗi bên (ms), 0 = không giới hạn */
   base: number;
+  /** Cờ theo ngày: thời gian mỗi nước (ms), 0 = ván thường */
+  daily?: number;
   inc: number;
   moves: string[];
   fen: string;
@@ -56,6 +58,8 @@ export type ChessGame = {
   /** Tên khai cuộc (sách khai cuộc lichess) */
   opening?: { eco: string; name: string } | null;
   botSay?: BotSay | null;
+  /** Câu nói nhanh gần nhất trong ván người với người */
+  chat?: { color: Color; text: string; ply: number; at: number } | null;
   /** Số lần dùng gợi ý / đi lại (ván với máy) */
   hints?: number;
   takebacks?: number;
@@ -135,4 +139,38 @@ export type ChessAnalysis = {
   position?: number;
   error?: string;
   result?: AnalysisResult;
+};
+
+/** Câu nói nhanh (máy chủ gửi danh sách) */
+export type ChessPhrase = { id: string; text: string };
+
+/** Một dòng máy phân tích: điểm theo góc nhìn của Trắng, dãy nước dạng ký hiệu */
+export type EvalLine = { move: string; cp: number | null; mate: number | null; wp: number; depth: number; pv: string[] };
+
+export type EvalResult = {
+  cp: number | null;
+  mate: number | null;
+  wp: number;
+  depth: number;
+  best: string | null;
+  bestSan: string | null;
+  end?: "checkmate" | "draw";
+  lines: EvalLine[];
+};
+
+type WDL = { win: number; draw: number; loss: number };
+
+/** Thống kê cờ vua của một người (GET /api/chess/stats/<người>) */
+export type ChessStats = {
+  userId: number;
+  rating: ChessRating;
+  games: number;
+  totals: { all: WDL; white: WDL; black: WDL; rated: WDL; friends: WDL; bots: WDL };
+  reasons: { checkmate: number; resign: number; timeout: number; other: number };
+  streak: { best: number; current: number };
+  fastestMate: { moves: number; gameId: number } | null;
+  history: { t: number; r: number; d?: number }[];
+  opponents: (WDL & { userId: number; name: string; last: number })[];
+  bots: (WDL & { bot: string; name: string; elo: number | null; avatar: string | null })[];
+  openings: (WDL & { name: string; eco: string; games: number })[];
 };

@@ -528,6 +528,26 @@ def s_chess_local_promo():
         raise RuntimeError("Không về được mục Trò chơi")
 
 
+def s_chess_analysis():
+    """Bàn phân tích: đi e2-e4, máy chủ (Stockfish) trả về độ sâu và 3 dòng nước hay nhất"""
+    tap_scrolled(r"^Cờ vua\.")
+    tap(r"^Bàn phân tích$", 20)
+    if wait_for(r"^e2, Tốt trắng", 20) is None:
+        raise RuntimeError("Không mở được bàn phân tích")
+    tap(r"^e2,")
+    tap(r"^e4")
+    if wait_for(r"^Độ sâu \d+", 45) is None:
+        raise RuntimeError("Máy phân tích không trả lời")
+    if find(r"^Đi .+, đánh giá ") is None:
+        raise RuntimeError("Không thấy các dòng nước của máy")
+    back()
+    if wait_for(r"^Bàn phân tích$", 10) is None:
+        raise RuntimeError("Không quay lại được trang Cờ vua")
+    back()
+    if wait_for(HUB, 10) is None:
+        raise RuntimeError("Không về được mục Trò chơi")
+
+
 def s_blocks():
     tap_scrolled(r"^Xếp Khối\.")  # thẻ game, không phải dòng trong khung Quiz hôm nay
     if wait_for(r"^Điểm \d+", 20) is None:
@@ -979,6 +999,7 @@ def main():
         step("Cờ vua với máy (có âm thanh)", s_chess_bot)
         step("Rời ván cờ", s_chess_back)
         step("Cờ vua hai người một máy: phong cấp (lỗi bản 0.6)", s_chess_local_promo)
+        step("Cờ vua: bàn phân tích (Stockfish trên máy chủ)", s_chess_analysis)
         step("Xếp Khối (có âm thanh)", s_blocks)
         step("Thoát Xếp Khối", s_blocks_back)
         step("Chuỗi hằng ngày của các game", s_streaks_all)

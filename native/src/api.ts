@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 
 import type { BlocksBoard, PendingScore } from "./blocks/types";
 import type { CaroGame, CaroOptions, CaroRating } from "./caro/types";
-import type { ChessAnalysis, ChessBot, ChessGame, ChessRating } from "./chess/types";
+import type { ChessAnalysis, ChessBot, ChessGame, ChessPhrase, ChessRating, ChessStats, EvalResult } from "./chess/types";
 import type { ActResult, Catalog, Farm, FriendSummary, Leaderboard, Market, PublicFarm } from "./farm/types";
 import type { GameSummary, PuzzleSummary } from "./puzzles/types";
 import type { StreakSummary } from "./streaks/types";
@@ -273,6 +273,10 @@ export const api = {
       customElo?: { min: number; max: number; step: number };
       /** Các máy đã thắng không cần trợ giúp */
       beaten?: string[];
+      /** Cờ theo ngày: số ngày mỗi nước máy chủ nhận */
+      dailyDays?: number[];
+      /** Câu nói nhanh trong ván với bạn */
+      phrases?: ChessPhrase[];
       baseMinutes: number[];
       challenges: ChessGame[];
       active: ChessGame[];
@@ -283,7 +287,7 @@ export const api = {
 
   chessGame: (id: number) => request<{ game: ChessGame }>(`/api/chess/games/${id}`),
 
-  chessChallenge: (body: { opponentId: number; base: number; inc: number; color: string; rated: boolean }) =>
+  chessChallenge: (body: { opponentId: number; base: number; inc: number; days?: number; color: string; rated: boolean }) =>
     request<{ game: ChessGame }>("/api/chess/challenges", { method: "POST", body }),
 
   chessAnswer: (id: number, action: "accept" | "decline" | "cancel") =>
@@ -301,6 +305,19 @@ export const api = {
 
   chessDraw: (id: number, action: "offer" | "accept" | "decline") =>
     request<{ game: ChessGame }>(`/api/chess/games/${id}/draw`, { method: "POST", body: { action } }),
+
+  /** Bàn phân tích: Stockfish chấm thế cờ (dãy nước từ đầu ván) */
+  chessEval: (moves: string[]) =>
+    request<{ eval: EvalResult; opening: { eco: string; name: string } | null; turn: "w" | "b"; cached?: boolean }>("/api/chess/eval", {
+      method: "POST",
+      body: { moves, lines: 3 },
+    }),
+
+  /** Thống kê cờ vua của một người ("me" = mình) */
+  chessStats: (userId: number | "me") => request<{ stats: ChessStats }>(`/api/chess/stats/${userId}`),
+
+  /** Câu nói nhanh trong ván với bạn */
+  chessSay: (id: number, phrase: string) => request<{ game: ChessGame }>(`/api/chess/games/${id}/say`, { method: "POST", body: { phrase } }),
 
   /** Ván với máy: gợi ý nước đi (Stockfish) */
   chessHint: (id: number) => request<{ move: string; game: ChessGame }>(`/api/chess/games/${id}/hint`, { method: "POST", body: {} }),

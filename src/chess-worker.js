@@ -137,6 +137,7 @@ async function evalStockfish({ fen, moves, movetime, depth, fresh, searchmoves, 
   // Dòng mới nhất cho từng hạng (multipv 1, 2…); dòng "lowerbound/upperbound" là điểm tạm, chỉ dùng khi không có gì khác
   const last = new Map();
   const loose = new Map();
+  const seen = []; // mọi dòng "info … pv" đầy đủ, theo thứ tự (bàn phân tích)
   const done = new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       sfWaiter = null;
@@ -146,7 +147,10 @@ async function evalStockfish({ fen, moves, movetime, depth, fresh, searchmoves, 
       if (text.startsWith('info') && / score /.test(text) && / pv /.test(text)) {
         const k = Number((/ multipv (\d+)/.exec(text) || [])[1] || 1);
         if (/ (lower|upper)bound/.test(text)) loose.set(k, text);
-        else last.set(k, text);
+        else {
+          last.set(k, text);
+          seen.push(text);
+        }
       } else if (text.startsWith('bestmove')) {
         clearTimeout(timer);
         sfWaiter = null;
@@ -169,6 +173,19 @@ async function evalStockfish({ fen, moves, movetime, depth, fresh, searchmoves, 
     out.pv = top.pv;
   }
   if (lines > 1) {
+    // Bàn phân tích: mọi dòng (nước tốt nhất, nhì, ba…) kèm dãy nước chính. Stockfish in các dòng thành từng đợt
+    // (multipv 1, 2, 3 liền nhau, là một lần xếp hạng các nước): lấy đợt đầy đủ cuối cùng, không trộn các đợt với nhau
+    const batches = [];
+    for (const text of seen) {
+      const info = parseInfo(text);
+      if (!info || !info.move) continue;
+      const k = Number((/ multipv (\d+)/.exec(text) || [])[1] || 1);
+      if (k === 1 || !batches.length) batches.push([]);
+      batches[batches.length - 1].push(info);
+    }
+    const most = Math.max(0, ...batches.map((b) => new Set(b.map((i) => i.move)).size));
+    const pick = [...batches].reverse().find((b) => b.length >= most && new Set(b.map((i) => i.move)).size === b.length) || [];
+    out.lines = pick.map((i) => ({ move: i.move, cp: i.cp, mate: i.mate, depth: i.depth, pv: i.pv }));
     const second = parseInfo(last.get(2) || loose.get(2));
     // Dòng thứ nhì từ lượt tìm nông hơn nhiều (hết giờ giữa chừng) thì điểm chưa đáng tin: bỏ
     if (second && second.move && second.move !== out.move && second.depth >= out.depth - 2) {

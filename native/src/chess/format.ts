@@ -17,7 +17,12 @@ export const TIME_CONTROLS: { base: number; inc: number; label: string; kind: st
   { base: 0, inc: 0, label: "∞", kind: "Không giới hạn" },
 ];
 
-export function tcLabel(g: Pick<ChessGame, "base" | "inc">) {
+/** Cờ theo ngày: số ngày mỗi nước */
+export const DAILY_DAYS = [1, 2, 3, 7];
+export const DAY_MS = 86400000;
+
+export function tcLabel(g: Pick<ChessGame, "base" | "inc"> & { daily?: number }) {
+  if (g.daily) return `${Math.round(g.daily / DAY_MS)} ngày/nước`;
   if (!g.base) return "Không giới hạn";
   const min = Math.round(g.base / 60000);
   return `${min}+${Math.round(g.inc / 1000)}`;
@@ -26,6 +31,8 @@ export function tcLabel(g: Pick<ChessGame, "base" | "inc">) {
 /** Đồng hồ: 4:05, 0:09.3 (dưới 10 giây hiện phần mười giây) */
 export function clockText(ms: number) {
   const t = Math.max(0, ms);
+  // Cờ theo ngày: "2 ngày 3 giờ"
+  if (t >= DAY_MS) return `${Math.floor(t / DAY_MS)} ngày ${Math.floor((t % DAY_MS) / 3600000)} giờ`;
   if (t < 10000) return `0:0${(t / 1000).toFixed(1)}`.replace(/^0:0(\d\d)/, "0:$1");
   const s = Math.ceil(t / 1000);
   const h = Math.floor(s / 3600);

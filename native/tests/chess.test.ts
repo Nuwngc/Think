@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({
   chessAnalyze: vi.fn(),
   chessHint: vi.fn(),
   chessTakeback: vi.fn(),
+  chessSay: vi.fn(),
 }));
 
 vi.mock("../src/api", () => {
@@ -27,7 +28,9 @@ vi.mock("../src/api", () => {
 
 import { ApiError } from "../src/api";
 import { clockText, coachText, evalText, material, MOVE_CLASS, moveComment, outcomeFor, replay, resultTitle, tcLabel } from "../src/chess/format";
+import { playAt, pvText } from "../src/chess/analysisBoard";
 import { localState, localStatusText } from "../src/chess/local";
+import { BOARD_THEMES, themeOf } from "../src/chess/prefs";
 import {
   askHint,
   bindChess,
@@ -40,6 +43,7 @@ import {
   playMove,
   requestAnalysis,
   resetChess,
+  sayPhrase,
   takeBack,
   useChess,
 } from "../src/chess/store";
@@ -335,5 +339,51 @@ describe("hai người một máy", () => {
     expect(localStatusText(resign)).toBe("Đen đầu hàng. Trắng thắng.");
     const rep = localState(["g1f3", "g8f6", "f3g1", "f6g8", "g1f3", "g8f6", "f3g1", "f6g8"]);
     expect(rep.outcome?.reason).toBe("repetition");
+  });
+});
+
+describe("cờ vua 2.7", () => {
+  it("cờ theo ngày: nhãn thời gian và đồng hồ ghi ngày giờ", () => {
+    expect(tcLabel({ base: 0, inc: 0, daily: 3 * 86400000 })).toBe("3 ngày/nước");
+    expect(clockText(2 * 86400000 + 5 * 3600000 + 1000)).toBe("2 ngày 5 giờ");
+    expect(clockText(5 * 3600000)).toBe("5:00:00");
+  });
+
+  it("bàn phân tích: đi tiếp, đi nước khác thì bỏ nhánh cũ, nước sai luật", () => {
+    let r = playAt([], 0, "e2e4");
+    expect(r).toEqual({ moves: ["e2e4"], ply: 1, san: "e4" });
+    r = playAt(["e2e4", "e7e5", "g1f3"], 1, "e7e5");
+    expect(r?.moves).toEqual(["e2e4", "e7e5", "g1f3"]); // đúng nước kế tiếp: giữ các nước sau
+    expect(r?.ply).toBe(2);
+    r = playAt(["e2e4", "e7e5", "g1f3"], 1, "c7c5");
+    expect(r?.moves).toEqual(["e2e4", "c7c5"]);
+    expect(playAt(["e2e4"], 1, "e2e4")).toBeNull();
+    // Phong cấp
+    const promo = ["a2a4", "h7h5", "a4a5", "h5h4", "a5a6", "h4h3", "a6b7", "h3g2"];
+    expect(playAt(promo, 8, "b7a8q")?.san).toBe("bxa8=Q");
+  });
+
+  it("dãy nước của máy có số nước", () => {
+    expect(pvText(["Nf3", "Nc6", "Bb5"], 2, "w")).toBe("2. Nf3 Nc6 3. Bb5");
+    expect(pvText(["Nc6", "Bb5", "a6"], 3, "b")).toBe("2… Nc6 3. Bb5 a6");
+  });
+
+  it("màu bàn cờ: có mặc định, mã lạ thì dùng mặc định", () => {
+    expect(BOARD_THEMES.length).toBe(6);
+    expect(themeOf("wood").light).toBe("#F0D9B5");
+    expect(themeOf("xyz").id).toBe("green");
+  });
+
+  it("câu nói nhanh: gửi thì cập nhật ván, lỗi thì báo", async () => {
+    const toasts: string[] = [];
+    resetChess();
+    bindChess({ meId: () => 1, nameOf: () => "Minh", toast: (t) => toasts.push(t), onTab: () => false, showChess: () => undefined });
+    onChessEvent("chess:game", { game: game() });
+    api.chessSay.mockResolvedValueOnce({ game: game({ chat: { color: "w", text: "Chúc may mắn!", ply: 0, at: 5 } }) });
+    expect(await sayPhrase(1, "gl")).toBe(true);
+    expect(useChess.getState().games[1].chat?.text).toBe("Chúc may mắn!");
+    api.chessSay.mockRejectedValueOnce(new ApiError("Từ từ thôi, đợi vài giây nhé.", 429));
+    expect(await sayPhrase(1, "hi")).toBe(false);
+    expect(toasts).toContain("Từ từ thôi, đợi vài giây nhé.");
   });
 });
