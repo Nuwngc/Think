@@ -1,10 +1,11 @@
 import { Chess, type Move, type Square } from "chess.js";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, PanResponder, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Animated, Easing, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Line, Polygon, SvgXml } from "react-native-svg";
 
 import { ClassBadge } from "./Analysis";
-import { duration, plan, squareAt, squares, squareXY } from "./anim";
+import { squareAt, squares, squareXY } from "./anim";
+import { makeLayout, type Layout, type Sprite } from "./layout";
 import { PIECES } from "./pieces";
 import type { Color, MoveClass } from "./types";
 
@@ -20,7 +21,10 @@ const HOVER = "rgba(255,255,255,0.75)";
 
 const FILES = "abcdefgh";
 const NAMES: Record<string, string> = { k: "Vua", q: "Hậu", r: "Xe", b: "Tượng", n: "Mã", p: "Tốt" };
-const nativeDriver = Platform.OS !== "web";
+// Quân trượt bằng luồng JS, không dùng native driver: với kiến trúc mới (Fabric), vị trí chạy trên luồng native không được
+// ghi lại vào cây giao diện của React, nên khi React xếp lại các quân (vd tốt phong cấp lên hàng trên) quân bị kéo về ô cũ
+// (lỗi bản 0.6: phong Hậu ở a8 thì Xe vừa đi a8→d8 hiện lại ở a8, che mất Hậu). Mỗi lần chỉ vài quân trượt nên luồng JS thừa sức.
+const nativeDriver = false;
 
 export function PieceImage({ code, size }: { code: string; size: number }) {
   const xml = PIECES[code];
@@ -164,47 +168,6 @@ function Arrow({ uci, cell, orientation }: { uci: string; cell: number; orientat
       <Polygon points={pts} fill={ARROW} />
     </Svg>
   );
-}
-
-type Sprite = { id: number; sq: string; code: string };
-type Layout = {
-  fen: string;
-  orientation: Color;
-  cell: number;
-  sprites: Sprite[];
-  /** Quân trượt: id → ô cũ */
-  moved: { id: number; from: string; to: string }[];
-  gone: { key: string; sq: string; code: string }[];
-  ms: number;
-};
-
-let spriteSeq = 1;
-
-/** Ghép quân của thế cờ mới với quân đang hiện (giữ nguyên id để quân trượt thay vì nhảy) */
-function makeLayout(prev: Layout | null, fen: string, orientation: Color, cell: number, lastMove: string | null | undefined): Layout {
-  const cur = squares(fen);
-  if (!prev || prev.orientation !== orientation || prev.cell !== cell) {
-    return { fen, orientation, cell, sprites: [...cur].map(([sq, code]) => ({ id: spriteSeq++, sq, code })), moved: [], gone: [], ms: 0 };
-  }
-  if (prev.fen === fen) return prev;
-  const p = plan(prev.fen, fen, lastMove);
-  const bySq = new Map(prev.sprites.map((x) => [x.sq, x]));
-  const moveTo = new Map(p.moves.map((m) => [m.to, m]));
-  const sprites: Sprite[] = [];
-  const moved: Layout["moved"] = [];
-  for (const [sq, code] of cur) {
-    const m = moveTo.get(sq);
-    const src = m ? bySq.get(m.from) : undefined;
-    if (m && src) {
-      sprites.push({ id: src.id, sq, code });
-      moved.push({ id: src.id, from: m.from, to: sq });
-      continue;
-    }
-    const keep = bySq.get(sq);
-    sprites.push(keep && keep.code === code ? keep : { id: spriteSeq++, sq, code });
-  }
-  const ms = duration(p.moves);
-  return { fen, orientation, cell, sprites, moved, gone: p.gone.map((g) => ({ key: `${fen}|${g.sq}`, ...g })), ms };
 }
 
 export function Board({
