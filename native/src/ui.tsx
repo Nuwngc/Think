@@ -100,7 +100,7 @@ export function ConvAvatar({
   dot = true,
   meId,
 }: {
-  conv: Pick<Conversation, "id" | "type" | "name" | "peerId">;
+  conv: Pick<Conversation, "id" | "type" | "name" | "peerId"> & { avatar?: string | null };
   users: Record<number, User>;
   size?: number;
   dot?: boolean;
@@ -108,16 +108,35 @@ export function ConvAvatar({
 }) {
   const c = useColors();
   if (conv.type === "dm") return <Avatar user={conv.peerId != null ? users[conv.peerId] : null} size={size} dot={dot} meId={meId} />;
-  if (conv.type === "group") {
-    return (
-      <View style={[styles.avatar, { width: size, height: size, borderRadius: size * 0.3, backgroundColor: colorOf(conv.id + 3) }]}>
-        <Text style={[styles.avatarText, { fontSize: size * 0.42 }]}>{initialOf(conv.name)}</Text>
-      </View>
-    );
-  }
+  if (conv.type === "group") return <GroupAvatar conv={conv} size={size} />;
   return (
     <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2, backgroundColor: c.jade }]}>
       <Icon name="forum" size={size * 0.52} color="#fff" />
+    </View>
+  );
+}
+
+/** Ảnh nhóm: ảnh đã đặt (2.9.0), không có hoặc lỗi tải thì chữ cái đầu trong ô bo góc */
+function GroupAvatar({ conv, size }: { conv: Pick<Conversation, "id" | "name"> & { avatar?: string | null }; size: number }) {
+  const c = useColors();
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [conv.avatar]);
+  const src = conv.avatar && !failed ? fileUrl(conv.avatar) : null;
+  return (
+    <View style={[styles.avatar, { width: size, height: size, borderRadius: size * 0.3, backgroundColor: src ? c.field : colorOf(conv.id + 3) }]}>
+      {src ? (
+        <Image
+          source={{ uri: src }}
+          style={{ width: size, height: size }}
+          contentFit="cover"
+          cachePolicy="disk"
+          transition={120}
+          onError={() => setFailed(true)}
+          accessibilityIgnoresInvertColors
+        />
+      ) : (
+        <Text style={[styles.avatarText, { fontSize: size * 0.42 }]}>{initialOf(conv.name)}</Text>
+      )}
     </View>
   );
 }

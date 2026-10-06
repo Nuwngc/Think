@@ -34,6 +34,7 @@ const { setupStreaks } = require('./src/streaks');
 const { setupPuzzles } = require('./src/puzzles');
 const { setupReports } = require('./src/reports');
 const chatPlus = require('./src/chat-plus');
+const chatLock = require('./src/chat-lock');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -101,7 +102,7 @@ if (CORS_ORIGINS.length) {
     res.set({
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       Vary: 'Origin',
     });
     if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -281,7 +282,8 @@ function loadMessage(id) {
 }
 
 const CONV_SELECT = `
-  SELECT c.id, c.type, c.name, c.created_at, c.created_by, c.theme, c.emoji, mem.last_read_id, mem.muted_until, mem.pinned_at,
+  SELECT c.id, c.type, c.name, c.created_at, c.created_by, c.theme, c.emoji, c.avatar, mem.last_read_id, mem.muted_until, mem.pinned_at,
+         (mem.lock_hash IS NOT NULL) AS locked,
          lm.id AS lm_id, lm.sender_id AS lm_sender_id, lm.text AS lm_text, lm.image AS lm_image,
          lm.deleted AS lm_deleted, lm.created_at AS lm_created_at, lm.kind AS lm_kind, lm.audio AS lm_audio, lm.audio_ms AS lm_audio_ms,
          (SELECT COUNT(*) FROM messages m
@@ -315,6 +317,9 @@ function serializeConv(r) {
     emoji: r.emoji || chatPlus.DEFAULT_EMOJI,
     mutedUntil: r.muted_until || 0,
     pinnedAt: r.pinned_at || null,
+    // 2.9.0: ảnh đại diện nhóm (chung), khóa bằng mật khẩu (riêng từng người, src/chat-lock.js)
+    avatar: r.avatar || null,
+    locked: Boolean(r.locked),
     lastMessage: r.lm_id
       ? serializeMessage({
           id: r.lm_id,
@@ -940,11 +945,22 @@ async function notifyMembers(conv, message, members) {
     url: `/#/c/${conv.id}`,
     createdAt: message.createdAt,
   };
+  // Người đã khóa cuộc trò chuyện này: thông báo không có tên người gửi và nội dung (src/chat-lock.js)
+  const locked = chatLock.lockedMembers(conv.id);
+  const hidden = {
+    locked: true,
+    isGroup: false,
+    convTitle: 'Think',
+    senderName: '🔒 Think',
+    text: 'Có tin nhắn mới trong cuộc trò chuyện đã khóa',
+    icon: '/icons/icon-192.png',
+  };
   await Promise.all(
     targets.map((uid) =>
       push.sendToUser(uid, {
         ...base,
         ...(mentioned.has(uid) && conv.type !== 'dm' ? { convTitle: `${sender.display_name} nhắc đến bạn trong ${conv.name}`, mention: true } : {}),
+        ...(locked.has(uid) ? hidden : {}),
         badge: unreadTotal(uid),
         convUnread: unreadIn(conv.id, uid),
       })
@@ -1145,6 +1161,44 @@ app.patch('/api/groups/:id', requireAuth, requireReady, (req, res) => {
   res.json({ conversation: getConv(conv.id, req.user.id) });
 });
 
+// Ảnh đại diện nhóm (2.9.0): thành viên nào cũng đổi được, máy người dùng đã thu nhỏ trước khi gửi
+app.post('/api/groups/:id/avatar', requireAuth, requireReady, rawImage, (req, res) => {
+  const conv = groupFor(req, res);
+  if (!conv) return;
+  const kind = sniffImage(req.body);
+  if (!kind) return res.status(400).json({ error: 'File này không phải ảnh JPG, PNG, WEBP hoặc GIF.' });
+  if (req.body.length > 2 * 1024 * 1024) return res.status(413).json({ error: 'Ảnh nhóm tối đa 2 MB.' });
+  const name = `g${conv.id}-${crypto.randomBytes(6).toString('hex')}.${kind}`;
+  fs.writeFileSync(path.join(AVATAR_DIR, name), req.body);
+  cloud.saveFile(`uploads/avatars/${name}`);
+  storage.recordUpload(`/uploads/avatars/${name}`, 'avatar', req.body.length, req.user.id);
+  const msgId = transaction(() => {
+    run('UPDATE conversations SET avatar = ? WHERE id = ?', `/uploads/avatars/${name}`, conv.id);
+    return systemMessage(conv.id, req.user.id, { event: 'avatar' });
+  });
+  removeUpload(conv.avatar);
+  const members = memberIds(conv.id);
+  emitMessage(msgId, members);
+  emitConvChanged(conv.id, members);
+  res.json({ conversation: getConv(conv.id, req.user.id) });
+});
+
+app.delete('/api/groups/:id/avatar', requireAuth, requireReady, (req, res) => {
+  const conv = groupFor(req, res);
+  if (!conv) return;
+  if (conv.avatar) {
+    const msgId = transaction(() => {
+      run('UPDATE conversations SET avatar = NULL WHERE id = ?', conv.id);
+      return systemMessage(conv.id, req.user.id, { event: 'avatar', removed: true });
+    });
+    removeUpload(conv.avatar);
+    const members = memberIds(conv.id);
+    emitMessage(msgId, members);
+    emitConvChanged(conv.id, members);
+  }
+  res.json({ conversation: getConv(conv.id, req.user.id) });
+});
+
 app.post('/api/groups/:id/members', requireAuth, requireReady, (req, res) => {
   const conv = groupFor(req, res);
   if (!conv) return;
@@ -1174,6 +1228,7 @@ app.delete('/api/groups/:id/members/:userId', requireAuth, requireReady, (req, r
 
   const before = memberIds(conv.id);
   const images = all('SELECT image FROM messages WHERE conversation_id = ? AND image IS NOT NULL', conv.id).map((r) => r.image);
+  if (conv.avatar) images.push(conv.avatar); // ảnh nhóm cũng xóa khi nhóm không còn ai
   const result = transaction(() => {
     run('DELETE FROM members WHERE conversation_id = ? AND user_id = ?', conv.id, target);
     if (get('SELECT COUNT(*) AS n FROM members WHERE conversation_id = ?', conv.id).n === 0) {
@@ -1269,8 +1324,9 @@ app.get('/api/app/notification/:id', requireAuth, requireReady, (req, res) => {
   const convId = Number(req.params.id);
   const mem = membership(convId, req.user.id);
   if (!mem) return res.status(404).json({ error: 'Không tìm thấy cuộc trò chuyện.' });
-  const conv = get('SELECT id, type, name FROM conversations WHERE id = ?', convId);
+  const conv = get('SELECT id, type, name, avatar FROM conversations WHERE id = ?', convId);
   const isGroup = conv.type !== 'dm';
+  const lockedConv = Boolean(get('SELECT lock_hash FROM members WHERE conversation_id = ? AND user_id = ?', convId, req.user.id)?.lock_hash);
   const peer = isGroup
     ? null
     : get(
@@ -1296,14 +1352,16 @@ app.get('/api/app/notification/:id', requireAuth, requireReady, (req, res) => {
       id: conv.id,
       isGroup,
       title: isGroup ? conv.name : peer ? peer.display_name : 'Think',
-      avatar: isGroup ? null : peer ? peer.avatar : null,
+      avatar: isGroup ? conv.avatar || null : peer ? peer.avatar : null,
+      locked: lockedConv,
     },
     me: { id: me.id, name: me.display_name, avatar: me.avatar || null },
     unread,
     messages: rows.reverse().map((m) => {
       const hasImage = Boolean(m.image || m.image_purged);
       let text = m.text || '';
-      if (m.deleted) text = 'Tin nhắn đã bị thu hồi';
+      if (lockedConv) text = '🔒 Tin nhắn đã khóa';
+      else if (m.deleted) text = 'Tin nhắn đã bị thu hồi';
       else if (hasImage) text = text ? `📷 ${text}` : '📷 Ảnh';
       return {
         id: m.id,
@@ -1421,6 +1479,10 @@ chatPlus.setupChatPlus({
   storage,
   cloud,
 });
+
+/* ---------------- Khóa cuộc trò chuyện bằng mật khẩu (2.9.0) — src/chat-lock.js ---------------- */
+
+chatLock.setupChatLock({ app, requireAuth, requireReady, emitConvChanged, getConv, limiter });
 
 /* ---------------- Báo lỗi app (crash, lỗi JavaScript) — src/reports.js ---------------- */
 

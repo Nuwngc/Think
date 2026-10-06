@@ -269,8 +269,8 @@ def play_one_block():
 
 # ---------- máy chủ thử (kiểm tra báo lỗi đã tới nơi) ----------
 
-def api_call(path, body=None, token=None):
-    req = urllib.request.Request(args.server + path, data=json.dumps(body).encode() if body is not None else None, method="POST" if body is not None else "GET")
+def api_call(path, body=None, token=None, method=None):
+    req = urllib.request.Request(args.server + path, data=json.dumps(body).encode() if body is not None else None, method=method or ("POST" if body is not None else "GET"))
     req.add_header("content-type", "application/json")
     if token:
         req.add_header("authorization", f"Bearer {token}")
@@ -418,6 +418,38 @@ def s_chat_back():
     back()
     if wait_for(r"^Trò chơi", 10) is None:
         raise RuntimeError("Không về được danh sách tin nhắn")
+
+
+LOCK_PASSWORD = "2468"
+
+
+def s_chat_lock():
+    """Khóa cuộc trò chuyện với Bạn Bè (đặt qua máy chủ, như từ máy khác): mở trên app phải nhập mật khẩu, danh sách không lộ nội dung"""
+    _, conv = dm_with_tester()
+    token, _ = login_token(args.user, args.password)
+    api_call(f"/api/conversations/{conv}/lock", {"password": LOCK_PASSWORD}, token=token, method="PUT")
+    try:
+        if wait_for(r"Tin nhắn đã khóa", 20) is None:
+            raise RuntimeError("Danh sách chưa ẩn nội dung cuộc trò chuyện đã khóa")
+        tap(r"^Bạn Bè, đã khóa")
+        if wait_for(r"^Cuộc trò chuyện đã khóa$", 15) is None:
+            raise RuntimeError("Mở cuộc trò chuyện đã khóa nhưng không thấy màn nhập mật khẩu")
+        if find(r"Tối nay chơi cờ không") is not None:
+            raise RuntimeError("Chưa nhập mật khẩu mà đã thấy tin nhắn")
+        tap(r"^Mật khẩu khóa$")
+        type_text(LOCK_PASSWORD)
+        sh("input keyevent 66")  # Enter: mở khóa
+        if wait_for(r"Tối nay chơi cờ không", 20) is None:
+            raise RuntimeError("Nhập đúng mật khẩu nhưng không mở được cuộc trò chuyện")
+        if wait_for(r"^Khóa lại cuộc trò chuyện$", 5) is None:
+            raise RuntimeError("Không thấy nút khóa lại trên đầu khung chat")
+        hide_keyboard()
+        back()
+        if wait_for(r"^Trò chơi", 10) is None:
+            raise RuntimeError("Không về được danh sách tin nhắn")
+    finally:
+        # Bỏ khóa để các bước sau (bong bóng chat) dùng cuộc trò chuyện này bình thường
+        api_call(f"/api/conversations/{conv}/lock", {"password": LOCK_PASSWORD}, token=token, method="DELETE")
 
 
 def s_games_hub():
@@ -1015,6 +1047,7 @@ def main():
         step("Nhắn tin", s_chat)
         step("Tin nhắn thoại (giữ nút micro)", s_voice)
         step("Rời cuộc trò chuyện", s_chat_back)
+        step("Khóa cuộc trò chuyện bằng mật khẩu", s_chat_lock)
         step("Mục Trò chơi", s_games_hub)
         step("Nông trại: thu hoạch, gieo hạt (có âm thanh)", s_farm)
         step("Nông trại: ghé vườn bạn rồi quay lại", s_farm_visit)

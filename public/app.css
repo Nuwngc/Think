@@ -522,6 +522,7 @@ html.auth-mode, html.auth-mode body { background: #000000; }
 
 /* ===== Nhóm chat riêng ===== */
 .avatar.is-team { border-radius: 30%; }
+.avatar.is-team img { border-radius: 30%; }
 .chat-title.is-link { cursor: pointer; }
 .chat-title.is-link:hover h2 { text-decoration: underline; text-underline-offset: 3px; }
 .new-group-row { margin-bottom: -8px; }
@@ -1522,3 +1523,27 @@ button.chess-row-main:hover { background: var(--field); }
 .chess-board .sq.is-premove::before, .chess-board .sq.is-selected.is-pre::before { content: ''; position: absolute; inset: 0; background: rgba(48, 110, 210, .5); }
 .chess-pgn-input { width: 100%; min-height: 140px; padding: 10px 12px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; color: var(--ink); border-radius: 12px; border: 1px solid var(--line); background: var(--surface); outline: none; resize: vertical; }
 .chess-pgn-input:focus { border-color: var(--jade-ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--jade-ink), transparent 80%); }
+
+/* 2.9.0: ảnh nhóm, khóa cuộc trò chuyện bằng mật khẩu */
+.group-photo { position: relative; padding: 0; border: 0; background: none; border-radius: 30%; cursor: pointer; }
+.group-photo-cam { position: absolute; right: -4px; bottom: -4px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--ink); box-shadow: 0 1px 4px rgba(0, 0, 0, .18); }
+.group-photo-cam .ic { width: 17px; height: 17px; }
+.group-photo-actions { display: flex; justify-content: center; gap: 8px; margin: -4px 0 4px; }
+.chat-pane.is-locked .messages,
+.chat-pane.is-locked .chat-foot,
+.chat-pane.is-locked .pin-bar,
+.chat-pane.is-locked .chat-search,
+.chat-pane.is-locked #chat-search-btn,
+.chat-pane.is-locked #group-info-btn,
+.chat-pane.is-locked #chess-dm-btn { display: none !important; }
+.chat-lock { flex: 1; display: grid; place-items: center; padding: 24px 16px; overflow-y: auto; }
+.chat-lock[hidden] { display: none; }
+.chat-lock-box { width: 100%; max-width: 340px; display: grid; justify-items: center; gap: 10px; text-align: center; }
+.chat-lock-box h3 { margin: 4px 0 0; font-size: 19px; }
+.chat-lock-box .hint { margin: 0; }
+.chat-lock-ic { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--jade-wash); color: var(--jade-ink); }
+.chat-lock-ic .ic { width: 30px; height: 30px; }
+.chat-lock-form { width: 100%; display: grid; gap: 10px; margin-top: 6px; }
+.chat-lock-form .search-input { text-align: center; letter-spacing: .06em; }
+.chat-lock-link { border: 0; background: none; padding: 6px; font: inherit; font-size: 14px; font-weight: 700; color: var(--jade-ink); cursor: pointer; }
+.lock-form { margin-top: 8px; }

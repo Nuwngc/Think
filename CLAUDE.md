@@ -24,6 +24,11 @@ Mọi game trên trang Trò chơi phải có chuỗi ngày chơi liên tiếp (R
 
 Dữ liệu ở `public/puzzles/<game>.json` và bản giống hệt `native/src/puzzles/data/<game>.json` (kiểm thử so khớp). Chỉ tạo bằng `scripts/puzzles/<game>.js`; thêm màn bằng `--add N` (chỉ thêm vào cuối, không sửa màn cũ — tiến độ người chơi tính theo số màn). Luật câu đố có hai bản giống hệt: `public/puzzles-core.js` và `native/src/puzzles/core.ts` — sửa một bên thì sửa cả bên kia.
 
+## Khóa cuộc trò chuyện, ảnh nhóm
+
+- Khóa bằng mật khẩu là riêng từng người (`members.lock_hash`, `src/chat-lock.js`). Chỗ nào hiện nội dung tin nhắn ra ngoài khung chat (xem trước ở danh sách, thông báo nhỏ, thông báo đẩy `notifyMembers`, `/api/app/notification`, bong bóng chat) phải kiểm tra `locked` để không lộ nội dung. Web: `isGated` trong `public/app.js`; app: `native/src/chatLock.ts` + `previewText` trong `native/src/format.ts`.
+- Ảnh nhóm ở `conversations.avatar` (file trong `uploads/avatars/`, tên bắt đầu bằng `g<mã nhóm>-`); nhóm bị xóa thì xóa luôn ảnh.
+
 ## Tin nhắn thoại, thành tựu
 
 - Tin nhắn thoại: phần dùng chung `public/voice-core.js` và bản app `native/src/voice/core.ts` phải giống hệt (kiểm thử so khớp). Mỗi lúc một trình phát dùng chung (`native/src/voice/player.ts`) — đừng tạo trình phát riêng cho từng tin (Android hết luồng âm thanh).

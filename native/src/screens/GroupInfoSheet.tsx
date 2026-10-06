@@ -3,7 +3,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 
 import { convTitle, fold, lastSeenText } from "../format";
-import { addMembers, namesOf, openDm, removeMember, renameGroup, showToast, useStore } from "../store";
+import { pickAvatar } from "../images";
+import { addMembers, namesOf, openDm, removeMember, renameGroup, setGroupAvatar, showToast, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import type { Conversation } from "../types";
 import { Avatar, Button, confirm, ConvAvatar, Field, FormError, Icon, IconButton, SectionLabel, Sheet, useStyles } from "../ui";
@@ -90,10 +91,35 @@ export function GroupInfoSheet({ visible, onClose, conv }: { visible: boolean; o
 
   const peer = conv.type === "dm" && conv.peerId != null ? users[conv.peerId] : undefined;
 
+  // Ảnh nhóm: chọn trong máy (cắt vuông, thu nhỏ) rồi gửi; thành viên nào cũng đổi được
+  const changePhoto = () =>
+    run("photo", async () => {
+      const img = await pickAvatar();
+      if (!img) return;
+      await setGroupAvatar(conv.id, img);
+      showToast("Đã đổi ảnh nhóm.");
+    });
+  const removePhoto = async () => {
+    if (!(await confirm("Xóa ảnh nhóm?", "Nhóm sẽ dùng lại chữ cái đầu của tên.", "Xóa ảnh"))) return;
+    run("photo-rm", async () => {
+      await setGroupAvatar(conv.id, null);
+      showToast("Đã xóa ảnh nhóm.");
+    });
+  };
+
   return (
     <Sheet visible={visible} onClose={onClose} title={conv.type === "dm" ? "Thông tin" : conv.type === "group" ? "Thông tin nhóm" : "Phòng chung"}>
       <View style={s.hero}>
-        <ConvAvatar conv={conv} users={users} size={72} dot={false} />
+        {isGroup ? (
+          <Pressable onPress={changePhoto} disabled={busy != null} accessibilityRole="button" accessibilityLabel="Đổi ảnh nhóm">
+            <ConvAvatar conv={conv} users={users} size={72} dot={false} />
+            <View style={[s.cam, { backgroundColor: c.surface, borderColor: c.line }]}>
+              <Icon name="photo-camera" size={16} color={c.text} />
+            </View>
+          </Pressable>
+        ) : (
+          <ConvAvatar conv={conv} users={users} size={72} dot={false} />
+        )}
         <Text style={s.heroName}>{convTitle(conv, names.nameOf)}</Text>
         <Text style={s.muted}>
           {conv.type === "dm"
@@ -103,10 +129,17 @@ export function GroupInfoSheet({ visible, onClose, conv }: { visible: boolean; o
       </View>
 
       {isGroup ? (
+        <View style={s.photoRow}>
+          <Button title="Đổi ảnh nhóm" icon="photo-camera" kind="secondary" small busy={busy === "photo"} onPress={changePhoto} />
+          {conv.avatar ? <Button title="Xóa ảnh" icon="delete-outline" kind="secondary" small busy={busy === "photo-rm"} onPress={removePhoto} /> : null}
+        </View>
+      ) : null}
+
+      {isGroup ? (
         <>
           <View style={s.inline}>
             <View style={{ flex: 1 }}>
-              <Field label="Tên nhóm" value={name} onChangeText={setName} maxLength={60} />
+              <Field label="Tên nhóm" value={name} onChangeText={setName} maxLength={60} accessibilityLabel="Tên nhóm" />
             </View>
             <Button title="Lưu" small onPress={saveName} busy={busy === "rename"} disabled={!name.trim() || name.trim() === conv.name} style={{ marginTop: 22 }} />
           </View>
@@ -199,6 +232,18 @@ export function GroupInfoSheet({ visible, onClose, conv }: { visible: boolean; o
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     hero: { alignItems: "center", gap: 6, paddingVertical: 8 },
+    cam: {
+      position: "absolute",
+      right: -6,
+      bottom: -6,
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: StyleSheet.hairlineWidth,
+    },
+    photoRow: { flexDirection: "row", justifyContent: "center", gap: 10 },
     heroName: { color: c.text, fontSize: 20, fontWeight: "800", textAlign: "center" },
     muted: { color: c.muted, fontSize: 13, textAlign: "left" },
     inline: { flexDirection: "row", gap: 10, alignItems: "flex-start" },

@@ -108,7 +108,7 @@ export function headInfo(conv: Conversation, msg: Message | null, extra: Partial
     title: convTitle(conv, names.nameOf),
     initial: initialOf(conv.type === "dm" ? peer?.displayName : conv.type === "group" ? conv.name : "Think"),
     color: conv.type === "dm" ? colorOf(conv.peerId) : conv.type === "group" ? colorOf(conv.id + 3) : "#0E7C66",
-    avatarUrl: peer?.avatar ? fileUrl(peer.avatar) : "",
+    avatarUrl: peer?.avatar ? fileUrl(peer.avatar) : conv.type === "group" && conv.avatar ? fileUrl(conv.avatar) : "",
     preview: msg ? `${conv.type === "dm" ? "" : `${convTitle(conv, names.nameOf)} · `}${previewText(msg, conv, names)}` : "",
     unread: unreadTotal(st.convs),
     general: conv.type === "general",
@@ -140,19 +140,22 @@ function onIncoming(msg: Message) {
   // Đang mở app: tin mới đã hiện trong app. Đang xem đúng cuộc trò chuyện này trong khung nổi: thôi.
   if (AppState.currentState === "active" && !bubbleOpen) return;
   if (bubbleOpen && st.currentId === conv.id) return;
-  native.showHead(headInfo(conv, msg));
+  // Cuộc trò chuyện đã khóa: không hiện bong bóng (thông báo vẫn có nhưng không lộ nội dung)
+  if (!conv.locked) native.showHead(headInfo(conv, msg));
   // Máy không nhận được thông báo đẩy (không có dịch vụ Google, máy chủ chưa cấu hình...):
   // app đang chạy nền nhờ bong bóng nên tự hiện thông báo
   if (!bubbleOpen && (st.push === "unavailable" || st.push === "server-off" || st.push === "error")) {
     const names = namesOf(st);
     Notifications.scheduleNotificationAsync({
       identifier: `conv-${conv.id}`,
-      content: {
-        title: convTitle(conv, names.nameOf),
-        body: previewText(msg, conv, names),
-        data: { type: "message", conversationId: conv.id },
-        categoryIdentifier: CATEGORY_MESSAGE,
-      },
+      content: conv.locked
+        ? { title: "🔒 Think", body: "Có tin nhắn mới trong cuộc trò chuyện đã khóa", data: { type: "message", conversationId: conv.id, locked: 1 } }
+        : {
+            title: convTitle(conv, names.nameOf),
+            body: previewText(msg, conv, names),
+            data: { type: "message", conversationId: conv.id },
+            categoryIdentifier: CATEGORY_MESSAGE,
+          },
       trigger: { channelId: CHANNEL_MESSAGES },
     }).catch(() => undefined);
   }

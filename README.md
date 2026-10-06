@@ -7,7 +7,8 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - Tài khoản do admin cấp, không ai tự đăng ký được. Lần đầu đăng nhập bắt buộc đổi mật khẩu tạm.
 - Mỗi người tự đổi được: tên hiển thị, lời giới thiệu, ảnh đại diện, **ảnh bìa**, mật khẩu.
 - **Trang cá nhân và bảng tin** (mục 15): đăng bài (chữ + ảnh), thả tim ❤️, bình luận, xem trang của từng người; **chia sẻ ván cờ** lên trang cá nhân hoặc gửi vào cuộc trò chuyện.
-- Phòng chung cho cả nhóm, nhắn riêng 1-1, và **nhóm chat riêng** tự tạo (đặt tên, thêm/xóa người, rời nhóm, có trưởng nhóm).
+- Phòng chung cho cả nhóm, nhắn riêng 1-1, và **nhóm chat riêng** tự tạo (đặt tên, **đổi tên, đổi ảnh nhóm**, thêm/xóa người, rời nhóm, có trưởng nhóm).
+- **Khóa cuộc trò chuyện bằng mật khẩu** (mục 18, mới ở 2.9.0): đặt mật khẩu riêng cho một cuộc trò chuyện (nhóm hay riêng) trên tài khoản của mình; mở ra phải nhập mật khẩu, danh sách và thông báo không lộ nội dung. Có trên web và App Think Beta.
 - Gửi ảnh (tự nén trên máy trước khi gửi), dán ảnh bằng Ctrl+V trên máy tính.
 - Thanh điều hướng dưới cùng: **Tin nhắn**, **Trò chơi** (Nông trại, Xếp Khối, Cờ vua, Cờ caro), **Cá nhân** (trang cá nhân + bảng tin; nút ⚙ **Cài đặt**: tên, giới thiệu, ảnh bìa, giao diện sáng/tối, thông báo, lưu trên máy, đổi mật khẩu) và **Quản trị** (chỉ admin thấy).
 - **Lưu trên máy người dùng**: tin nhắn và ảnh được giữ lại trên điện thoại, mở app là xem được ngay kể cả khi mất mạng hay máy chủ đang thức dậy. Tải lịch sử chat thành file, tải ảnh về máy.
@@ -475,6 +476,14 @@ Thẻ **Cờ caro** trong tab Trò chơi (web: `#/caro`), có trên bản web v�
 
 Có trên bản web và App Think Beta (cùng dữ liệu):
 
+- **Ảnh nhóm, tên nhóm** (2.9.0): mở **Thông tin nhóm** (ⓘ trên đầu khung chat → **Thành viên**; trên web chạm tên nhóm cũng được), chạm ảnh nhóm hoặc nút **Đổi ảnh nhóm** để chọn ảnh (tự cắt vuông, thu nhỏ trước khi gửi), **Xóa ảnh** để dùng lại chữ cái đầu; sửa ô **Tên nhóm** rồi bấm Lưu. Thành viên nào cũng đổi được, cả nhóm thấy dòng "… đã đổi ảnh nhóm". API `POST` / `DELETE /api/groups/<mã>/avatar`, `PATCH /api/groups/<mã>`.
+- **Khóa cuộc trò chuyện bằng mật khẩu** (2.9.0): ⓘ **Tùy chỉnh đoạn chat → Khóa bằng mật khẩu → Đặt mật khẩu** (4–32 ký tự, nhập hai lần). Khóa **chỉ trên tài khoản của bạn** (cả web và app, mọi máy), người khác trong cuộc trò chuyện không bị ảnh hưởng.
+  - Mở cuộc trò chuyện đã khóa phải nhập mật khẩu; chưa nhập thì không tải, không hiện tin nhắn và không tính là đã đọc. Nhập sai 5 lần phải đợi 15 phút.
+  - Danh sách cuộc trò chuyện có biểu tượng 🔒 và chỉ ghi "🔒 Tin nhắn đã khóa"; thông báo nhỏ trong app cũng vậy; **thông báo đẩy** không có tên người gửi, không có nội dung, không có nút Trả lời; app không hiện bong bóng chat cho cuộc trò chuyện đã khóa.
+  - Mở khóa xong thì xem được tới khi rời cuộc trò chuyện **2 phút** hoặc ẩn trang / để app chạy nền quá 2 phút (lúc đó tự khóa lại). Nút **ổ khóa** trên đầu khung chat khóa lại ngay.
+  - **Đổi mật khẩu** (nhập mật khẩu cũ), **Bỏ khóa**; **quên mật khẩu** thì bỏ khóa bằng mật khẩu đăng nhập Think (ở màn nhập mật khẩu, bấm "Quên mật khẩu?").
+  - Mật khẩu lưu trên máy chủ dạng mã băm scrypt (giống mật khẩu đăng nhập), không ai đọc được. API (`src/chat-lock.js`): `PUT /api/conversations/<mã>/lock` `{ password, current }`, `POST /api/conversations/<mã>/unlock` `{ password }`, `DELETE /api/conversations/<mã>/lock` `{ password }` hoặc `{ accountPassword }`; cuộc trò chuyện có thêm `locked` (riêng từng người) và `avatar` (ảnh nhóm).
+
 - **Tùy chỉnh đoạn chat** (nút ⓘ trên đầu khung chat): **12 chủ đề màu** (màu bong bóng tin của mình, mọi người trong cuộc trò chuyện đều thấy), **biểu tượng gửi nhanh** (ô nhập trống thì nút gửi thành biểu tượng này, bấm là gửi), tắt thông báo, ghim, tin đã ghim, **ảnh đã gửi**.
 - **Sửa tin nhắn** của mình (chạm giữ → Sửa; tin hiện "Đã chỉnh sửa"), **ghim tin nhắn** (thanh ghim trên đầu khung chat, chạm để nhảy tới tin đó), **tìm tin nhắn** trong cuộc trò chuyện (không cần dấu), **chuyển tiếp** tin sang một hoặc nhiều cuộc trò chuyện.
 - **Tắt thông báo** từng cuộc trò chuyện (1 giờ, 8 giờ, 24 giờ, đến khi bật lại) — vẫn báo khi có người **@nhắc tên** bạn; **ghim cuộc trò chuyện** lên đầu danh sách. Trong app: chạm giữ một cuộc trò chuyện ở danh sách.
@@ -585,6 +594,7 @@ src/storage.js       Đo bộ nhớ máy chủ, tự dọn và dọn thủ công
 src/auth.js          Mã hóa mật khẩu (scrypt), phiên đăng nhập
 src/push.js          Thông báo đẩy (Web Push / VAPID)
 src/fcm.js           Thông báo đẩy cho App Think Beta (Firebase Cloud Messaging)
+src/chat-lock.js     Khóa cuộc trò chuyện bằng mật khẩu riêng của từng người (đặt, mở, bỏ khóa)
 src/chess.js         Cờ vua: thách đấu, đồng hồ, ELO, bảng xếp hạng, API /api/chess
 src/chess-engine.js  Hàng đợi gửi việc cho máy cờ; src/chess-worker.js chạy máy cờ trong luồng riêng
 src/chess-analysis.js Đánh giá ván đã xong bằng Stockfish (xếp loại thiên tài … sai lầm nghiêm trọng, độ chính xác)

@@ -230,6 +230,9 @@ ensureColumn('chess_games', 'takebacks', 'takebacks INTEGER NOT NULL DEFAULT 0')
 // 2.7.0: cờ theo ngày (thời gian mỗi nước, ms; 0 = ván thường), câu nói nhanh gần nhất trong ván người với người
 ensureColumn('chess_games', 'daily_ms', 'daily_ms INTEGER NOT NULL DEFAULT 0');
 ensureColumn('chess_games', 'chat', 'chat TEXT');
+// 2.9.0: ảnh đại diện nhóm; khóa cuộc trò chuyện bằng mật khẩu riêng của từng người (mã băm scrypt, NULL = không khóa)
+ensureColumn('conversations', 'avatar', 'avatar TEXT');
+ensureColumn('members', 'lock_hash', 'lock_hash TEXT');
 // 2.8.0: ván thuộc giải đấu nào; xin đi lại trong ván với bạn (bên xin, số nước lúc xin)
 ensureColumn('chess_games', 'tournament_id', 'tournament_id INTEGER');
 ensureColumn('chess_games', 'takeback_offer', 'takeback_offer TEXT');

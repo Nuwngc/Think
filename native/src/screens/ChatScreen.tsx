@@ -29,6 +29,7 @@ import {
   discard,
   emitTyping,
   loadMessages,
+  lockConversationNow,
   namesOf,
   react,
   recall,
@@ -47,6 +48,7 @@ import { Avatar, Button, confirm, ConvAvatar, Icon, IconButton, KeyboardAware, S
 import { KnightIcon } from "../chess/Board";
 import { ChallengeSheet } from "../chess/Sheets";
 import { ChatSearch, ForwardSheet, MentionList, PinBar, PinsSheet, PollSheet } from "./ChatExtras";
+import { ChatLockGate } from "./ChatLock";
 import { ConvSettingsSheet } from "./ConvSettingsSheet";
 import { GroupInfoSheet } from "./GroupInfoSheet";
 import { ImageViewer } from "./ImageViewer";
@@ -123,6 +125,8 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
       atBottom: st.atBottom,
     })),
   );
+  // Khóa bằng mật khẩu: mở khóa tới lúc nào (store.unlocked)
+  const unlockedUntil = useStore((st) => st.unlocked[convId] || 0);
   const theme = themeOf(conv);
   const quickEmoji = emojiOf(conv);
   const names = useMemo(() => namesOf({ me, users }), [me, users]);
@@ -306,6 +310,7 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
   );
 
   if (!conv) return null;
+  if (conv.locked && !(unlockedUntil > Date.now())) return <ChatLockGate conv={conv} onClose={bubble?.onClose} />;
 
   const title = convTitle(conv, names.nameOf);
   const peer = conv.type === "dm" && conv.peerId != null ? users[conv.peerId] : undefined;
@@ -365,6 +370,7 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
             <KnightIcon size={22} color={c.text2} hole={c.surface} />
           </Pressable>
         ) : null}
+        {conv.locked ? <IconButton name="lock" label="Khóa lại cuộc trò chuyện" onPress={() => lockConversationNow(convId)} /> : null}
         <IconButton name="search" label="Tìm tin nhắn" onPress={() => setSearchOpen(true)} />
         {bubble ? (
           <IconButton name="open-in-new" label="Mở trong app" onPress={bubble.onOpenApp} />

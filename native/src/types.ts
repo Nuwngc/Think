@@ -123,6 +123,10 @@ export type Conversation = {
   /** Riêng mình: tắt thông báo tới lúc nào (-1 = mãi mãi, 0 = đang bật), ghim lên đầu danh sách */
   mutedUntil?: number;
   pinnedAt?: number | null;
+  /** Ảnh đại diện nhóm (2.9.0, chung cả nhóm) */
+  avatar?: string | null;
+  /** Riêng mình: đã khóa bằng mật khẩu (2.9.0) */
+  locked?: boolean;
 };
 
 export type StorageUsage = {
