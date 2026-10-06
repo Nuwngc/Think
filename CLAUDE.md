@@ -35,6 +35,8 @@ Dữ liệu ở `public/puzzles/<game>.json` và bản giống hệt `native/src
 - Ván với máy có `hints` / `takebacks`; đi lại làm ván ít nước hơn nên web và app nhận bản mới theo `takebacks` (`isNewer`), đừng bỏ.
 - Bàn phân tích, thống kê, câu nói nhanh ở `src/chess-extra.js`. `POST /api/chess/eval` phải giữ chặn thế cờ hiện tại của ván đang chơi và giới hạn số lần (CPU máy chủ miễn phí). Câu nói nhanh chỉ chọn trong `PHRASES` (không cho gõ tự do).
 - Màu bàn cờ: `BOARD_THEMES` có hai bản giống nhau (`public/chess-ui.js`, `native/src/chess/prefs.ts`).
+- Giải đấu vòng tròn ở `src/chess-tournaments.js` (bảng xếp hạng tính trên máy chủ). Ván trong giải có `tournament_id`: không hủy được, không xin đi lại được — đổi luật ván thường trong `src/chess.js` thì nhớ giữ ngoại lệ này. Thông báo giải gửi kèm `tournamentId` để app mở thẳng trang giải.
+- Đi trước (premove) và đọc PGN có hai bản giống nhau: `premoveTargets` / `movesFromPgn` trong `public/chess-ui.js` và `native/src/chess/premove.ts`, `native/src/chess/pgn.ts`.
 - Kiểm thử có máy cờ chạy thật: dừng bằng `engine.stop()` trong `test.after`, ván với máy trong kiểm thử nên cầm Trắng (máy không nghĩ dở khi kiểm thử kết thúc).
 - Bàn cờ trong app (`native/src/chess/Board.tsx`): vị trí quân dùng Animated **không** native driver và các quân giữ thứ tự vẽ cố định (`layout.ts`). Đổi lại sẽ làm quân hiện sai ô với kiến trúc mới (lỗi phong cấp bản 0.6).
 

@@ -17,7 +17,7 @@ import {
   resetCaro,
   useCaro,
 } from "./caro/store";
-import { bindChess, closeGame, loadChess, onAnalysisEvent, onChessEvent, openGame, resetChess, useChess } from "./chess/store";
+import { bindChess, closeGame, closeTournament, loadChess, onAnalysisEvent, onChessEvent, onChessRefresh, onTournamentEvent, openGame, openTournament, resetChess, useChess } from "./chess/store";
 import { bindFarm, loadFarm, onFarmEvent, openVisit as openFarmVisit, resetFarm, setTab as setFarmTab, useFarm } from "./farm/store";
 import { bindStreaks, loadStreaks, markPlayed, onStreakEvent, resetStreaks } from "./streaks/store";
 import type { GameId as PuzzleGame } from "./puzzles/core";
@@ -80,8 +80,8 @@ export type MsgBox = {
   stale: boolean;
 };
 
-/** chessGameId / caroGameId: chạm để mở ván đó (0 = mở mục Cờ vua / Cờ caro) */
-export type Toast = { id: number; text: string; title?: string; convId?: number; senderId?: number; chessGameId?: number; caroGameId?: number };
+/** chessGameId / caroGameId: chạm để mở ván đó (0 = mở mục Cờ vua / Cờ caro); chessTournamentId: mở giải đấu */
+export type Toast = { id: number; text: string; title?: string; convId?: number; senderId?: number; chessGameId?: number; chessTournamentId?: number; caroGameId?: number };
 
 export type UpdateInfo = { versionCode: number; versionName: string; apk: string; notes?: string };
 
@@ -543,6 +543,7 @@ function leaveChessView() {
   if (useChess.getState().openId != null) closeGame();
   if (useChess.getState().localOpen) useChess.setState({ localOpen: false });
   if (useChess.getState().analysis || useChess.getState().statsFor != null) useChess.setState({ analysis: null, statsFor: null });
+  if (useChess.getState().tournamentOpen != null) closeTournament();
 }
 
 /** Rời mục Cờ caro: đóng ván đang mở, dừng máy (ván với máy vẫn lưu, mở lại chơi tiếp) */
@@ -636,16 +637,18 @@ export function closeSettings() {
 /** Mở ván từ chỗ khác (bảng tin, tin nhắn, thông báo…): bấm Quay lại thì về đúng chỗ đó */
 let chessReturn: { gameId: number; tab: Tab; currentId: number | null } | null = null;
 
-/** Mở mục Cờ vua; có gameId thì mở luôn ván đó */
-export function openChess(gameId?: number | null) {
+/** Mở mục Cờ vua; có gameId thì mở luôn ván đó, có tournamentId thì mở trang giải đấu */
+export function openChess(gameId?: number | null, tournamentId?: number | null) {
   const s = get();
   chessReturn = gameId && !inChess() ? { gameId, tab: s.tab, currentId: s.currentId } : null;
   leaveCaroView();
   set({ tab: "games", gamesView: "chess", currentId: null });
-  if (get().toast?.chessGameId != null) hideToast();
+  if (get().toast?.chessGameId != null || get().toast?.chessTournamentId != null) hideToast();
   if (gameId) openGame(gameId);
   else {
     closeGame();
+    if (tournamentId) openTournament(tournamentId);
+    else closeTournament();
     loadChess();
   }
 }
@@ -1301,6 +1304,8 @@ function connectSocket() {
   s.on("chess:game", (data) => onChessEvent("chess:game", data));
   s.on("chess:challenge", (data) => onChessEvent("chess:challenge", data));
   s.on("chess:analysis", onAnalysisEvent);
+  s.on("chess:tournament", onTournamentEvent);
+  s.on("chess:refresh", onChessRefresh);
   s.on("games:score", onScoreEvent);
   s.on("caro:game", (data) => onCaroEvent("caro:game", data));
   s.on("caro:challenge", (data) => onCaroEvent("caro:challenge", data));
@@ -1500,6 +1505,7 @@ bindChess({
   toast: (text, extra) => {
     // Đang xem đúng ván đó thì thôi
     if (extra?.chessGameId && useChess.getState().openId === extra.chessGameId && inChess() && get().currentId == null) return;
+    if (extra?.chessTournamentId && useChess.getState().tournamentOpen === extra.chessTournamentId && useChess.getState().openId == null && inChess() && get().currentId == null) return;
     showToast(text, extra || {}, 4500);
   },
   onTab: () => inChess() && get().currentId == null && get().appActive,

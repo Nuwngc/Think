@@ -12,6 +12,7 @@ const DEFS = [
   { id: 'chess-wins', icon: '🏆', name: 'Kỳ thủ', goals: [1, 10, 50], text: (n) => `Thắng ${n} ván cờ vua` },
   { id: 'chess-elo', icon: '👑', name: 'Cao thủ cờ vua', goals: [1300, 1500, 1800], base: 1200, text: (n) => `Đạt ${n} điểm ELO cờ vua` },
   { id: 'bots', icon: '🐲', name: 'Thuần phục máy', goals: [1, 6, 12], text: (n) => `Thắng ${n} máy cờ khác nhau (không gợi ý, không đi lại)` },
+  { id: 'cups', icon: '🎉', name: 'Nhà vô địch', goals: [1, 3, 10], text: (n) => `Vô địch ${n} giải đấu cờ vua` },
   { id: 'caro-wins', icon: '🎯', name: 'Vua caro', goals: [1, 10, 50], text: (n) => `Thắng ${n} ván cờ caro với bạn bè` },
   { id: 'blocks', icon: '🎮', name: 'Thợ xếp khối', goals: [1000, 5000, 20000], text: (n) => `Đạt ${n.toLocaleString('vi-VN')} điểm một ván Xếp Khối` },
   { id: 'puzzle-stars', icon: '⭐', name: 'Nhà giải đố', goals: [30, 150, 450], text: (n) => `Gom ${n} sao Thử thách nhanh` },
@@ -61,6 +62,13 @@ function valuesOf(uid) {
       uid, uid
     ),
     'chess-elo': one('SELECT MAX(peak, rating) FROM chess_ratings WHERE user_id = ?', uid),
+    cups: (() => {
+      try {
+        return require('./chess-tournaments').cupsOf(uid);
+      } catch {
+        return 0;
+      }
+    })(),
     bots: one(
       `SELECT COUNT(DISTINCT bot) FROM chess_games WHERE bot IS NOT NULL AND bot NOT LIKE 'custom-%' AND status = 'finished'
          AND hints = 0 AND takebacks = 0 AND ((white_id = ? AND result = '1-0') OR (black_id = ? AND result = '0-1'))`,

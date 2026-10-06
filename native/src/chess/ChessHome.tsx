@@ -12,8 +12,9 @@ import { Avatar, Button, Icon, IconButton, Sheet, useStyles, type IconName } fro
 import { clockText, myColor, opponentColor, outcomeFor, reasonText, tcLabel } from "./format";
 import { SideAvatar, useNow, useSide } from "./parts";
 import { BotSheet, ChallengeSheet, HistorySheet, PrefsSheet } from "./Sheets";
-import { answerChallenge, loadChess, loadLeaderboard, openAnalysis, openGame, openLocal, openStats, useChess } from "./store";
+import { answerChallenge, loadChess, loadLeaderboard, myTournaments, openAnalysis, openGame, openLocal, openStats, openTournament, useChess } from "./store";
 import { StatsSheet } from "./Stats";
+import { CreateTournamentSheet, TournamentRow } from "./Tournament";
 import type { ChessGame, ChessRating } from "./types";
 
 // Tab Cờ vua: điểm của tôi, câu đố (quiz hôm nay, thử thách nhanh), lời thách đấu, ván đang chơi, bảng xếp hạng, ván gần đây.
@@ -23,7 +24,7 @@ export function ChessHome() {
   const s = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const meId = useStore((st) => st.me?.id ?? 0);
-  const { loaded, loading, error, rating, games, leaderboard } = useChess(
+  const { loaded, loading, error, rating, games, leaderboard, tournaments, live } = useChess(
     useShallow((st) => ({
       loaded: st.loaded,
       loading: st.loading,
@@ -31,8 +32,13 @@ export function ChessHome() {
       rating: st.rating,
       games: st.games,
       leaderboard: st.leaderboard,
+      tournaments: st.tournaments,
+      live: st.live,
     })),
   );
+  const tours = useMemo(() => myTournaments(tournaments, meId), [tournaments, meId]);
+  const watching = useMemo(() => live.filter((g) => !myColor(g, meId)), [live, meId]);
+  const [createOpen, setCreateOpen] = useState(false);
   const [challengeOpen, setChallengeOpen] = useState(false);
   const [botOpen, setBotOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
@@ -151,6 +157,22 @@ export function ChessHome() {
           </Section>
         ) : null}
 
+        <Section title="Giải đấu" action={{ label: "Tạo giải", onPress: () => setCreateOpen(true) }}>
+          {tours.length ? (
+            tours.map((t) => <TournamentRow key={t.id} t={t} meId={meId} onOpen={openTournament} />)
+          ) : (
+            <Text style={s.empty}>Mời 2–7 người bạn đấu vòng tròn: ai cũng gặp nhau một lần, cờ theo ngày, ai nhiều điểm nhất vô địch.</Text>
+          )}
+        </Section>
+
+        {watching.length ? (
+          <Section title="Bạn bè đang đánh">
+            {watching.map((g) => (
+              <LiveRow key={g.id} g={g} />
+            ))}
+          </Section>
+        ) : null}
+
         {!loaded && loading ? <Text style={s.empty}>Đang tải…</Text> : null}
 
         <Section title="Bảng xếp hạng" action={leaderboard && leaderboard.length > 5 ? { label: "Xem tất cả", onPress: () => setBoardOpen(true) } : undefined}>
@@ -182,6 +204,7 @@ export function ChessHome() {
       <LeaderboardSheet visible={boardOpen} onClose={() => setBoardOpen(false)} />
       <StatsSheet />
       <PrefsSheet visible={prefsOpen} onClose={() => setPrefsOpen(false)} />
+      <CreateTournamentSheet visible={createOpen} onClose={() => setCreateOpen(false)} />
       <HistorySheet
         visible={historyOpen}
         onClose={() => setHistoryOpen(false)}
@@ -298,11 +321,47 @@ function GameRow({ g, meId }: { g: ChessGame; meId: number }) {
           {rating != null ? <Text style={s.rowSub}>{`  ${opp.isBot ? "~" : ""}${rating}`}</Text> : null}
         </Text>
         <Text style={s.rowSub} numberOfLines={1}>
-          {tcLabel(g)} · {g.bot ? "với máy" : g.rated ? "tính điểm" : "giao hữu"} · bạn cầm {mine === "w" ? "Trắng" : "Đen"} · {g.moves.length} nước
+          {tcLabel(g)} · {g.bot ? "với máy" : g.tournament ? `🏆 ${g.tournament.name}` : g.rated ? "tính điểm" : "giao hữu"} · bạn cầm {mine === "w" ? "Trắng" : "Đen"} ·{" "}
+          {g.moves.length} nước
         </Text>
       </View>
       <View style={[s.pill, { backgroundColor: myTurn ? c.jade : c.field }]}>
         <Text style={[s.pillText, { color: myTurn ? c.onJade : c.muted }]}>{myTurn ? "Lượt bạn" : "Chờ"}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/** Ván của bạn bè đang diễn ra: chạm để xem (chỉ xem, không đi được) */
+function LiveRow({ g }: { g: ChessGame }) {
+  const c = useColors();
+  const s = useStyles(makeStyles);
+  const white = useSide(g, "w");
+  const black = useSide(g, "b");
+  return (
+    <Pressable
+      onPress={() => openGame(g.id)}
+      style={({ pressed }) => [s.row, pressed && { backgroundColor: c.field }]}
+      accessibilityRole="button"
+      accessibilityLabel={`Xem ván ${white.name} với ${black.name}`}
+    >
+      <View style={{ flexDirection: "row" }}>
+        <SideAvatar g={g} color="w" size={34} />
+        <View style={{ marginLeft: -10, borderRadius: 20, borderWidth: 2, borderColor: c.surface }}>
+          <SideAvatar g={g} color="b" size={34} />
+        </View>
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={s.rowTitle} numberOfLines={1}>
+          {white.name} – {black.name}
+        </Text>
+        <Text style={s.rowSub} numberOfLines={1}>
+          {tcLabel(g)} · {g.tournament ? `🏆 ${g.tournament.name}` : g.rated ? "tính điểm" : "giao hữu"} · {g.moves.length} nước · {g.turn === "w" ? "Trắng" : "Đen"} đang nghĩ
+        </Text>
+      </View>
+      <View style={[s.pill, { backgroundColor: c.jadeWash, flexDirection: "row", gap: 4 }]}>
+        <Icon name="visibility" size={14} color={c.accent} />
+        <Text style={[s.pillText, { color: c.accent }]}>Xem</Text>
       </View>
     </Pressable>
   );

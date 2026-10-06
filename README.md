@@ -21,6 +21,7 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - **Đóng băng chuỗi** ❄️ (mục 21, mới ở 2.5.0): mỗi tuần được 1 lượt (giữ tối đa 2), lỡ quên chơi một ngày thì tự dùng để chuỗi không bị đứt.
 - **Quiz hằng ngày + Thử thách nhanh** (mục 22, mới ở 2.4.0): Cờ vua, Xếp Khối, Cờ caro mỗi game có **một câu đố mỗi ngày** cho cả nhóm cùng giải (xem ai giải nhanh nhất) và **200 màn thử thách** mở dần, mỗi màn 1–3 sao, bảng xếp hạng sao; thêm màn được bất cứ lúc nào. Chơi được khi mất mạng (Xếp Khối, cờ caro), có trên web và App Think Beta.
 - **Chuỗi hằng ngày** (mục 21, mới ở 2.3.0): mỗi game (Nông trại, Xếp Khối, Cờ vua, Cờ caro) có **chuỗi ngày chơi liên tiếp** riêng 🔥 và một chuỗi chung; thẻ game hiện số ngày, có lịch 7 ngày, mốc 3 / 7 / 14 / 30… ngày được chúc mừng, buổi tối nhắc nếu chuỗi sắp đứt. Game nào thêm sau này cũng phải có chuỗi.
+- **Cờ vua 2.8.0** (mục 14): **giải đấu vòng tròn** giữa bạn bè (3–8 người, cờ theo ngày, bảng xếp hạng có hệ số phụ, nhà vô địch 🏆 và huy hiệu **Nhà vô địch**), **xem bạn bè đang đánh**, **đi trước** (premove) khi đối thủ đang nghĩ, **xin đi lại** trong ván giao hữu với bạn, **chép / dán PGN** (chép PGN của ván, dán PGN vào bàn phân tích).
 - **Cờ vua 2.7.0** (mục 14): **bàn phân tích** có Stockfish (thanh đánh giá, mũi tên, 3 dòng nước hay nhất; mở từ ván đã xong), **cờ theo ngày** (1 / 2 / 3 / 7 ngày mỗi nước, nhắc khi sắp hết hạn), **thống kê** (biểu đồ ELO, thắng / hòa / thua theo màu quân, đối đầu từng bạn, khai cuộc hay chơi), **6 màu bàn cờ**, **nói nhanh** với bạn trong ván (bong bóng câu nói).
 - **Cờ vua 2.6.0** (mục 14): **18 máy cờ có tính cách** (Mầm Non ~250 → Đại Kiện Tướng ~2600, Stockfish mạnh nhất ~3000), **máy tự chọn sức** 300–2800 ELO, máy **nói chuyện** trong ván, **gợi ý** và **đi lại** khi chơi với máy, **vương miện** 👑 cho mỗi máy đã hạ, **tên khai cuộc** ngay trong ván, chế độ **hai người một máy** (không cần mạng); sửa lỗi phong cấp làm quân hiện sai chỗ trong app.
 - **Cờ vua** (mục 14): thách đấu bạn bè, chọn thời gian (1+0 … 30+0 hoặc không giới hạn), đồng hồ do máy chủ giữ, **quân cờ trượt mượt và kéo thả bằng ngón tay như chess.com**, **điểm ELO và bảng xếp hạng**, chơi với máy (có Stockfish), **xem lại ván**, **đánh giá ván kiểu Game Review**: mỗi nước được xếp loại **Thiên tài !!, Tuyệt vời !, Tốt nhất, Rất tốt, Tốt, Theo sách, Thiếu chính xác ?!, Sai lầm ?, Bỏ lỡ, Sai lầm nghiêm trọng ??**, có thanh đánh giá, nhận xét từng nước, tên khai cuộc. Âm thanh quân gỗ giòn kiểu các trang cờ lớn. Có trên cả web lẫn App Think Beta.
@@ -413,6 +414,11 @@ Mục **Cờ vua** (trong tab Trò chơi) có trên bản web và App Think Beta
 - **Cờ theo ngày** (khi Thách đấu, chọn **1 / 2 / 3 / 7 ngày**): mỗi nước có từng ấy thời gian để nghĩ, đồng hồ ghi "2 ngày 3 giờ"; có thông báo khi tới lượt và khi **còn 2 giờ**; quá hạn là thua (chưa ai đi nước đầu thì hủy ván). Lời thách đấu cờ theo ngày chờ được 2 ngày. Mỗi người chơi được tối đa 20 ván cùng lúc.
 - **Thống kê** (nút trên đầu mục Cờ vua; chạm một người trong Bảng xếp hạng để xem của người đó): ELO, số ván, tỉ lệ thắng, chuỗi thắng dài nhất, chiếu hết nhanh nhất, **biểu đồ ELO** qua các ván xếp hạng (chạm để xem từng ván), thắng / hòa / thua khi cầm Trắng, cầm Đen, với bạn bè, với máy, **đối đầu** từng người, máy đã đấu, **khai cuộc hay chơi**. API `GET /api/chess/stats/<mã người | me>`.
 - **Nói nhanh** (ván với bạn, đang chơi hoặc vừa xong 30 phút): chọn một câu có sẵn ("Chúc may mắn!", "Nước hay đấy! 👏", "Cảm ơn ván cờ! 🙏", "Đấu lại nhé?", 😂…), câu nói hiện thành bong bóng cạnh tên mình trên màn hình của bạn. Chỉ chọn trong danh sách (không gõ tự do), mỗi người một câu mỗi 3 giây. Tắt bong bóng ở **Tùy chọn bàn cờ → Câu nói trong ván**.
+- **Giải đấu vòng tròn** (mục **Giải đấu** ở trang Cờ vua → **Tạo giải**; web: `#/chess/t/<mã giải>`): mời 2–7 người (cả mình là 3–8), chọn **1 / 2 / 3 / 7 ngày mỗi nước**, **1 ván mỗi cặp** hoặc **2 ván đổi màu**, có tính ELO hay không. Ai cũng gặp mọi người còn lại. Giải **tự bắt đầu khi mọi người đã trả lời** (cần ít nhất 3 người nhận lời; người tạo bấm **Bắt đầu ngay** được, ai chưa trả lời thì không vào giải). Mọi ván tạo cùng lúc, chơi kiểu cờ theo ngày. **Bảng xếp hạng**: thắng 1 điểm, hòa ½, thua 0; bằng điểm xét hệ số **Sonneborn-Berger** (tổng điểm của những người mình thắng, cộng nửa điểm người mình hòa), rồi số ván thắng. Ván trong giải không hủy được (đầu hàng sớm vẫn tính thua), không xin đi lại được, chưa ai đi nước đầu tới hạn thì bên phải đi bị xử thua. Hết ván là xong giải: báo **nhà vô địch** (đồng vô địch nếu bằng hết), tính vào thành tựu **Nhà vô địch** 🎉. Mỗi người tạo được tối đa 3 giải chưa xong. Máy chủ: `src/chess-tournaments.js`.
+- **Bạn bè đang đánh** (trang Cờ vua): danh sách ván người với người đang diễn ra mà mình không chơi, chạm để vào xem (chỉ xem). API `GET /api/chess/live`.
+- **Đi trước (premove)**: lúc đối thủ đang nghĩ, chọn quân rồi chọn ô (hoặc kéo quân) để đặt sẵn nước đi — hai ô tô **xanh dương**; đối thủ đi xong thì nước đó tự đi nếu còn hợp lệ, không thì bỏ. Chạm bàn cờ (hoặc chữ **Bỏ**) để bỏ. Tắt ở **Tùy chọn bàn cờ → Đi trước khi đối thủ đang nghĩ**.
+- **Xin đi lại** (ván giao hữu với bạn, không tính điểm, không trong giải): bấm **Xin đi lại**, bạn bấm **Cho đi lại** thì bàn cờ lùi về lúc trước nước mình vừa đi. Đi tiếp là lời xin mất hiệu lực. Ván tính điểm / trong giải không xin đi lại được. API `POST /api/chess/games/<mã>/takeback` `{ action: offer | accept | decline }`.
+- **PGN**: ván đã xong có nút **Chép PGN** (có tên người chơi, ngày, kết quả, kiểu kết thúc; API `GET /api/chess/games/<mã>/pgn`). Bàn phân tích có **Dán PGN** (mở ván chép từ Think hoặc trang cờ khác, bỏ qua bình luận và nhánh phụ; chỉ nhận ván bắt đầu từ thế cờ đầu) và **Chép PGN**.
 - **Màu bàn cờ** (Tùy chọn bàn cờ): Xanh lá, Gỗ, Xanh biển, Tím, San hô, Đêm. Lưu riêng trên từng máy, dùng cho mọi bàn cờ (ván, câu đố, bàn phân tích).
 - **Tên khai cuộc** hiện ngay trong ván (dưới danh sách nước đi), lấy từ sách khai cuộc lichess, ví dụ "Sicilian Defense (B20)".
 - **Hai người một máy** (nút trên đầu mục Cờ vua; web: `#/chess/local`): hai bạn ngồi cạnh nhau, đưa máy cho nhau sau mỗi nước. Luật chạy ngay trên máy, **không cần mạng**, không tính điểm; có đi lại, đầu hàng, ván mới, **tự xoay bàn cờ** (bên tới lượt luôn ở phía dưới). Ván lưu trên máy, thoát ra vào lại vẫn chơi tiếp.
@@ -547,7 +553,7 @@ Có trên bản web và App Think Beta (nghe chéo được: ghi trên web, nghe
 
 ## 24. Thành tựu
 
-Trang cá nhân (web và App Think Beta) có mục **Thành tựu**: 13 huy hiệu, mỗi huy hiệu 3 bậc **Đồng / Bạc / Vàng**. Chạm một huy hiệu để xem cách đạt và còn thiếu bao nhiêu; huy hiệu chưa đạt có thanh tiến độ.
+Trang cá nhân (web và App Think Beta) có mục **Thành tựu**: 14 huy hiệu, mỗi huy hiệu 3 bậc **Đồng / Bạc / Vàng**. Chạm một huy hiệu để xem cách đạt và còn thiếu bao nhiêu; huy hiệu chưa đạt có thanh tiến độ.
 
 | Huy hiệu | Đồng / Bạc / Vàng |
 |---|---|
@@ -555,6 +561,7 @@ Trang cá nhân (web và App Think Beta) có mục **Thành tựu**: 13 huy hi�
 | 🏆 Kỳ thủ — thắng ván cờ vua (cả với máy) | 1 / 10 / 50 ván |
 | 👑 Cao thủ cờ vua — điểm ELO cao nhất | 1300 / 1500 / 1800 |
 | 🐲 Thuần phục máy — số máy cờ khác nhau đã thắng không dùng gợi ý / đi lại (mới ở 2.6.0) | 1 / 6 / 12 máy |
+| 🎉 Nhà vô địch — vô địch giải đấu cờ vua (cả đồng vô địch; mới ở 2.8.0) | 1 / 3 / 10 giải |
 | 🎯 Vua caro — thắng cờ caro với bạn bè | 1 / 10 / 50 ván |
 | 🎮 Thợ xếp khối — kỷ lục một ván Xếp Khối | 1.000 / 5.000 / 20.000 điểm |
 | ⭐ Nhà giải đố — sao Thử thách nhanh | 30 / 150 / 450 sao |
@@ -584,6 +591,7 @@ src/chess-analysis.js Đánh giá ván đã xong bằng Stockfish (xếp loại 
 src/chess-openings.js Sách khai cuộc (dữ liệu src/chess-openings.tsv, lichess-org/chess-openings, CC0)
 src/chess-bots.js    Danh sách máy cờ, gu chơi, độ khó theo ELO, máy tự chọn sức, câu nói của máy
 src/chess-extra.js   Bàn phân tích (API /api/chess/eval), thống kê, câu nói nhanh trong ván với bạn
+src/chess-tournaments.js Giải đấu vòng tròn giữa bạn bè (API /api/chess/tournaments), bảng xếp hạng Sonneborn-Berger
 src/games.js         Trò chơi trên máy (Xếp Khối): điểm, bảng xếp hạng tuần / mọi lúc (API /api/games)
 src/social.js        Trang cá nhân và bảng tin: bài đăng, thả tim, bình luận (API /api/posts)
 src/caro.js          Cờ caro: thách đấu, giờ mỗi nước, ELO, bảng xếp hạng (API /api/caro)

@@ -65,6 +65,7 @@ function toData(p) {
   if (p.messageId != null) data.messageId = p.messageId;
   if (p.gameId != null) data.gameId = p.gameId;
   if (p.postId != null) data.postId = p.postId;
+  if (p.tournamentId != null) data.tournamentId = p.tournamentId; // giải đấu cờ vua
   const out = { color: '#0E7C66', channelId: 'messages' };
   if (p.type === 'message') {
     out.title = clip(p.convTitle || p.senderName || 'Think', 80);

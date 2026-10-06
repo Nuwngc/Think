@@ -230,6 +230,6 @@ test('ván với máy: lời chào, máy đi, gợi ý, đi lại, tên khai cu�
     ).lastInsertRowid
   );
   assert.equal((await call('POST', `/api/chess/games/${pvp}/hint`)).status, 403);
-  assert.equal((await call('POST', `/api/chess/games/${pvp}/takeback`)).status, 403);
+  assert.equal((await call('POST', `/api/chess/games/${pvp}/takeback`)).status, 409); // ván với bạn: xin đi lại (chưa đi nước nào)
   assert.ok(get('SELECT id FROM chess_games WHERE id = ?', pvp));
 });

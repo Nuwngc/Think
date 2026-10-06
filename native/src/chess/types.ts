@@ -63,6 +63,10 @@ export type ChessGame = {
   /** Số lần dùng gợi ý / đi lại (ván với máy) */
   hints?: number;
   takebacks?: number;
+  /** Ván giao hữu với bạn: bên đang xin đi lại */
+  takebackOffer?: Color | null;
+  /** Ván thuộc giải đấu */
+  tournament?: { id: number; name: string } | null;
 };
 
 export type ChessRating = {
@@ -173,4 +177,39 @@ export type ChessStats = {
   opponents: (WDL & { userId: number; name: string; last: number })[];
   bots: (WDL & { bot: string; name: string; elo: number | null; avatar: string | null })[];
   openings: (WDL & { name: string; eco: string; games: number })[];
+};
+
+/** Một dòng bảng xếp hạng giải đấu (máy chủ tính: src/chess-tournaments.js) */
+export type TournamentStanding = {
+  userId: number;
+  points: number;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  /** Hệ số phụ Sonneborn-Berger */
+  sb: number;
+  /** Số ván còn lại */
+  left: number;
+  rank: number;
+};
+
+/** Giải đấu vòng tròn giữa bạn bè (cờ theo ngày) */
+export type ChessTournament = {
+  id: number;
+  name: string;
+  creatorId: number;
+  status: "open" | "active" | "finished" | "cancelled";
+  /** Thời gian mỗi nước (ms) */
+  daily: number;
+  rated: boolean;
+  /** Số ván mỗi cặp (1 hoặc 2) */
+  rounds: number;
+  createdAt: number;
+  startedAt: number | null;
+  endedAt: number | null;
+  players: { userId: number; status: "invited" | "joined" | "declined" }[];
+  standings: TournamentStanding[];
+  games: { id: number; whiteId: number; blackId: number; status: ChessStatus; result: string | null; reason: string | null; plies: number; turn: Color }[];
+  winners: number[];
 };

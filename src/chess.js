@@ -31,6 +31,7 @@ const { BOTS, botPublic } = bots;
 const botById = { get: (id) => bots.botById(id) };
 const openings = require('./chess-openings');
 const { setupChessExtra, PHRASES } = require('./chess-extra');
+const { setupTournaments } = require('./chess-tournaments');
 
 /* ---------------- Tiện ích ---------------- */
 
@@ -132,6 +133,17 @@ function readSay(text) {
   }
 }
 
+// Tên giải đấu (đọc lại khi cần, giữ sẵn vì gửi ván rất thường xuyên)
+const tNames = new Map();
+function tournamentName(id) {
+  if (!tNames.has(id)) {
+    const row = get('SELECT name FROM chess_tournaments WHERE id = ?', id);
+    if (tNames.size > 500) tNames.clear();
+    tNames.set(id, row ? row.name : 'Giải đấu');
+  }
+  return tNames.get(id);
+}
+
 function readChat(text) {
   if (!text) return null;
   try {
@@ -183,6 +195,10 @@ function serialize(g, now = Date.now()) {
     botSay: bot ? readSay(g.bot_say) : null,
     // Ván người với người: câu nói nhanh gần nhất ({ color, text, ply, at })
     chat: !bot ? readChat(g.chat) : null,
+    // Bên đang xin đi lại (ván giao hữu với bạn)
+    takebackOffer: g.takeback_offer || null,
+    // Ván thuộc giải đấu nào
+    tournament: g.tournament_id ? { id: g.tournament_id, name: tournamentName(g.tournament_id) } : null,
     hints: g.hints || 0,
     takebacks: g.takebacks || 0,
   };
@@ -226,6 +242,7 @@ function cannotMate(chess, color) {
 function setupChess({ app, io, requireAuth, requireReady, isActive, notify, nameOf }) {
   const timers = new Map();
   const botTimers = new Map();
+  let tournaments = null; // src/chess-tournaments.js (gắn ở cuối hàm)
 
   const emitTo = (ids, event, payload) => {
     for (const uid of new Set(ids)) if (uid != null) io.to(`user:${uid}`).emit(event, payload);
@@ -324,6 +341,13 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     });
     const done = loadGame(g.id);
     emitGame(done);
+    if (done.tournament_id && tournaments) {
+      try {
+        tournaments.onGameFinished(done.tournament_id);
+      } catch (err) {
+        console.warn('[chess] Cập nhật giải đấu lỗi:', err.message);
+      }
+    }
     return done;
   }
 
@@ -395,8 +419,8 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
         arm(g);
         return;
       }
-      if (movesOf(g).length < 2) {
-        // Chưa ai đi đủ nước đầu: hủy ván, không ai mất điểm
+      if (movesOf(g).length < 2 && !g.tournament_id) {
+        // Chưa ai đi đủ nước đầu: hủy ván, không ai mất điểm (ván trong giải thì bên tới lượt thua)
         const done = finish(g, null, 'no-start', now);
         for (const uid of humanIds(done)) pushIfAway(uid, { title: 'Ván cờ đã bị hủy', body: 'Hết hạn đi nước đầu tiên.', tag: `chess-g-${id}`, url: `/#/chess/g/${id}`, gameId: id });
         return;
@@ -435,6 +459,37 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     pushIfAway(loserId, { title: 'Hết giờ!', body: `Bạn đã hết giờ trong ván cờ với ${sideName(done, winner)}.`, tag: `chess-g-${g.id}`, url: `/#/chess/g/${g.id}`, gameId: g.id });
     pushIfAway(winnerId, { title: 'Bạn thắng!', body: `${sideName(done, loser)} đã hết giờ.`, tag: `chess-g-${g.id}`, url: `/#/chess/g/${g.id}`, gameId: g.id });
     return done;
+  }
+
+  /** Ván dạng PGN: tiêu đề (tên hai bên, ngày, kết quả, thời gian) + các nước */
+  function pgnOf(g) {
+    const chess = new Chess();
+    for (const m of movesOf(g)) {
+      const p = UCI.exec(m);
+      chess.move({ from: p[1], to: p[2], promotion: p[3] });
+    }
+    const d = new Date((g.started_at || g.created_at) + 7 * 3600000); // giờ Việt Nam
+    const date = `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${String(d.getUTCDate()).padStart(2, '0')}`;
+    const result = g.status === 'active' ? '*' : g.result || '*';
+    chess.setHeader('Event', g.tournament_id ? tournamentName(g.tournament_id) : g.bot ? 'Chơi với máy' : g.rated ? 'Ván tính điểm' : 'Ván giao hữu');
+    chess.setHeader('Site', 'Think');
+    chess.setHeader('Date', date);
+    chess.setHeader('White', sideName(g, 'w'));
+    chess.setHeader('Black', sideName(g, 'b'));
+    chess.setHeader('Result', result);
+    if (g.daily_ms) chess.setHeader('TimeControl', `1/${Math.round(g.daily_ms / 1000)}`);
+    else if (g.base_ms) chess.setHeader('TimeControl', `${Math.round(g.base_ms / 1000)}+${Math.round(g.inc_ms / 1000)}`);
+    if (g.reason) chess.setHeader('Termination', reasonEn(g.reason));
+    const body = chess.pgn();
+    // chess.js chỉ ghi kết quả khi ván kết thúc trên bàn cờ; đầu hàng / hết giờ cũng phải có ở cuối
+    return /(1-0|0-1|1\/2-1\/2|\*)\s*$/.test(body) ? body : `${body} ${result}`;
+  }
+  const reasonEn = (r) => ({ checkmate: 'Normal', resign: 'Normal', timeout: 'Time forfeit', agreement: 'Normal', stalemate: 'Normal' }[r] || 'Normal');
+  /** Người chơi xem mọi lúc; người khác xem được ván đang chơi / đã xong */
+  function viewableGame(req, id) {
+    const g = loadGame(id);
+    if (g && ['active', 'finished', 'aborted'].includes(g.status)) return g;
+    return mine(req, id);
   }
 
   const sideName = (g, color) => {
@@ -491,7 +546,8 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     const moves = [...movesOf(g), moveText].join(' ');
     const drawOffer = g.draw_offer && g.draw_offer !== color ? null : g.draw_offer; // đi tiếp là từ chối lời mời hòa
     run(
-      `UPDATE chess_games SET moves = ?, fen = ?, white_ms = ?, black_ms = ?, turn_started_at = ?, draw_offer = ?, updated_at = ?
+      `UPDATE chess_games SET moves = ?, fen = ?, white_ms = ?, black_ms = ?, turn_started_at = ?, draw_offer = ?, updated_at = ?,
+         takeback_offer = NULL, takeback_ply = NULL
        WHERE id = ?`,
       moves, chess.fen(), whiteMs, blackMs, now, drawOffer, now, g.id
     );
@@ -891,33 +947,91 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
   }));
 
   // Đi lại: bỏ nước vừa đi của mình (và nước máy đáp lại nếu có) để đi lại nước khác
-  app.post('/api/chess/games/:id/takeback', ...auth, handle((req, res) => {
-    const { g, color } = myBotGame(req);
-    const moves = movesOf(g);
-    // Tới lượt mình: bỏ 2 nước (máy + mình). Máy đang nghĩ: bỏ 1 nước (của mình)
-    const drop = turnOf(g) === color ? 2 : 1;
-    if (moves.length < drop || (moves.length - drop) % 2 !== (color === 'w' ? 0 : 1)) {
-      throw new ChessError(409, 'Chưa có nước nào của bạn để đi lại.');
-    }
-    const keep = moves.slice(0, moves.length - drop);
+  /** Bỏ `drop` nước cuối của ván (đi lại), ghi lại thế cờ, báo hai bên */
+  function rollBack(g, drop, now = Date.now()) {
+    const keep = movesOf(g).slice(0, movesOf(g).length - drop);
     const chess = new Chess();
     for (const m of keep) {
       const p = UCI.exec(m);
       chess.move({ from: p[1], to: p[2], promotion: p[3] });
     }
-    const now = Date.now();
     boards.delete(g.id);
     botMemory.delete(g.id);
     run(
       `UPDATE chess_games SET moves = ?, fen = ?, turn_started_at = ?, draw_offer = NULL, bot_say = NULL,
-         takebacks = takebacks + 1, updated_at = ? WHERE id = ?`,
+         takeback_offer = NULL, takeback_ply = NULL, takebacks = takebacks + 1, updated_at = ? WHERE id = ?`,
       keep.join(' '), chess.fen(), now, now, g.id
     );
     const next = loadGame(g.id);
     arm(next);
     emitGame(next);
     scheduleBot(next);
+    return next;
+  }
+
+  // Đi lại. Ván với máy: bỏ nước vừa đi của mình (và nước máy đáp) ngay.
+  // Ván giao hữu với bạn: { action: 'offer' } xin đi lại, bạn { action: 'accept' | 'decline' }. Đi tiếp là bỏ lời xin.
+  app.post('/api/chess/games/:id/takeback', ...auth, handle((req, res) => {
+    const g = mine(req, req.params.id);
+    const color = colorOf(g, req.user.id);
+    if (!color || g.status !== 'active') throw new ChessError(409, 'Ván cờ đã kết thúc.');
+    const moves = movesOf(g);
+    const now = Date.now();
+    if (g.bot) {
+      // Tới lượt mình: bỏ 2 nước (máy + mình). Máy đang nghĩ: bỏ 1 nước (của mình)
+      const drop = turnOf(g) === color ? 2 : 1;
+      if (moves.length < drop || (moves.length - drop) % 2 !== (color === 'w' ? 0 : 1)) {
+        throw new ChessError(409, 'Chưa có nước nào của bạn để đi lại.');
+      }
+      return res.json({ game: serialize(rollBack(g, drop, now)) });
+    }
+    if (g.rated || g.tournament_id) throw new ChessError(409, 'Ván tính điểm hoặc trong giải đấu không xin đi lại được.');
+    const action = String(req.body?.action || 'offer');
+    if (action === 'offer') {
+      // Phải có nước của mình để đi lại
+      const mineMoves = moves.filter((_, i) => (i % 2 === 0 ? 'w' : 'b') === color).length;
+      if (!mineMoves) throw new ChessError(409, 'Chưa có nước nào của bạn để đi lại.');
+      if (g.takeback_offer === color) return res.json({ game: serialize(g) });
+      run('UPDATE chess_games SET takeback_offer = ?, takeback_ply = ?, updated_at = ? WHERE id = ?', color, moves.length, now, g.id);
+      const next = loadGame(g.id);
+      emitGame(next);
+      pushIfAway(playerId(g, other(color)), { title: 'Xin đi lại', body: `${nameOf(req.user.id)} xin đi lại nước vừa rồi.`, tag: `chess-g-${g.id}`, url: `/#/chess/g/${g.id}`, gameId: g.id });
+      return res.json({ game: serialize(next) });
+    }
+    if (g.takeback_offer !== other(color)) throw new ChessError(409, 'Không có lời xin đi lại nào.');
+    if (action === 'decline') {
+      run('UPDATE chess_games SET takeback_offer = NULL, takeback_ply = NULL, updated_at = ? WHERE id = ?', now, g.id);
+      const next = loadGame(g.id);
+      emitGame(next);
+      return res.json({ game: serialize(next) });
+    }
+    if (action !== 'accept') throw new ChessError(400, 'Yêu cầu không hợp lệ.');
+    if (g.takeback_ply !== moves.length) throw new ChessError(409, 'Bàn cờ đã đổi, lời xin đi lại không còn nữa.');
+    // Bỏ tới khi lại tới lượt người xin: họ vừa đi (1 nước) hoặc mình đã đáp lại (2 nước)
+    const asker = g.takeback_offer;
+    const drop = turnOf(g) === asker ? 2 : 1;
+    if (moves.length < drop) throw new ChessError(409, 'Không còn nước để đi lại.');
+    const next = rollBack(g, drop, now);
+    pushIfAway(playerId(g, asker), { title: 'Đã đồng ý đi lại', body: `${nameOf(req.user.id)} cho bạn đi lại.`, tag: `chess-g-${g.id}`, url: `/#/chess/g/${g.id}`, gameId: g.id });
     res.json({ game: serialize(next) });
+  }));
+
+  // Ván bạn bè đang đánh (người với người, không có mình) để vào xem
+  app.get('/api/chess/live', ...auth, handle((req, res) => {
+    const uid = req.user.id;
+    const rows = all(
+      `SELECT * FROM chess_games WHERE status = 'active' AND bot IS NULL AND white_id != ? AND black_id != ?
+        ORDER BY updated_at DESC LIMIT 20`,
+      uid, uid
+    );
+    const now = Date.now();
+    res.json({ games: rows.map((g) => serialize(g, now)) });
+  }));
+
+  // Ván dạng PGN (để dán vào các trang cờ khác hoặc bàn phân tích)
+  app.get('/api/chess/games/:id/pgn', ...auth, handle((req, res) => {
+    const g = viewableGame(req, req.params.id);
+    res.type('text/plain; charset=utf-8').send(pgnOf(g));
   }));
 
   app.post('/api/chess/bot', ...auth, handle((req, res) => res.json({ game: serialize(createBotGame(req.user.id, req.body)) })));
@@ -947,8 +1061,8 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     const g = mine(req, req.params.id);
     const color = colorOf(g, req.user.id);
     if (!color || g.status !== 'active') throw new ChessError(409, 'Ván cờ đã kết thúc.');
-    if (movesOf(g).length < 2) {
-      // Chưa ai đi: coi như hủy ván, không ai mất điểm
+    if (movesOf(g).length < 2 && !g.tournament_id) {
+      // Chưa ai đi: coi như hủy ván, không ai mất điểm (ván trong giải thì vẫn tính thua)
       return res.json({ game: serialize(finish(g, null, 'aborted')) });
     }
     const done = finish(g, color === 'w' ? '0-1' : '1-0', 'resign');
@@ -959,6 +1073,7 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
   app.post('/api/chess/games/:id/abort', ...auth, handle((req, res) => {
     const g = mine(req, req.params.id);
     if (!colorOf(g, req.user.id) || g.status !== 'active') throw new ChessError(409, 'Ván cờ đã kết thúc.');
+    if (g.tournament_id) throw new ChessError(409, 'Ván trong giải đấu không hủy được. Bạn có thể đầu hàng.');
     if (movesOf(g).length >= 2) throw new ChessError(409, 'Hai bên đã đi rồi, không hủy được nữa. Bạn có thể đầu hàng hoặc mời hòa.');
     res.json({ game: serialize(finish(g, null, 'aborted')) });
   }));
@@ -1030,6 +1145,11 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
     arm(g);
     scheduleBot(g);
   }
+
+  // Giải đấu vòng tròn (src/chess-tournaments.js)
+  tournaments = setupTournaments({
+    app, auth, handle, ChessError, emitTo, pushIfAway, nameOf, arm, startFen: START_FEN, dailyDays: DAILY_DAYS, dayMs: DAY,
+  });
 
   // Bàn phân tích, thống kê, câu nói nhanh (src/chess-extra.js)
   setupChessExtra({

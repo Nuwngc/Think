@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 
 import type { BlocksBoard, PendingScore } from "./blocks/types";
 import type { CaroGame, CaroOptions, CaroRating } from "./caro/types";
-import type { ChessAnalysis, ChessBot, ChessGame, ChessPhrase, ChessRating, ChessStats, EvalResult } from "./chess/types";
+import type { ChessAnalysis, ChessBot, ChessGame, ChessPhrase, ChessRating, ChessStats, ChessTournament, EvalResult } from "./chess/types";
 import type { ActResult, Catalog, Farm, FriendSummary, Leaderboard, Market, PublicFarm } from "./farm/types";
 import type { GameSummary, PuzzleSummary } from "./puzzles/types";
 import type { StreakSummary } from "./streaks/types";
@@ -90,6 +90,30 @@ export async function request<T>(path: string, options: Options = {}): Promise<T
   }
   if (!res.ok) throw handleError(res.status, data, auth && Boolean(token) && options.token === undefined);
   return data as T;
+}
+
+/** Lấy chữ thường (vd PGN của ván cờ) */
+async function requestText(path: string): Promise<string> {
+  const token = await getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { headers });
+  } catch {
+    throw new ApiError(OFFLINE, 0);
+  }
+  const text = await res.text();
+  if (!res.ok) {
+    let data: any = null;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      /* không phải JSON */
+    }
+    throw handleError(res.status, data, Boolean(token));
+  }
+  return text;
 }
 
 /** Gửi nguyên nội dung file ảnh (máy chủ tự nhận dạng JPG/PNG/WEBP/GIF). */
@@ -324,6 +348,24 @@ export const api = {
 
   /** Ván với máy: đi lại nước vừa đi */
   chessTakeback: (id: number) => request<{ game: ChessGame }>(`/api/chess/games/${id}/takeback`, { method: "POST", body: {} }),
+
+  /** Ván giao hữu với bạn: xin đi lại (offer), trả lời lời xin (accept / decline) */
+  chessTakebackAsk: (id: number, action: "offer" | "accept" | "decline") =>
+    request<{ game: ChessGame }>(`/api/chess/games/${id}/takeback`, { method: "POST", body: { action } }),
+
+  /** PGN của một ván (chữ thường) */
+  chessPgn: (id: number) => requestText(`/api/chess/games/${id}/pgn`),
+
+  /** Ván bạn bè đang đánh (không có mình) */
+  chessLive: () => request<{ games: ChessGame[] }>("/api/chess/live"),
+
+  /* Giải đấu vòng tròn (src/chess-tournaments.js) */
+  chessTournaments: () => request<{ tournaments: ChessTournament[]; dailyDays: number[] }>("/api/chess/tournaments"),
+  chessTournament: (id: number) => request<{ tournament: ChessTournament }>(`/api/chess/tournaments/${id}`),
+  chessCreateTournament: (body: { name: string; players: number[]; days: number; rounds: number; rated: boolean }) =>
+    request<{ tournament: ChessTournament }>("/api/chess/tournaments", { method: "POST", body }),
+  chessTournamentAct: (id: number, action: "join" | "decline" | "start" | "cancel") =>
+    request<{ tournament: ChessTournament }>(`/api/chess/tournaments/${id}/${action}`, { method: "POST", body: {} }),
 
   chessRematch: (id: number) => request<{ game: ChessGame }>(`/api/chess/games/${id}/rematch`, { method: "POST", body: {} }),
 
