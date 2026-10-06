@@ -185,8 +185,8 @@ export function LockSection({ conv }: { conv: Conversation }) {
     <View style={s.section}>
       <SectionLabel>{conv.locked ? "🔒 Đang khóa bằng mật khẩu" : "Khóa bằng mật khẩu"}</SectionLabel>
       <Text style={s.sectionHint}>
-        Chỉ khóa trên tài khoản của bạn (cả web và app): mở cuộc trò chuyện này phải nhập mật khẩu, danh sách và thông báo không hiện nội dung tin nhắn. Người
-        khác không bị ảnh hưởng.
+        Chỉ khóa trên tài khoản của bạn (cả web và app): mở cuộc trò chuyện này phải nhập mật khẩu, danh sách không hiện nội dung tin nhắn. Thông báo và bong
+        bóng chat vẫn đầy đủ, bấm vào thì hỏi mật khẩu. Người khác không bị ảnh hưởng.
       </Text>
       {mode == null ? (
         <View style={s.row}>

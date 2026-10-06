@@ -5,7 +5,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { byPinnedThenActivity } from "../chatPlus";
 import { isMuted } from "../chatThemes";
-import { convTitle, fold, previewText, shortTime } from "../format";
+import { convTitle, fold, listPreview, shortTime } from "../format";
 import { markRead, namesOf, openConversation, setConvPrefs, turnPushOn, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import type { Conversation } from "../types";
@@ -229,7 +229,7 @@ const ConvRow = memo(function ConvRow({
       ? "Đang nhập…"
       : `${names.nameOf(typers[0])} đang nhập…`
     : lm
-      ? previewText(lm, conv, names)
+      ? listPreview(lm, conv, names)
       : conv.type === "dm"
         ? "Chưa có tin nhắn"
         : "Nơi cả nhóm cùng nói chuyện";

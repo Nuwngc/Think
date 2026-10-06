@@ -665,7 +665,6 @@
     return `${hasImage ? '📷 ' : ''}${String(m.text || '').replace(/\s+/g, ' ')}`;
   }
   function previewText(m, c) {
-    if (c && c.locked) return LOCKED_PREVIEW; // cuộc trò chuyện đã khóa: không lộ nội dung
     if (m.kind === 'system') return systemText(m);
     const who = m.senderId === state.me.id ? 'Bạn' : c.type !== 'dm' ? nameOf(m.senderId) : '';
     return who ? `${who}: ${messageSummary(m)}` : messageSummary(m);
@@ -673,7 +672,8 @@
   const lastActivity = (c) => c.lastMessage?.createdAt || c.createdAt || 0;
 
   /* ----- Khóa cuộc trò chuyện bằng mật khẩu (2.9.0, máy chủ: src/chat-lock.js) -----
-     Mở khóa xong thì xem được tới khi rời cuộc trò chuyện hoặc ẩn trang quá RELOCK_MS; nút ổ khóa trên đầu khung chat khóa lại ngay. */
+     Mở khóa xong thì xem được tới khi rời cuộc trò chuyện hoặc ẩn trang quá RELOCK_MS; nút ổ khóa trên đầu khung chat khóa lại ngay.
+     Thông báo nhỏ và thông báo đẩy vẫn đầy đủ; danh sách cuộc trò chuyện thì không hiện nội dung. */
   const LOCKED_PREVIEW = '🔒 Tin nhắn đã khóa';
   const RELOCK_MS = 2 * 60 * 1000;
   const locks = { open: new Map(), hiddenAt: 0, mode: 'unlock', error: '', busy: false };
@@ -705,7 +705,8 @@
     const unread = c.unread || 0;
     const preview = typers.length
       ? h('span', { class: 'conv-preview is-typing', text: isDm ? 'Đang nhập…' : `${nameOf(typers[0])} đang nhập…` })
-      : h('span', { class: 'conv-preview', text: lm ? previewText(lm, c) : isDm ? 'Chưa có tin nhắn' : 'Nơi cả nhóm cùng nói chuyện' });
+      // Đã khóa: danh sách không hiện nội dung (thông báo thì vẫn đầy đủ)
+      : h('span', { class: 'conv-preview', text: c.locked ? LOCKED_PREVIEW : lm ? previewText(lm, c) : isDm ? 'Chưa có tin nhắn' : 'Nơi cả nhóm cùng nói chuyện' });
     const muted = isMuted(c);
     return h('li', { class: `conv${unread ? ' has-unread' : ''}${muted ? ' is-muted' : ''}${c.id === state.currentId ? ' is-active' : ''}`, dataset: { conv: c.id } },
       h('a', {
@@ -2037,7 +2038,7 @@
     }
     lockUi.el = h('div', { class: 'panel', id: 'conv-lock' },
       h('h3', { text: c.locked ? '🔒 Đang khóa bằng mật khẩu' : 'Khóa bằng mật khẩu' }),
-      h('p', { class: 'hint', text: 'Chỉ khóa trên tài khoản của bạn (cả web và app): mở cuộc trò chuyện này phải nhập mật khẩu, danh sách và thông báo không hiện nội dung tin nhắn. Người khác không bị ảnh hưởng.' }),
+      h('p', { class: 'hint', text: 'Chỉ khóa trên tài khoản của bạn (cả web và app): mở cuộc trò chuyện này phải nhập mật khẩu, danh sách không hiện nội dung tin nhắn. Thông báo và bong bóng chat vẫn đầy đủ, bấm vào thì hỏi mật khẩu. Người khác không bị ảnh hưởng.' }),
       body);
     return lockUi.el;
   }
@@ -3304,15 +3305,11 @@ ${sections}
       payload: {
         type: 'message',
         conversationId: c.id,
-        ...(c.locked
-          ? { isGroup: false, convTitle: 'Think', senderName: '🔒 Think', text: 'Có tin nhắn mới trong cuộc trò chuyện đã khóa', icon: '/icons/icon-192.png', locked: true }
-          : {
-              isGroup: c.type !== 'dm',
-              convTitle: convTitle(c),
-              senderName: nameOf(msg.senderId),
-              text: msg.image && !msg.text ? '📷 Đã gửi một ảnh' : messageSummary(msg),
-              icon: userOf(msg.senderId)?.avatar || '/icons/icon-192.png',
-            }),
+        isGroup: c.type !== 'dm',
+        convTitle: convTitle(c),
+        senderName: nameOf(msg.senderId),
+        text: msg.image && !msg.text ? '📷 Đã gửi một ảnh' : messageSummary(msg),
+        icon: userOf(msg.senderId)?.avatar || '/icons/icon-192.png',
         url: `/#/c/${c.id}`,
         createdAt: msg.createdAt,
       },

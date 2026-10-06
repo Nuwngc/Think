@@ -140,22 +140,20 @@ function onIncoming(msg: Message) {
   // Đang mở app: tin mới đã hiện trong app. Đang xem đúng cuộc trò chuyện này trong khung nổi: thôi.
   if (AppState.currentState === "active" && !bubbleOpen) return;
   if (bubbleOpen && st.currentId === conv.id) return;
-  // Cuộc trò chuyện đã khóa: không hiện bong bóng (thông báo vẫn có nhưng không lộ nội dung)
-  if (!conv.locked) native.showHead(headInfo(conv, msg));
+  // Cuộc trò chuyện đã khóa vẫn có bong bóng đầy đủ; chạm mở khung chat nổi thì hỏi mật khẩu (ChatScreen → ChatLockGate)
+  native.showHead(headInfo(conv, msg));
   // Máy không nhận được thông báo đẩy (không có dịch vụ Google, máy chủ chưa cấu hình...):
   // app đang chạy nền nhờ bong bóng nên tự hiện thông báo
   if (!bubbleOpen && (st.push === "unavailable" || st.push === "server-off" || st.push === "error")) {
     const names = namesOf(st);
     Notifications.scheduleNotificationAsync({
       identifier: `conv-${conv.id}`,
-      content: conv.locked
-        ? { title: "🔒 Think", body: "Có tin nhắn mới trong cuộc trò chuyện đã khóa", data: { type: "message", conversationId: conv.id, locked: 1 } }
-        : {
-            title: convTitle(conv, names.nameOf),
-            body: previewText(msg, conv, names),
-            data: { type: "message", conversationId: conv.id },
-            categoryIdentifier: CATEGORY_MESSAGE,
-          },
+      content: {
+        title: convTitle(conv, names.nameOf),
+        body: previewText(msg, conv, names),
+        data: { type: "message", conversationId: conv.id },
+        categoryIdentifier: CATEGORY_MESSAGE,
+      },
       trigger: { channelId: CHANNEL_MESSAGES },
     }).catch(() => undefined);
   }

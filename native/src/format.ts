@@ -165,11 +165,14 @@ export function joinedText(ts: number | null | undefined) {
 }
 
 /** Dòng xem trước trong danh sách chat: "Bạn: …", "Minh: …" (nhóm) */
-/** Xem trước tin của cuộc trò chuyện đã khóa (danh sách, thông báo nhỏ, bong bóng chat): không lộ nội dung */
+/** Danh sách cuộc trò chuyện: cuộc trò chuyện đã khóa không hiện nội dung tin (thông báo, bong bóng chat thì vẫn đầy đủ) */
 export const LOCKED_PREVIEW = "🔒 Tin nhắn đã khóa";
 
-export function previewText(m: ChatItem, c: Pick<Conversation, "type"> & { locked?: boolean }, names: Names) {
-  if (c.locked) return LOCKED_PREVIEW;
+export function listPreview(m: ChatItem, c: Pick<Conversation, "type"> & { locked?: boolean }, names: Names) {
+  return c.locked ? LOCKED_PREVIEW : previewText(m, c, names);
+}
+
+export function previewText(m: ChatItem, c: Pick<Conversation, "type">, names: Names) {
   if (m.kind === "system") return systemText(m, names);
   const who = m.senderId === names.meId ? "Bạn" : c.type !== "dm" ? names.nameOf(m.senderId) : "";
   return who ? `${who}: ${messageSummary(m, names)}` : messageSummary(m, names);

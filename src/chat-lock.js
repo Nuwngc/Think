@@ -1,8 +1,8 @@
 'use strict';
 // Khóa cuộc trò chuyện (2.9.0): mỗi người tự đặt mật khẩu riêng cho một cuộc trò chuyện (riêng hay nhóm) trên tài khoản của mình.
 // Người khác trong cuộc trò chuyện không bị ảnh hưởng. Mật khẩu lưu dạng mã băm (scrypt, giống mật khẩu đăng nhập) ở members.lock_hash,
-// nên đổi máy / dùng cả web lẫn app vẫn cùng một khóa. Web và app không hiện tin nhắn khi chưa mở khóa; thông báo đẩy của
-// cuộc trò chuyện đã khóa không có nội dung (server.js: notifyMembers). Quên mật khẩu: bỏ khóa bằng mật khẩu đăng nhập.
+// nên đổi máy / dùng cả web lẫn app vẫn cùng một khóa. Thông báo (đẩy, trong app) và bong bóng chat vẫn đầy đủ như thường;
+// bấm vào cuộc trò chuyện thì web / app hỏi mật khẩu trước khi hiện tin nhắn. Quên mật khẩu: bỏ khóa bằng mật khẩu đăng nhập.
 const { get, all, run } = require('./db');
 const auth = require('./auth');
 

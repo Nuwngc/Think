@@ -198,8 +198,7 @@ async function showMessage(d) {
     }
   } catch { /* trình duyệt không hỗ trợ đọc thông báo cũ */ }
   const line = d.isGroup ? `${d.senderName}: ${d.text}` : d.text;
-  // Cuộc trò chuyện đã khóa: chỉ một dòng "có tin nhắn mới", không lặp lại
-  lines = d.locked ? [line] : lines.concat(line).slice(-5);
+  lines = lines.concat(line).slice(-5);
   count += 1;
   const title = d.isGroup ? d.convTitle : d.senderName;
   return self.registration.showNotification(count > 1 ? `${title} (${count} tin nhắn)` : title, {

@@ -26,7 +26,7 @@ Dữ liệu ở `public/puzzles/<game>.json` và bản giống hệt `native/src
 
 ## Khóa cuộc trò chuyện, ảnh nhóm
 
-- Khóa bằng mật khẩu là riêng từng người (`members.lock_hash`, `src/chat-lock.js`). Chỗ nào hiện nội dung tin nhắn ra ngoài khung chat (xem trước ở danh sách, thông báo nhỏ, thông báo đẩy `notifyMembers`, `/api/app/notification`, bong bóng chat) phải kiểm tra `locked` để không lộ nội dung. Web: `isGated` trong `public/app.js`; app: `native/src/chatLock.ts` + `previewText` trong `native/src/format.ts`.
+- Khóa bằng mật khẩu là riêng từng người (`members.lock_hash`, `src/chat-lock.js`). Theo ý chủ dự án: thông báo (đẩy, trong app) và bong bóng chat vẫn **đầy đủ**; chỉ khi mở cuộc trò chuyện mới hỏi mật khẩu, và danh sách cuộc trò chuyện không hiện nội dung tin. Chỗ mở khung chat (web `openConversation` / `isGated` trong `public/app.js`; app `ChatScreen` → `ChatLockGate`, `native/src/chatLock.ts`) phải giữ màn khóa, kể cả khung chat nổi của bong bóng.
 - Ảnh nhóm ở `conversations.avatar` (file trong `uploads/avatars/`, tên bắt đầu bằng `g<mã nhóm>-`); nhóm bị xóa thì xóa luôn ảnh.
 
 ## Tin nhắn thoại, thành tựu

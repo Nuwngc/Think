@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { afterBackground, isGated, leaveUnlocked, LOCK_MAX, LOCK_MIN, lockLengthOk, RELOCK_MS } from "../src/chatLock";
-import { LOCKED_PREVIEW, previewText, systemText } from "../src/format";
+import { listPreview, LOCKED_PREVIEW, previewText, systemText } from "../src/format";
 import type { Conversation, Message } from "../src/types";
 
 const names = { meId: 1, nameOf: (id: number | null | undefined) => (({ 1: "An", 2: "Bình" }) as Record<number, string>)[id ?? 0] || "Người dùng" };
@@ -39,10 +39,12 @@ describe("khóa cuộc trò chuyện", () => {
     expect(lockLengthOk("x".repeat(33))).toBe(false);
   });
 
-  it("danh sách / thông báo nhỏ không lộ nội dung của cuộc trò chuyện đã khóa", () => {
-    expect(previewText(msg(), conv(), names)).toBe("mật mã 42");
-    expect(previewText(msg(), conv({ locked: true }), names)).toBe(LOCKED_PREVIEW);
-    expect(previewText(msg({ kind: "system", text: '{"event":"rename","name":"X"}' }), conv({ locked: true, type: "group" }), names)).toBe(LOCKED_PREVIEW);
+  it("danh sách ẩn nội dung cuộc trò chuyện đã khóa; thông báo, bong bóng chat vẫn đầy đủ", () => {
+    expect(listPreview(msg(), conv(), names)).toBe("mật mã 42");
+    expect(listPreview(msg(), conv({ locked: true }), names)).toBe(LOCKED_PREVIEW);
+    expect(listPreview(msg({ kind: "system", text: '{"event":"rename","name":"X"}' }), conv({ locked: true, type: "group" }), names)).toBe(LOCKED_PREVIEW);
+    // Thông báo nhỏ, thông báo trên máy, bong bóng chat dùng previewText: vẫn có nội dung
+    expect(previewText(msg(), conv({ locked: true }), names)).toBe("mật mã 42");
   });
 
   it("tin hệ thống đổi / xóa ảnh nhóm", () => {

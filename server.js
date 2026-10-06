@@ -945,22 +945,12 @@ async function notifyMembers(conv, message, members) {
     url: `/#/c/${conv.id}`,
     createdAt: message.createdAt,
   };
-  // Người đã khóa cuộc trò chuyện này: thông báo không có tên người gửi và nội dung (src/chat-lock.js)
-  const locked = chatLock.lockedMembers(conv.id);
-  const hidden = {
-    locked: true,
-    isGroup: false,
-    convTitle: 'Think',
-    senderName: '🔒 Think',
-    text: 'Có tin nhắn mới trong cuộc trò chuyện đã khóa',
-    icon: '/icons/icon-192.png',
-  };
+  // Cuộc trò chuyện đã khóa (src/chat-lock.js) vẫn có thông báo đầy đủ; bấm vào thì web / app hỏi mật khẩu
   await Promise.all(
     targets.map((uid) =>
       push.sendToUser(uid, {
         ...base,
         ...(mentioned.has(uid) && conv.type !== 'dm' ? { convTitle: `${sender.display_name} nhắc đến bạn trong ${conv.name}`, mention: true } : {}),
-        ...(locked.has(uid) ? hidden : {}),
         badge: unreadTotal(uid),
         convUnread: unreadIn(conv.id, uid),
       })
@@ -1360,8 +1350,7 @@ app.get('/api/app/notification/:id', requireAuth, requireReady, (req, res) => {
     messages: rows.reverse().map((m) => {
       const hasImage = Boolean(m.image || m.image_purged);
       let text = m.text || '';
-      if (lockedConv) text = '🔒 Tin nhắn đã khóa';
-      else if (m.deleted) text = 'Tin nhắn đã bị thu hồi';
+      if (m.deleted) text = 'Tin nhắn đã bị thu hồi';
       else if (hasImage) text = text ? `📷 ${text}` : '📷 Ảnh';
       return {
         id: m.id,
