@@ -46,8 +46,9 @@ const config: ExpoConfig = {
     softwareKeyboardLayoutMode: "resize",
     allowBackup: false,
     // SYSTEM_ALERT_WINDOW: bong bóng chat nổi trên màn hình (chỉ dùng khi người dùng bật trong Cài đặt)
-    // RECORD_AUDIO: tin nhắn thoại (app chỉ hỏi quyền khi người dùng bấm nút micro lần đầu)
-    permissions: ["POST_NOTIFICATIONS", "SYSTEM_ALERT_WINDOW", "RECORD_AUDIO"],
+    // RECORD_AUDIO: tin nhắn thoại, gọi điện (app chỉ hỏi quyền khi người dùng bấm nút micro / nút gọi lần đầu)
+    // CAMERA, MODIFY_AUDIO_SETTINGS, WAKE_LOCK: gọi video, chọn loa ngoài / loa trong, tắt màn hình khi áp tai (2.10.0)
+    permissions: ["POST_NOTIFICATIONS", "SYSTEM_ALERT_WINDOW", "RECORD_AUDIO", "CAMERA", "MODIFY_AUDIO_SETTINGS", "WAKE_LOCK"],
     ...(hasGoogleServices ? { googleServicesFile: "./google-services.json" } : {}),
   },
   ios: {
@@ -60,7 +61,8 @@ const config: ExpoConfig = {
   plugins: [
     [
       "expo-notifications",
-      { icon: "./assets/notification-icon.png", color: "#0E7C66", defaultChannel: "messages" },
+      // sounds: chuông của kênh thông báo "Cuộc gọi đến"
+      { icon: "./assets/notification-icon.png", color: "#0E7C66", defaultChannel: "messages", sounds: ["./assets/sounds/call/call_ring.wav"] },
     ],
     [
       "expo-splash-screen",
@@ -82,6 +84,11 @@ const config: ExpoConfig = {
       },
     ],
     "expo-secure-store",
+    // Gọi thoại / gọi video (WebRTC, 2.10.0)
+    [
+      "@config-plugins/react-native-webrtc",
+      { cameraPermission: "Think cần máy ảnh để gọi video.", microphonePermission: "Think cần micro để gọi điện và ghi tin nhắn thoại." },
+    ],
     // Tiếng trong game + ghi / nghe tin nhắn thoại
     ["expo-audio", { microphonePermission: "Think cần micro để ghi tin nhắn thoại.", recordAudioAndroid: true }],
     [

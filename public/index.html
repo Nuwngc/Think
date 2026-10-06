@@ -40,6 +40,7 @@
   <script src="/social-ui.js" defer></script>
   <script src="/voice-core.js" defer></script>
   <script src="/voice-ui.js" defer></script>
+  <script src="/calls-ui.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -87,6 +88,13 @@
     <symbol id="i-tune" viewBox="0 0 24 24"><path d="M4 7h9"/><path d="M17 7h3"/><circle cx="15" cy="7" r="2"/><path d="M4 17h3"/><path d="M11 17h9"/><circle cx="9" cy="17" r="2"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5.5v13l10.5-6.5Z"/></symbol>
     <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14"/><path d="M16 5v14"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path d="M5.2 3.5h3.3l1.7 4.3-2.2 1.4a11.5 11.5 0 0 0 6.8 6.8l1.4-2.2 4.3 1.7v3.3a1.7 1.7 0 0 1-1.8 1.7A16.6 16.6 0 0 1 3.5 5.3a1.7 1.7 0 0 1 1.7-1.8Z"/></symbol>
+    <symbol id="i-phone-off" viewBox="0 0 24 24"><path d="M3.3 13.6c-.5-.5-.5-1.3 0-1.8a12.2 12.2 0 0 1 17.4 0c.5.5.5 1.3 0 1.8l-1.9 1.8-3.4-1.4v-2.5a10 10 0 0 0-6.8 0V14l-3.4 1.4Z"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/></symbol>
+    <symbol id="i-video-off" viewBox="0 0 24 24"><path d="M15.5 13.5v2A2.5 2.5 0 0 1 13 18H5a2.5 2.5 0 0 1-2.5-2.5v-7A2.5 2.5 0 0 1 5 6h1.5M10 6h3a2.5 2.5 0 0 1 2.5 2.5v1l6-3.5v10"/><path d="m3 3 18 18"/></symbol>
+    <symbol id="i-mic-off" viewBox="0 0 24 24"><path d="M15 10.5V6a3 3 0 0 0-5.7-1.3M9 9v2.5a3 3 0 0 0 4.6 2.5"/><path d="M5.5 11a6.5 6.5 0 0 0 10.8 4.9M18.5 11c0 .8-.1 1.5-.4 2.2"/><path d="M12 17.5V21"/><path d="m3 3 18 18"/></symbol>
+    <symbol id="i-flip-cam" viewBox="0 0 24 24"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.8l1.4-2h4.6l1.4 2h1.8A2.5 2.5 0 0 1 20 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5Z"/><path d="M9 11.5a3.2 3.2 0 0 1 5.6-1.2l.9.9M15 15a3.2 3.2 0 0 1-5.6 1.2l-.9-.9"/><path d="M15.6 9v2.2h-2.2M8.4 17.5v-2.2h2.2"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M11 3.5c.6 4.4 1.9 5.9 6.5 6.5-4.6.6-5.9 2.1-6.5 6.5-.6-4.4-1.9-5.9-6.5-6.5 4.6-.6 5.9-2.1 6.5-6.5Z"/><path d="M18 14.5c.3 2 .9 2.6 2.8 2.9-1.9.3-2.5.9-2.8 2.9-.3-2-.9-2.6-2.8-2.9 1.9-.3 2.5-.9 2.8-2.9Z"/></symbol>
     <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="m6 7 1 12.5A1.5 1.5 0 0 0 8.5 21h7a1.5 1.5 0 0 0 1.5-1.5L18 7"/><path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/></symbol>
     <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 19h16"/><path d="m5 15 4.5-5 3.5 3 6-7"/></symbol>
@@ -348,6 +356,7 @@
           <button class="seg-btn" type="button" role="tab" id="seg-accounts" data-seg="accounts" aria-selected="true" aria-controls="admin-accounts">Tài khoản</button>
           <button class="seg-btn" type="button" role="tab" id="seg-storage" data-seg="storage" aria-selected="false" aria-controls="admin-storage" tabindex="-1">Bộ nhớ</button>
           <button class="seg-btn" type="button" role="tab" id="seg-errors" data-seg="errors" aria-selected="false" aria-controls="admin-errors" tabindex="-1">Báo lỗi app <span class="seg-badge" id="errors-badge" hidden></span></button>
+          <button class="seg-btn" type="button" role="tab" id="seg-ai" data-seg="ai" aria-selected="false" aria-controls="admin-ai" tabindex="-1">AI, gọi</button>
         </div>
         <div class="page-body" id="admin-accounts" role="tabpanel" aria-labelledby="seg-accounts">
           <div id="storage-alert"></div>
@@ -382,6 +391,59 @@
             <p class="hint" id="errors-summary"></p>
           </section>
           <ul id="errors-list" class="errors-list"></ul>
+        </div>
+        <!-- Think AI + máy chủ TURN cho cuộc gọi (public/app.js: loadAiAdmin) -->
+        <div class="page-body" id="admin-ai" role="tabpanel" aria-labelledby="seg-ai" hidden>
+          <form id="ai-form" class="panel" novalidate>
+            <div class="panel-row">
+              <h3>Think AI</h3>
+              <span class="ai-state" id="ai-state"></span>
+            </div>
+            <p class="hint">Trợ lý AI trong chat: mọi người nhắn riêng cho Think AI, hoặc gõ @Think AI trong nhóm. Lấy khóa miễn phí ở Google AI Studio (aistudio.google.com → Get API key) rồi dán vào đây. Khóa chỉ lưu trên máy chủ, không hiện lại.</p>
+            <label class="switch-row"><span>Bật Think AI</span><input type="checkbox" name="enabled" class="switch"></label>
+            <label class="field"><span>Dịch vụ AI</span>
+              <select name="provider">
+                <option value="gemini">Google Gemini (có gói miễn phí)</option>
+                <option value="openai">Kiểu OpenAI (OpenAI, Groq, OpenRouter…)</option>
+              </select>
+            </label>
+            <label class="field"><span>Khóa API</span>
+              <input name="apiKey" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Dán khóa API mới (để trống = giữ khóa cũ)">
+            </label>
+            <label class="field"><span>Model</span>
+              <input name="model" autocapitalize="none" spellcheck="false" placeholder="gemini-flash-latest">
+            </label>
+            <label class="field ai-openai"><span>Địa chỉ API</span>
+              <input name="baseUrl" type="url" autocapitalize="none" spellcheck="false" placeholder="vd https://api.groq.com/openai/v1">
+            </label>
+            <label class="switch-row ai-gemini"><span>Cho tra Google (tin tức, thời tiết…)</span><input type="checkbox" name="search" class="switch"></label>
+            <div class="field-row">
+              <label class="field"><span>Mỗi người / ngày</span><input name="perUserDaily" type="number" inputmode="numeric" min="1" max="1000"></label>
+              <label class="field"><span>Cả nhóm / ngày</span><input name="totalDaily" type="number" inputmode="numeric" min="1" max="100000"></label>
+            </div>
+            <p class="hint" id="ai-usage"></p>
+            <p class="form-error" role="alert" hidden></p>
+            <div class="btn-row">
+              <button class="btn btn-primary" type="submit">Lưu</button>
+              <button class="btn" type="button" id="ai-test">Thử khóa</button>
+              <button class="btn btn-danger-quiet" type="button" id="ai-remove-key" hidden>Xóa khóa</button>
+            </div>
+            <p class="hint ai-test-result" id="ai-test-result" role="status" hidden></p>
+          </form>
+          <form id="turn-form" class="panel" novalidate>
+            <h3>Cuộc gọi: máy chủ TURN</h3>
+            <p class="hint">Gọi thoại / video đi thẳng giữa hai máy. Khi hai bên dùng 4G hoặc mạng chặn kết nối thẳng, cuộc gọi cần một máy chủ TURN để chuyển tiếp (vd Metered, Cloudflare). Để trống nếu gọi vẫn được.</p>
+            <label class="field"><span>Địa chỉ TURN</span>
+              <input name="turnUrls" autocapitalize="none" spellcheck="false" placeholder="turn:turn.example.com:3478">
+            </label>
+            <div class="field-row">
+              <label class="field"><span>Tên đăng nhập</span><input name="turnUsername" autocapitalize="none" spellcheck="false" autocomplete="off"></label>
+              <label class="field"><span>Mật khẩu</span><input name="turnCredential" type="password" autocomplete="off" placeholder="Để trống = giữ"></label>
+            </div>
+            <p class="hint" id="turn-state"></p>
+            <p class="form-error" role="alert" hidden></p>
+            <div><button class="btn btn-primary" type="submit">Lưu</button></div>
+          </form>
         </div>
         <div class="page-body" id="admin-storage" role="tabpanel" aria-labelledby="seg-storage" hidden>
           <section class="panel storage-card" id="storage-card" aria-labelledby="storage-title">
@@ -473,6 +535,8 @@
             <h2 id="chat-name"></h2>
             <p id="chat-status"></p>
           </div>
+          <button class="icon-btn" type="button" id="call-voice-btn" data-action="call-voice" aria-label="Gọi thoại" title="Gọi thoại" hidden><svg class="ic"><use href="#i-phone"/></svg></button>
+          <button class="icon-btn" type="button" id="call-video-btn" data-action="call-video" aria-label="Gọi video" title="Gọi video" hidden><svg class="ic"><use href="#i-video"/></svg></button>
           <button class="icon-btn" type="button" id="chess-dm-btn" data-action="chess-challenge" aria-label="Thách một ván cờ" hidden><svg class="ic ic-knight"><use href="#i-knight"/></svg></button>
           <button class="icon-btn" type="button" id="chat-lock-btn" data-action="chat-lock-now" aria-label="Khóa lại cuộc trò chuyện" title="Khóa lại" hidden><svg class="ic"><use href="#i-lock"/></svg></button>
           <button class="icon-btn" type="button" id="chat-search-btn" data-action="chat-search" aria-label="Tìm tin nhắn"><svg class="ic"><use href="#i-search"/></svg></button>

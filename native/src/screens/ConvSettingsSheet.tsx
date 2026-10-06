@@ -60,6 +60,7 @@ export function ConvSettingsSheet({
   onSearch,
   onMembers,
   onPins,
+  onChess,
   onOpenImage,
 }: {
   conv: Conversation;
@@ -68,6 +69,8 @@ export function ConvSettingsSheet({
   onSearch: () => void;
   onMembers: () => void;
   onPins: () => void;
+  /** Chat riêng: Thách cờ (trên đầu khung chat chỉ còn nút gọi) */
+  onChess?: () => void;
   onOpenImage: (image: string) => void;
 }) {
   const c = useColors();
@@ -114,6 +117,12 @@ export function ConvSettingsSheet({
             onClose();
             setTimeout(onMembers, 250);
           })}
+          {onChess
+            ? quick("sports-esports", "Thách cờ", () => {
+                onClose();
+                setTimeout(onChess, 250);
+              })
+            : null}
         </View>
 
         <LockSection conv={conv} />

@@ -1,5 +1,5 @@
 /* Service worker: lưu giao diện để mở nhanh + hiện thông báo đẩy kể cả khi đã đóng app */
-const CACHE = 'think-v18';
+const CACHE = 'think-v19';
 // Ảnh trong tin nhắn và ảnh đại diện đã xem được giữ lại trên máy (tên file không bao giờ đổi),
 // nên vẫn hiện được khi mất mạng hoặc khi máy chủ đã dọn ảnh cũ. Tắt "Lưu trên máy" thì không giữ nữa.
 const MEDIA = 'think-media';
@@ -14,6 +14,7 @@ const SHELL = [
   '/social-ui.js',
   '/voice-core.js',
   '/voice-ui.js',
+  '/calls-ui.js',
   '/games-ui.js',
   // Chuỗi hằng ngày của mọi game
   '/streaks.js',
@@ -47,6 +48,7 @@ const SHELL = [
   '/manifest.webmanifest',
   '/socket.io/socket.io.min.js',
   '/icons/icon-192.png',
+  '/icons/think-ai.png',
   '/icons/badge-72.png',
   '/icons/favicon-48.png',
   '/fonts/be-vietnam-pro-latin-400-normal.woff2',
@@ -174,6 +176,19 @@ async function handlePush(data) {
     } catch { /* bỏ qua */ }
   }
   if (data.type === 'message') return showMessage(data);
+  // Cuộc gọi đến: rung lâu, giữ thông báo đến khi bấm (cuộc gọi nhỡ dùng cùng tag nên thay thế thông báo này)
+  if (data.type === 'call') {
+    return self.registration.showNotification(data.title || 'Think', {
+      body: data.body || 'Đang gọi cho bạn…',
+      icon: data.icon || '/icons/icon-192.png',
+      badge: '/icons/badge-72.png',
+      tag: data.tag || 'call',
+      renotify: true,
+      requireInteraction: true,
+      vibrate: [400, 200, 400, 200, 400],
+      data: { url: data.url || '/' },
+    });
+  }
   // Thông báo khác: có người thả cảm xúc, được thêm vào nhóm, gửi thử...
   return self.registration.showNotification(data.title || 'Think', {
     body: data.body || '',

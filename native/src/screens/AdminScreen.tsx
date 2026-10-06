@@ -4,7 +4,7 @@ import { Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text,
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShallow } from "zustand/react/shallow";
 
-import { api } from "../api";
+import { api, type AiSettings, type TurnSettings } from "../api";
 import { fmtBytes, fmtNum, hm, lastSeenText, shortTime } from "../format";
 import { namesOf, showToast, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
@@ -12,11 +12,12 @@ import type { AdminUser, ErrorReport, StoragePayload } from "../types";
 import { API_URL } from "../config";
 import { Avatar, Button, Card, confirm, Field, FormError, Icon, KeyboardAware, Loading, SectionLabel, Sheet, SheetItem, useStyles } from "../ui";
 
-type Seg = "users" | "storage" | "errors";
+type Seg = "users" | "storage" | "errors" | "ai";
 const SEGS: { key: Seg; label: string }[] = [
   { key: "users", label: "Tài khoản" },
   { key: "storage", label: "Bộ nhớ" },
-  { key: "errors", label: "Báo lỗi app" },
+  { key: "errors", label: "Báo lỗi" },
+  { key: "ai", label: "AI, gọi" },
 ];
 
 export function AdminScreen() {
@@ -51,7 +52,7 @@ export function AdminScreen() {
           ))}
         </View>
       </View>
-      {seg === "users" ? <UsersPanel /> : seg === "storage" ? <StoragePanel /> : <ErrorsPanel />}
+      {seg === "users" ? <UsersPanel /> : seg === "storage" ? <StoragePanel /> : seg === "ai" ? <AiPanel /> : <ErrorsPanel />}
     </KeyboardAware>
   );
 }
@@ -437,6 +438,260 @@ function StoragePanel() {
           {fmtNum(data.lastClean.messages)} tin nhắn.
         </Text>
       ) : null}
+    </ScrollView>
+  );
+}
+
+/* =========================================================
+   Think AI + máy chủ TURN cho cuộc gọi (2.10.0). Bản web: mục "AI, gọi" (loadAiAdmin trong public/app.js)
+   ========================================================= */
+
+function AiPanel() {
+  const c = useColors();
+  const s = useStyles(makeStyles);
+  const [ai, setAi] = useState<AiSettings | null>(null);
+  const [turn, setTurn] = useState<TurnSettings | null>(null);
+  const [form, setForm] = useState({ provider: "gemini" as "gemini" | "openai", apiKey: "", model: "", baseUrl: "", perUserDaily: "", totalDaily: "" });
+  const [turnForm, setTurnForm] = useState({ turnUrls: "", turnUsername: "", turnCredential: "" });
+  const [error, setError] = useState<string | null>(null);
+  const [turnError, setTurnError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const fill = (a: AiSettings) => {
+    setAi(a);
+    setForm({ provider: a.provider, apiKey: "", model: a.model, baseUrl: a.baseUrl || "", perUserDaily: String(a.perUserDaily), totalDaily: String(a.totalDaily) });
+  };
+  const fillTurn = (t: TurnSettings) => {
+    setTurn(t);
+    setTurnForm({ turnUrls: t.turnUrls, turnUsername: t.turnUsername, turnCredential: "" });
+  };
+  const load = useCallback(async () => {
+    try {
+      const [a, t] = await Promise.all([api.aiSettings(), api.turnSettings()]);
+      fill(a.ai);
+      fillTurn(t.calls);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không tải được cài đặt.");
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (!ai || !turn) {
+    return error ? (
+      <View style={s.content}>
+        <FormError text={error} />
+        <Button title="Thử lại" kind="secondary" onPress={load} />
+      </View>
+    ) : (
+      <Loading />
+    );
+  }
+
+  const save = async (extra: Partial<AiSettings> & { apiKey?: string } = {}) => {
+    setBusy("save");
+    setError(null);
+    try {
+      const body: Parameters<typeof api.saveAiSettings>[0] = {
+        provider: form.provider,
+        model: form.model.trim(),
+        baseUrl: form.provider === "openai" ? form.baseUrl.trim() : "",
+        perUserDaily: Number(form.perUserDaily) || undefined,
+        totalDaily: Number(form.totalDaily) || undefined,
+        ...extra,
+      };
+      if (form.apiKey.trim() && extra.apiKey === undefined) body.apiKey = form.apiKey.trim();
+      const res = await api.saveAiSettings(body);
+      fill(res.ai);
+      showToast(res.ai.ready ? "Đã lưu. Think AI sẵn sàng trả lời." : "Đã lưu cài đặt Think AI.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Chưa lưu được.");
+    } finally {
+      setBusy(null);
+    }
+  };
+  const test = async () => {
+    setBusy("test");
+    setTestResult(null);
+    try {
+      const r = await api.testAi();
+      setTestResult({ ok: true, text: `Khóa dùng được (${r.model}). Think AI trả lời: “${r.reply}”` });
+    } catch (err) {
+      setTestResult({ ok: false, text: err instanceof Error ? err.message : "Chưa thử được." });
+    } finally {
+      setBusy(null);
+    }
+  };
+  const saveTurn = async () => {
+    setBusy("turn");
+    setTurnError(null);
+    try {
+      const res = await api.saveTurnSettings({
+        turnUrls: turnForm.turnUrls.trim(),
+        turnUsername: turnForm.turnUsername.trim(),
+        ...(turnForm.turnCredential ? { turnCredential: turnForm.turnCredential } : {}),
+      });
+      fillTurn(res.calls);
+      showToast("Đã lưu máy chủ TURN.");
+    } catch (err) {
+      setTurnError(err instanceof Error ? err.message : "Chưa lưu được.");
+    } finally {
+      setBusy(null);
+    }
+  };
+  const gemini = form.provider === "gemini";
+  const state = ai.ready ? "Đang chạy" : !ai.enabled ? "Đang tắt" : "Chưa có khóa";
+
+  return (
+    <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+      <Card style={s.pad}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Text style={[s.cardTitle, { flex: 1 }]}>Think AI</Text>
+          <View style={[s.tag, { backgroundColor: ai.ready ? c.jadeWash : c.field }]}>
+            <Text style={[s.tagText, { color: ai.ready ? c.accent : c.muted, letterSpacing: 0 }]}>{state}</Text>
+          </View>
+        </View>
+        <Text style={s.muted}>
+          Trợ lý AI trong chat: mọi người nhắn riêng cho Think AI, hoặc gõ @Think AI trong nhóm. Lấy khóa miễn phí ở Google AI Studio (aistudio.google.com → Get API key)
+          rồi dán vào đây. Khóa chỉ lưu trên máy chủ, không hiện lại.
+        </Text>
+        <View style={s.switchRow}>
+          <Text style={[s.settingTitle, { flex: 1 }]}>Bật Think AI</Text>
+          <Switch
+            value={ai.enabled}
+            onValueChange={(on) => save({ enabled: on })}
+            disabled={busy === "save"}
+            trackColor={{ false: c.line, true: c.jadeWash }}
+            thumbColor={ai.enabled ? c.jade : "#fff"}
+            accessibilityLabel="Bật Think AI"
+          />
+        </View>
+        <Text style={s.muted}>Dịch vụ AI</Text>
+        <View style={s.chips}>
+          <Chip active={gemini} label="Google Gemini" onPress={() => setForm((f) => ({ ...f, provider: "gemini" }))} />
+          <Chip active={!gemini} label="Kiểu OpenAI" onPress={() => setForm((f) => ({ ...f, provider: "openai" }))} />
+        </View>
+        <Field
+          label="Khóa API"
+          value={form.apiKey}
+          onChangeText={(v) => setForm((f) => ({ ...f, apiKey: v }))}
+          placeholder={ai.hasKey ? `Đang dùng khóa ${ai.keyHint}. Dán khóa mới để đổi` : "Dán khóa API vào đây"}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel="Khóa API"
+        />
+        <Field
+          label="Model"
+          value={form.model}
+          onChangeText={(v) => setForm((f) => ({ ...f, model: v }))}
+          placeholder={gemini ? "gemini-flash-latest" : "vd llama-3.3-70b-versatile"}
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel="Model"
+        />
+        {gemini ? (
+          <View style={s.switchRow}>
+            <Text style={[s.settingTitle, { flex: 1, fontSize: 14.5 }]}>Cho tra Google (tin tức, thời tiết…)</Text>
+            <Switch
+              value={ai.search}
+              onValueChange={(on) => save({ search: on })}
+              disabled={busy === "save"}
+              trackColor={{ false: c.line, true: c.jadeWash }}
+              thumbColor={ai.search ? c.jade : "#fff"}
+              accessibilityLabel="Cho tra Google"
+            />
+          </View>
+        ) : (
+          <Field
+            label="Địa chỉ API"
+            value={form.baseUrl}
+            onChangeText={(v) => setForm((f) => ({ ...f, baseUrl: v }))}
+            placeholder="vd https://api.groq.com/openai/v1"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            accessibilityLabel="Địa chỉ API"
+          />
+        )}
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Field
+              label="Mỗi người / ngày"
+              value={form.perUserDaily}
+              onChangeText={(v) => setForm((f) => ({ ...f, perUserDaily: v.replace(/\D/g, "") }))}
+              keyboardType="number-pad"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Field label="Cả nhóm / ngày" value={form.totalDaily} onChangeText={(v) => setForm((f) => ({ ...f, totalDaily: v.replace(/\D/g, "") }))} keyboardType="number-pad" />
+          </View>
+        </View>
+        <Text style={s.muted}>Hôm nay đã trả lời {fmtNum(ai.usedToday)} câu hỏi.</Text>
+        <FormError text={error} />
+        <View style={s.chips}>
+          <Button title="Lưu" small onPress={() => save()} busy={busy === "save"} />
+          <Button title="Thử khóa" kind="secondary" small onPress={test} busy={busy === "test"} />
+          {ai.hasKey && ai.keySource === "settings" ? (
+            <Button
+              title="Xóa khóa"
+              kind="secondary"
+              small
+              onPress={async () => {
+                if (await confirm("Xóa khóa API?", "Think AI sẽ ngừng trả lời cho đến khi có khóa mới.", "Xóa")) save({ apiKey: "" });
+              }}
+            />
+          ) : null}
+        </View>
+        {testResult ? <Text style={[s.muted, { color: testResult.ok ? c.text2 : c.danger }]}>{testResult.ok ? `✅ ${testResult.text}` : `❌ ${testResult.text}`}</Text> : null}
+      </Card>
+
+      <SectionLabel>CUỘC GỌI: MÁY CHỦ TURN</SectionLabel>
+      <Card style={s.pad}>
+        <Text style={s.muted}>
+          Gọi thoại / video đi thẳng giữa hai máy. Khi hai bên dùng 4G hoặc mạng chặn kết nối thẳng, cuộc gọi cần một máy chủ TURN để chuyển tiếp (vd Metered, Cloudflare). Để
+          trống nếu gọi vẫn được.
+        </Text>
+        <Field
+          label="Địa chỉ TURN"
+          value={turnForm.turnUrls}
+          onChangeText={(v) => setTurnForm((f) => ({ ...f, turnUrls: v }))}
+          placeholder="turn:turn.example.com:3478"
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel="Địa chỉ TURN"
+        />
+        <Field
+          label="Tên đăng nhập"
+          value={turnForm.turnUsername}
+          onChangeText={(v) => setTurnForm((f) => ({ ...f, turnUsername: v }))}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <Field
+          label="Mật khẩu"
+          value={turnForm.turnCredential}
+          onChangeText={(v) => setTurnForm((f) => ({ ...f, turnCredential: v }))}
+          placeholder={turn.hasCredential ? "Đã lưu (để trống = giữ)" : ""}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <Text style={s.muted}>
+          {turn.turnUrls
+            ? "Cuộc gọi đang dùng máy chủ TURN này khi cần."
+            : turn.cloudflare
+              ? "Đang dùng TURN của Cloudflare (biến môi trường)."
+              : turn.envTurn
+                ? "Đang dùng TURN đặt trong biến môi trường."
+                : "Chưa có máy chủ TURN: gọi qua wifi thường vẫn được, một số mạng 4G có thể không nối được."}
+        </Text>
+        <FormError text={turnError} />
+        <Button title="Lưu" small onPress={saveTurn} busy={busy === "turn"} style={{ alignSelf: "flex-start" }} />
+      </Card>
     </ScrollView>
   );
 }

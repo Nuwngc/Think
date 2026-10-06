@@ -42,7 +42,7 @@ export const Avatar = memo(function Avatar({
   dot = true,
   meId,
 }: {
-  user: Pick<User, "id" | "displayName" | "avatar" | "online"> | null | undefined;
+  user: (Pick<User, "id" | "displayName" | "avatar" | "online"> & { bot?: boolean }) | null | undefined;
   size?: number;
   dot?: boolean;
   meId?: number;
@@ -51,7 +51,7 @@ export const Avatar = memo(function Avatar({
   const [failed, setFailed] = useState(false);
   const src = user?.avatar && !failed ? fileUrl(user.avatar) : null;
   useEffect(() => setFailed(false), [user?.avatar]);
-  const showDot = dot && user?.online && user.id !== meId;
+  const showDot = dot && user?.online && !user.bot && user.id !== meId;
   return (
     <View style={{ width: size, height: size }}>
       <View

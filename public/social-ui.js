@@ -243,8 +243,8 @@ window.ThinkSocial = (() => {
       const actions = mine
         ? [h('button', { class: 'btn btn-sm', type: 'button', 'data-action': 'settings' }, icon('settings'), 'Chỉnh sửa trang cá nhân')]
         : [
-            h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => host.openDm(u.id) }, icon('chat'), 'Nhắn tin'),
-            host.challenge ? h('button', { class: 'btn btn-sm', type: 'button', onclick: () => host.challenge(u.id) }, icon('knight'), 'Thách cờ') : null,
+            h('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: () => host.openDm(u.id) }, icon('chat'), u.bot ? 'Hỏi Think AI' : 'Nhắn tin'),
+            host.challenge && !u.bot ? h('button', { class: 'btn btn-sm', type: 'button', onclick: () => host.challenge(u.id) }, icon('knight'), 'Thách cờ') : null,
           ];
       return h('section', { class: 'profile-hero' },
         cover,

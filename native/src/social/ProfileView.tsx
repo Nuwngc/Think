@@ -150,7 +150,7 @@ function Hero({ user, own, width }: { user: User; own: boolean; width: number })
                   }
                 }}
               />
-              {!user.disabled ? (
+              {!user.disabled && !user.bot ? (
                 <Pressable
                   onPress={() => setChallenge(true)}
                   style={({ pressed }) => [s.chessBtn, { backgroundColor: c.field, opacity: pressed ? 0.8 : 1 }]}

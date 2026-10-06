@@ -2872,7 +2872,7 @@ window.ThinkChess = (() => {
       if (!S.leaderboard) loadLeaderboard();
       const ratingOf = (id) => (S.leaderboard || []).find((r) => r.userId === id)?.rating ?? 1200;
       const people = [...state.users.values()]
-        .filter((u) => u.id !== meId() && !u.disabled)
+        .filter((u) => u.id !== meId() && !u.disabled && !u.bot)
         .sort((a, b) => Number(b.online) - Number(a.online) || a.displayName.localeCompare(b.displayName, 'vi'));
       const list = h('ul', { class: 'people-list chess-people', role: 'radiogroup', 'aria-label': 'Đối thủ' });
       const search = h('input', { class: 'search-input', type: 'search', placeholder: 'Tìm người', 'aria-label': 'Tìm người để thách đấu', autocomplete: 'off' });
@@ -3222,7 +3222,7 @@ window.ThinkChess = (() => {
     function openCreateTournament() {
       const opts = { name: '', picked: new Set(), days: 1, rounds: 1, rated: false };
       const people = [...state.users.values()]
-        .filter((u) => u.id !== meId() && !u.disabled)
+        .filter((u) => u.id !== meId() && !u.disabled && !u.bot)
         .sort((a, b) => Number(b.online) - Number(a.online) || a.displayName.localeCompare(b.displayName, 'vi'));
       const nameInput = h('input', { class: 'search-input', type: 'text', maxlength: '40', placeholder: `Giải của ${nameOf(meId())}`, 'aria-label': 'Tên giải' });
       nameInput.addEventListener('input', () => { opts.name = nameInput.value; });

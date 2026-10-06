@@ -15,7 +15,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShallow } from "zustand/react/shallow";
 
 import { emojiOf, themeOf } from "../chatThemes";
-import { convTitle, dayKey, dayLabel, lastSeenText, REACTIONS, systemText } from "../format";
+import { startCall } from "../calls/engine";
+import { callInfoOf, convTitle, dayKey, dayLabel, lastSeenText, REACTIONS, systemText } from "../format";
 import { forgetPick, pickImages, prepareImage, rememberPick } from "../images";
 import { isPending } from "../messages";
 import {
@@ -45,7 +46,6 @@ import {
 import { useColors, type Colors } from "../theme";
 import type { ChatItem, Conversation, Message } from "../types";
 import { Avatar, Button, confirm, ConvAvatar, Icon, IconButton, KeyboardAware, Sheet, SheetItem, useKeyboardOpen, useStyles } from "../ui";
-import { KnightIcon } from "../chess/Board";
 import { ChallengeSheet } from "../chess/Sheets";
 import { ChatSearch, ForwardSheet, MentionList, PinBar, PinsSheet, PollSheet } from "./ChatExtras";
 import { ChatLockGate } from "./ChatLock";
@@ -274,12 +274,27 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
               <Text style={s.day}>{row.label}</Text>
             </View>
           );
-        case "system":
+        case "system": {
+          // Nhật ký cuộc gọi trong chat riêng: thêm nút "Gọi lại"
+          const call = callInfoOf(row.item);
+          const peerUser = conv?.type === "dm" && conv.peerId != null ? users[conv.peerId] : undefined;
+          const canCall = Boolean(call && peerUser && !peerUser.disabled && !peerUser.bot && !bubble);
           return (
-            <View style={s.center}>
+            <View style={[s.center, canCall && s.callRow]}>
               <Text style={s.system}>{systemText(row.item, names)}</Text>
+              {canCall && conv && peerUser ? (
+                <Pressable
+                  onPress={() => startCall(conv.id, peerUser, Boolean(call?.video))}
+                  style={({ pressed }) => [s.callBack, { opacity: pressed ? 0.7 : 1 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Gọi lại"
+                >
+                  <Text style={s.callBackText}>Gọi lại</Text>
+                </Pressable>
+              ) : null}
             </View>
           );
+        }
         case "seen":
           return (
             <View style={s.seen}>
@@ -306,7 +321,7 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
           return <ListTop conv={conv!} box={box} names={names} users={users} meId={meId} />;
       }
     },
-    [conv, meId, users, names, jumpTo, s, box, theme, pinnedIds],
+    [conv, meId, users, names, jumpTo, s, box, theme, pinnedIds, bubble],
   );
 
   if (!conv) return null;
@@ -318,9 +333,9 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
   let status: string;
   if (offline) status = "Chưa kết nối máy chủ";
   else if (typers.length && conv.type === "dm") status = "Đang nhập…";
-  else if (conv.type === "dm") status = peer?.disabled ? "Tài khoản này đã bị khóa" : lastSeenText(peer);
+  else if (conv.type === "dm") status = peer?.bot ? "Trợ lý AI · luôn sẵn sàng" : peer?.disabled ? "Tài khoản này đã bị khóa" : lastSeenText(peer);
   else {
-    const ids = conv.type === "group" ? conv.memberIds || [] : Object.values(users).filter((u) => !u.disabled).map((u) => u.id);
+    const ids = conv.type === "group" ? conv.memberIds || [] : Object.values(users).filter((u) => !u.disabled && !u.bot).map((u) => u.id);
     const active = ids.filter((uid) => uid !== meId && users[uid]?.online).length;
     status = `${ids.length} thành viên${active ? `, ${active} người đang hoạt động` : ""}`;
   }
@@ -334,6 +349,9 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
           : `${typers[0]} và ${typers.length - 1} người khác đang nhập…`;
 
   const loading = !box || (!box.loaded && box.loading) || (!box.loaded && !box.error);
+  // Chat riêng với người thật: nút gọi thoại / gọi video. Thách cờ và Tìm tin nhắn chuyển vào "Tùy chỉnh đoạn chat" cho đỡ chật.
+  const human = conv.type === "dm" && peer && !peer.disabled && !peer.bot ? peer : null;
+  const callable = Boolean(human && !bubble);
 
   return (
     <KeyboardAware bottomInset={false} style={{ backgroundColor: c.bg }}>
@@ -359,19 +377,14 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
             </Text>
           </View>
         </Pressable>
-        {conv.type === "dm" && peer && !peer.disabled && !bubble ? (
-          <Pressable
-            onPress={() => setChessOpen(true)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`Thách ${peer.displayName} một ván cờ`}
-            style={({ pressed }) => [s.chessBtn, { opacity: pressed ? 0.55 : 1 }]}
-          >
-            <KnightIcon size={22} color={c.text2} hole={c.surface} />
-          </Pressable>
+        {human && callable ? (
+          <>
+            <IconButton name="call" label="Gọi thoại" onPress={() => startCall(conv.id, human, false)} />
+            <IconButton name="videocam" label="Gọi video" onPress={() => startCall(conv.id, human, true)} />
+          </>
         ) : null}
         {conv.locked ? <IconButton name="lock" label="Khóa lại cuộc trò chuyện" onPress={() => lockConversationNow(convId)} /> : null}
-        <IconButton name="search" label="Tìm tin nhắn" onPress={() => setSearchOpen(true)} />
+        {callable ? null : <IconButton name="search" label="Tìm tin nhắn" onPress={() => setSearchOpen(true)} />}
         {bubble ? (
           <IconButton name="open-in-new" label="Mở trong app" onPress={bubble.onOpenApp} />
         ) : (
@@ -707,6 +720,7 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
         onSearch={() => setSearchOpen(true)}
         onMembers={() => setInfoOpen(true)}
         onPins={() => setPinsOpen(true)}
+        onChess={human && !bubble ? () => setChessOpen(true) : undefined}
         onOpenImage={(image) => setViewer({ ...(list.find((m) => m.image === image) || { id: 0, conversationId: convId, senderId: 0, kind: "text", text: null, deleted: false, createdAt: 0, replyTo: null, reactions: [] }), image } as Message)}
       />
       <PinsSheet conv={conv} visible={pinsOpen} onClose={() => setPinsOpen(false)} onJump={jumpTo} />
@@ -748,6 +762,7 @@ function ListTop({
     return <View style={s.center}>{box.loading ? <ActivityIndicator color={c.accent} /> : <View style={{ height: 24 }} />}</View>;
   }
   const peer = conv.type === "dm" && conv.peerId != null ? users[conv.peerId] : undefined;
+  if (peer?.bot) return <AiIntro conv={conv} users={users} empty={!box?.list.length} />;
   let text = "Phòng chung của cả nhóm. Tin nhắn ở đây mọi thành viên đều đọc được.";
   if (conv.type === "dm") text = `Đây là đầu cuộc trò chuyện riêng giữa bạn và ${peer?.displayName || "người này"}.`;
   if (conv.type === "group") {
@@ -763,8 +778,46 @@ function ListTop({
   );
 }
 
+// Think AI (2.10.0): lời chào và vài câu hỏi gợi ý khi chưa nhắn gì (giống bản web)
+const AI_SUGGESTIONS = ["Gợi ý món ăn tối nay 🍜", "Viết lời chúc sinh nhật cho bạn thân 🎂", "Dịch sang tiếng Anh: Hẹn gặp lại cuối tuần nhé!", "Giải thích ngắn gọn: lãi kép là gì?"];
+
+function AiIntro({ conv, users, empty }: { conv: Conversation; users: ReturnType<typeof useStore.getState>["users"]; empty: boolean }) {
+  const c = useColors();
+  const s = useStyles(makeStyles);
+  return (
+    <View style={s.intro}>
+      <ConvAvatar conv={conv} users={users} size={72} dot={false} />
+      <Text style={s.introName}>Think AI</Text>
+      <Text style={s.introText}>
+        Trợ lý AI của Think. Hỏi mình bất cứ điều gì: giải thích, dịch, viết hộ, gợi ý… Gửi ảnh để mình xem giúp. Trong nhóm, gõ @Think AI là mình trả lời.
+      </Text>
+      <Text style={[s.introText, { fontSize: 12.5 }]}>AI có thể nhầm, hãy kiểm tra lại thông tin quan trọng.</Text>
+      {empty ? (
+        <View style={s.chips}>
+          {AI_SUGGESTIONS.map((q) => (
+            <Pressable
+              key={q}
+              onPress={() => sendText(conv.id, q.replace(/\s*\p{Extended_Pictographic}+$/u, ""))}
+              style={({ pressed }) => [s.chip, { backgroundColor: pressed ? c.jadeWash : c.surface, borderColor: c.line }]}
+              accessibilityRole="button"
+            >
+              <Text style={[s.chipText, { color: c.accent }]}>{q}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
+    callRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", alignItems: "center", gap: 10 },
+    callBack: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: c.jadeWash },
+    callBackText: { color: c.accent, fontSize: 12.5, fontWeight: "700" },
+    chips: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8, marginTop: 10, maxWidth: 420 },
+    chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth },
+    chipText: { fontSize: 14, fontWeight: "600" },
     header: {
       flexDirection: "row",
       alignItems: "center",
@@ -776,7 +829,6 @@ const makeStyles = (c: Colors) =>
       borderBottomColor: c.line,
     },
     headerMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
-    chessBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20 },
     title: { color: c.text, fontSize: 16.5, fontWeight: "800" },
     status: { color: c.muted, fontSize: 12.5 },
     fill: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },

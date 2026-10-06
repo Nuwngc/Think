@@ -35,6 +35,8 @@ const { setupPuzzles } = require('./src/puzzles');
 const { setupReports } = require('./src/reports');
 const chatPlus = require('./src/chat-plus');
 const chatLock = require('./src/chat-lock');
+const ai = require('./src/ai');
+const { setupCalls } = require('./src/calls');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -91,7 +93,7 @@ app.use((req, res, next) => {
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'same-origin',
     'X-Frame-Options': 'DENY',
-    'Permissions-Policy': 'camera=(), microphone=(self), geolocation=()', // micro: tin nhắn thoại
+    'Permissions-Policy': 'camera=(self), microphone=(self), geolocation=()', // micro: tin nhắn thoại, gọi điện; máy ảnh: gọi video
   });
   next();
 });
@@ -182,7 +184,8 @@ function publicUser(u) {
     bio: u.bio || '',
     role: u.role,
     disabled: Boolean(u.disabled),
-    online: isOnline(u.id),
+    online: u.role === 'bot' || isOnline(u.id), // Think AI luôn sẵn sàng
+    ...(u.role === 'bot' ? { bot: true } : {}),
     lastSeen: u.last_seen || null,
     joinedAt: u.created_at || null,
   };
@@ -382,7 +385,7 @@ async function createUser({ username, displayName, password, role = 'member', mu
 }
 
 async function bootstrapAdmin() {
-  if (get('SELECT COUNT(*) AS n FROM users').n > 0) return;
+  if (get("SELECT COUNT(*) AS n FROM users WHERE role <> 'bot'").n > 0) return;
   const username = normUsername(process.env.ADMIN_USERNAME) || 'admin';
   const fromEnv = validPassword(process.env.ADMIN_PASSWORD);
   const password = fromEnv ? process.env.ADMIN_PASSWORD : auth.generatePassword(10);
@@ -882,6 +885,8 @@ app.post('/api/conversations/:id/messages', requireAuth, requireReady, (req, res
 
   const body = audio ? '' : text;
   const mentions = body ? chatPlus.cleanMentions(req.body?.mentions, convId, req.user.id) : [];
+  // Gọi "@Think AI" trong nhóm: tô màu tên như @nhắc tên (Think AI không là thành viên nhóm)
+  if (conv.type !== 'dm' && ai.mentionsBot(body) && ai.getBotId() && !mentions.includes(ai.getBotId())) mentions.push(ai.getBotId());
   const newId = transaction(() => {
     const id = Number(
       run(
@@ -915,6 +920,7 @@ app.post('/api/conversations/:id/messages', requireAuth, requireReady, (req, res
   res.json({ message: { ...message, clientId } });
 
   notifyMembers(conv, message, members).catch((err) => console.warn('[push]', err.message));
+  aiBot.onMessage(conv, message); // Think AI trả lời nếu được nhắn riêng / gọi tên (src/ai.js)
 });
 
 async function notifyMembers(conv, message, members) {
@@ -1064,7 +1070,7 @@ function normGroupName(value) {
 // Lọc danh sách người dùng hợp lệ (đang hoạt động, không trùng, bỏ chính mình)
 function activeUserIds(list, excludeId) {
   if (!Array.isArray(list)) return [];
-  const active = new Set(all('SELECT id FROM users WHERE disabled = 0').map((r) => r.id));
+  const active = new Set(all("SELECT id FROM users WHERE disabled = 0 AND role <> 'bot'").map((r) => r.id)); // không thêm Think AI vào nhóm
   return [...new Set(list.map(Number))].filter((id) => id !== excludeId && active.has(id)).slice(0, 200);
 }
 
@@ -1473,6 +1479,46 @@ chatPlus.setupChatPlus({
 
 chatLock.setupChatLock({ app, requireAuth, requireReady, emitConvChanged, getConv, limiter });
 
+/* ---------------- Think AI: trợ lý AI trong chat (2.10.0) — src/ai.js ---------------- */
+
+const aiBot = ai.setupAI({
+  app,
+  io,
+  requireAuth,
+  requireReady,
+  requireAdmin,
+  memberIds,
+  loadMessage,
+  notifyMembers,
+  publicUser,
+  // Ảnh trong tin nhắn (để Think AI xem ảnh): trên máy chủ, thiếu thì tải từ Firebase
+  readImage: async (url) => {
+    let buf = ai.readLocalImage(url);
+    if (!buf && cloud.enabled() && /^\/uploads\/img\/[\w.-]+$/.test(url)) {
+      await cloud.fetchFile(url.slice(1));
+      buf = ai.readLocalImage(url);
+    }
+    return buf;
+  },
+});
+
+/* ---------------- Gọi thoại / gọi video 1-1 bằng WebRTC (2.10.0) — src/calls.js ---------------- */
+
+const calls = setupCalls({
+  app,
+  io,
+  requireAuth,
+  requireReady,
+  requireAdmin,
+  membership,
+  memberIds,
+  systemMessage,
+  emitMessage,
+  isActive,
+  isBot: ai.isBot,
+  notify: (uid, payload) => push.sendToUser(uid, payload),
+});
+
 /* ---------------- Báo lỗi app (crash, lỗi JavaScript) — src/reports.js ---------------- */
 
 setupReports({ app, io, loadSession, requireAdminChain: [requireAuth, requireReady, requireAdmin] });
@@ -1483,10 +1529,11 @@ const admin = express.Router();
 admin.use(requireAuth, requireReady, requireAdmin);
 
 const adminUser = (u) => ({ ...publicUser(u), mustChangePassword: Boolean(u.must_change_password), createdAt: u.created_at });
-const findUser = (id) => get('SELECT * FROM users WHERE id = ?', Number(id));
+// Think AI (role 'bot') không hiện / không sửa được trong danh sách tài khoản, chỉnh trong mục Think AI
+const findUser = (id) => get("SELECT * FROM users WHERE id = ? AND role <> 'bot'", Number(id));
 
 admin.get('/users', (req, res) => {
-  res.json({ users: all('SELECT * FROM users ORDER BY id').map(adminUser) });
+  res.json({ users: all("SELECT * FROM users WHERE role <> 'bot' ORDER BY id").map(adminUser) });
 });
 
 admin.post('/users', async (req, res) => {
@@ -1605,6 +1652,7 @@ io.on('connection', (socket) => {
   const uid = socket.data.userId;
   socket.join(`user:${uid}`);
   if (socket.data.role === 'admin') socket.join('admins'); // nhận báo lỗi app mới
+  calls.attach(socket); // gọi thoại / gọi video
   let set = online.get(uid);
   if (!set) online.set(uid, (set = new Set()));
   set.add(socket);

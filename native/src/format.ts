@@ -84,8 +84,47 @@ export function listNames(ids: number[] | undefined, { meId, nameOf }: Names) {
 }
 
 /** Tin hệ thống trong nhóm, lưu dạng JSON, hiển thị theo tên hiện tại của mọi người */
+/** Cuộc gọi (2.10.0): "📞 Cuộc gọi thoại · 2:31", "📹 Bạn đã lỡ cuộc gọi video từ An"… (giống bản web) */
+function callText(d: { video?: boolean; status?: string; duration?: number; to?: number }, callerId: number, names: Names) {
+  const mine = callerId === names.meId; // mình là người gọi
+  const ic = d.video ? "📹" : "📞";
+  const kind = d.video ? "video" : "thoại";
+  if (d.status === "ended") {
+    const s = Math.max(0, Math.floor(d.duration || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const ss = String(s % 60).padStart(2, "0");
+    return `${ic} Cuộc gọi ${kind} · ${h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`}`;
+  }
+  if (d.status === "declined") return mine ? `${ic} ${d.to != null ? names.nameOf(d.to) : "Người kia"} đã từ chối cuộc gọi ${kind}` : `${ic} Bạn đã từ chối cuộc gọi ${kind}`;
+  return mine ? `${ic} Cuộc gọi ${kind} không được trả lời` : `${ic} Bạn đã lỡ cuộc gọi ${kind} từ ${names.nameOf(callerId)}`;
+}
+
+/** Tin hệ thống là nhật ký cuộc gọi: trả về { video } để hiện nút "Gọi lại" */
+export function callInfoOf(m: Pick<Message, "text" | "kind">): { video: boolean } | null {
+  if (m.kind !== "system" || !m.text || !m.text.includes('"call"')) return null;
+  try {
+    const d = JSON.parse(m.text);
+    return d?.event === "call" ? { video: Boolean(d.video) } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function systemText(m: Pick<Message, "text" | "senderId">, names: Names) {
-  let d: { event?: string; name?: string; targets?: number[]; text?: string | null; image?: boolean; emoji?: string; removed?: boolean } = {};
+  let d: {
+    event?: string;
+    name?: string;
+    targets?: number[];
+    text?: string | null;
+    image?: boolean;
+    emoji?: string;
+    removed?: boolean;
+    video?: boolean;
+    status?: string;
+    duration?: number;
+    to?: number;
+  } = {};
   try {
     d = JSON.parse(m.text || "{}");
   } catch {
@@ -111,6 +150,8 @@ export function systemText(m: Pick<Message, "text" | "senderId">, names: Names) 
       return `${actor} đã đổi biểu tượng cảm xúc nhanh thành ${d.emoji}`;
     case "avatar":
       return d.removed ? `${actor} đã xóa ảnh nhóm` : `${actor} đã đổi ảnh nhóm`;
+    case "call":
+      return callText(d, m.senderId, names);
     default:
       return "Cuộc trò chuyện vừa được cập nhật";
   }

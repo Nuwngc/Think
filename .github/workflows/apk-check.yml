@@ -126,6 +126,8 @@ jobs:
           THINK_CHESS_ANALYSIS_MS: "150"
         run: |
           npm ci --omit=dev
+          # Bước "Gọi thoại" của run.py: tài khoản thử thứ hai nghe máy qua Socket.IO
+          pip install --quiet "python-socketio[client]>=5,<6" || true
           nohup node start.js > "$RUNNER_TEMP/server.log" 2>&1 &
           ADMIN_PASSWORD=admin-ci-12345 python3 scripts/apk-check/seed.py
 

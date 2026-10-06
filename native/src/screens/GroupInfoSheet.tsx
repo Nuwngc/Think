@@ -38,7 +38,7 @@ export function GroupInfoSheet({ visible, onClose, conv }: { visible: boolean; o
   const isOwner = isGroup && conv.createdBy === meId;
   const memberIds = useMemo(() => {
     if (conv.type === "group") return conv.memberIds || [];
-    if (conv.type === "general") return Object.values(users).filter((u) => !u.disabled).map((u) => u.id);
+    if (conv.type === "general") return Object.values(users).filter((u) => !u.disabled && !u.bot).map((u) => u.id);
     return [meId, conv.peerId].filter((x): x is number => x != null);
   }, [conv, users, meId]);
   const members = memberIds
@@ -50,7 +50,7 @@ export function GroupInfoSheet({ visible, onClose, conv }: { visible: boolean; o
     const q = fold(query);
     const inGroup = new Set(memberIds);
     return Object.values(users)
-      .filter((u) => !u.disabled && !inGroup.has(u.id))
+      .filter((u) => !u.disabled && !u.bot && !inGroup.has(u.id))
       .filter((u) => !q || fold(u.displayName).includes(q) || fold(u.username).includes(q))
       .sort((a, b) => a.displayName.localeCompare(b.displayName, "vi"));
   }, [users, memberIds, query]);

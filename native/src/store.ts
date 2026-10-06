@@ -59,6 +59,7 @@ import { clearToken, currentToken, getToken, setToken } from "./session";
 import { mentionIds } from "./chatPlus";
 import { emojiOf, isMuted } from "./chatThemes";
 import { afterBackground, isGated as gatedNow, leaveUnlocked as leaveUntil } from "./chatLock";
+import { bindCallSocket, callHooks, callReconnected, resetCalls } from "./calls/engine";
 import type { ChatItem, Conversation, Me, Message, PendingMessage, Pin, Reaction, User } from "./types";
 
 /* =========================================================
@@ -199,6 +200,9 @@ export function showToast(text: string, extra: Omit<Toast, "id" | "text"> = {}, 
   set({ toast: { id: ++toastSeq, text, ...extra } });
   toastTimer = setTimeout(() => set({ toast: null }), ms);
 }
+
+// Màn hình cuộc gọi báo lỗi bằng thông báo nhỏ
+callHooks.toast = (text) => showToast(text);
 
 export function hideToast() {
   if (toastTimer) clearTimeout(toastTimer);
@@ -365,6 +369,7 @@ export async function changePassword(current: string, next: string) {
 }
 
 function resetAll(notice: string | null) {
+  resetCalls();
   if (socket) {
     socket.removeAllListeners();
     socket.disconnect();
@@ -1334,12 +1339,14 @@ function connectSocket() {
   });
   socket = s;
   set({ connection: "connecting" });
+  bindCallSocket(s); // gọi thoại / gọi video (src/calls/engine.ts)
 
   s.on("connect", () => {
     set({ connection: "online" });
     reportVisibility();
     // Mỗi lần nối lại: tải lại để không sót tin lúc mất kết nối (trừ khi đang tải lần đầu)
     if (!loadingAll) resync();
+    callReconnected(); // đang gọi thì báo máy chủ mình đã nối lại
   });
   s.on("disconnect", (reason) => set({ connection: reason === "io client disconnect" ? "connecting" : "offline" }));
   s.on("connect_error", (err: Error) => {
