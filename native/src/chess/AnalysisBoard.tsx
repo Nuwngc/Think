@@ -1,15 +1,18 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Clipboard from "expo-clipboard";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, ApiError } from "../api";
+import { showToast } from "../store";
 import { useColors, type Colors } from "../theme";
-import { Button, confirm, IconButton, useStyles } from "../ui";
+import { Button, confirm, FormError, IconButton, Sheet, useStyles } from "../ui";
 import { EvalBar } from "./Analysis";
 import { playAt, pvText } from "./analysisBoard";
 import { Board } from "./Board";
 import { evalSpeech, evalText, replay } from "./format";
+import { movesFromPgn, pgnOf } from "./pgn";
 import { usePrefs } from "./prefs";
 import { PrefsSheet } from "./Sheets";
 import { holdSounds, playSound, soundForSan } from "./sound";
@@ -35,6 +38,7 @@ export function AnalysisBoard() {
   const opened = useChess((st) => st.analysis);
   const [b, setB] = useState<Saved | null>(null);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const [, setTick] = useState(0);
 
   useEffect(() => holdSounds(), []);
@@ -242,10 +246,93 @@ export function AnalysisBoard() {
             }}
           />
         </View>
+        <View style={s.actions}>
+          <Button title="Dán PGN" icon="content-paste" kind="secondary" small style={{ flex: 1 }} onPress={() => setPasteOpen(true)} />
+          <Button
+            title="Chép PGN"
+            icon="content-copy"
+            kind="secondary"
+            small
+            style={{ flex: 1 }}
+            disabled={b.moves.length === 0}
+            onPress={async () => {
+              await Clipboard.setStringAsync(pgnOf(b.moves));
+              showToast("Đã chép PGN.");
+            }}
+          />
+        </View>
         <Text style={s.note}>Ván đang chơi thì không phân tích được thế cờ hiện tại. Mũi tên xanh là nước máy chọn (tắt ở Tùy chọn → Mũi tên gợi ý).</Text>
       </ScrollView>
       <PrefsSheet visible={prefsOpen} onClose={() => setPrefsOpen(false)} />
+      <PastePgnSheet
+        visible={pasteOpen}
+        onClose={() => setPasteOpen(false)}
+        onLoad={(moves) => {
+          save({ ...b, moves, ply: moves.length });
+          showToast(`Đã mở ván ${Math.ceil(moves.length / 2)} nước.`);
+        }}
+      />
     </View>
+  );
+}
+
+/** Dán PGN (từ Think hoặc trang cờ khác) để mở trên bàn phân tích */
+function PastePgnSheet({ visible, onClose, onLoad }: { visible: boolean; onClose: () => void; onLoad: (moves: string[]) => void }) {
+  const c = useColors();
+  const s = useStyles(makeStyles);
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (visible) setError(null);
+  }, [visible]);
+  function open() {
+    try {
+      const moves = movesFromPgn(text);
+      onLoad(moves);
+      setText("");
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không đọc được PGN này.");
+    }
+  }
+  return (
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title="Dán PGN"
+      footer={<Button title="Mở trên bàn phân tích" icon="insights" disabled={!text.trim()} onPress={open} />}
+    >
+      <Text style={s.muted}>Dán PGN của một ván (chép từ Think hoặc trang cờ khác). Bình luận và nhánh phụ sẽ được bỏ qua.</Text>
+      <TextInput
+        value={text}
+        onChangeText={(v) => {
+          setText(v);
+          setError(null);
+        }}
+        multiline
+        placeholder="1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 …"
+        placeholderTextColor={c.muted}
+        style={s.pgnInput}
+        accessibilityLabel="PGN"
+        autoCorrect={false}
+        autoCapitalize="none"
+        textAlignVertical="top"
+      />
+      <Button
+        title="Dán từ bộ nhớ tạm"
+        icon="content-paste"
+        kind="secondary"
+        small
+        onPress={async () => {
+          const v = await Clipboard.getStringAsync().catch(() => "");
+          if (v) {
+            setText(v);
+            setError(null);
+          } else setError("Bộ nhớ tạm đang trống.");
+        }}
+      />
+      <FormError text={error} />
+    </Sheet>
   );
 }
 
@@ -289,4 +376,14 @@ const makeStyles = (c: Colors) =>
     actions: { flexDirection: "row", gap: 10 },
     muted: { color: c.muted, fontSize: 13 },
     note: { color: c.muted, fontSize: 12, textAlign: "center", lineHeight: 17 },
+    pgnInput: {
+      minHeight: 140,
+      maxHeight: 260,
+      borderRadius: 12,
+      backgroundColor: c.field,
+      padding: 12,
+      color: c.text,
+      fontSize: 14,
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    },
   });

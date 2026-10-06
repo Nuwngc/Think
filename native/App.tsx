@@ -43,7 +43,7 @@ function handleResponse(resp: unknown) {
   ) {
     const go =
       a.type === "chess"
-        ? () => openChess(a.gameId)
+        ? () => openChess(a.gameId, a.tournamentId)
         : a.type === "caro"
           ? () => openCaro(a.gameId)
           : a.type === "farm"

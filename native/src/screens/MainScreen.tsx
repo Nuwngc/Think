@@ -11,7 +11,8 @@ import { ChessHome } from "../chess/ChessHome";
 import { GameScreen } from "../chess/GameScreen";
 import { LocalGame } from "../chess/LocalGame";
 import { AnalysisBoard } from "../chess/AnalysisBoard";
-import { chessBadge, closeAnalysis, closeLocal, useChess } from "../chess/store";
+import { chessBadge, closeAnalysis, closeLocal, closeTournament, useChess } from "../chess/store";
+import { TournamentScreen } from "../chess/Tournament";
 import { SocialHost } from "../social/SocialHost";
 import { StreakHost } from "../streaks/ui";
 import { closeUser, useSocial } from "../social/store";
@@ -54,6 +55,7 @@ export function MainScreen() {
   const gameId = useChess((s) => s.openId);
   const localOpen = useChess((s) => s.localOpen);
   const analysisOpen = useChess((s) => s.analysis != null);
+  const tournamentOpen = useChess((s) => s.tournamentOpen);
   const caroId = useCaro((s) => s.openId);
   const caroBot = useCaro((s) => s.botOpen);
   const viewUser = useSocial((s) => s.viewUser);
@@ -78,6 +80,10 @@ export function MainScreen() {
       }
       if (s.tab === "games" && s.gamesView === "chess" && useChess.getState().localOpen) {
         closeLocal();
+        return true;
+      }
+      if (s.tab === "games" && s.gamesView === "chess" && useChess.getState().tournamentOpen != null) {
+        closeTournament(); // ván mở từ trang giải: Quay lại về trang giải, rồi về trang Cờ vua
         return true;
       }
       if (s.tab === "games" && s.gamesView === "caro" && useCaro.getState().openId != null) {
@@ -126,6 +132,8 @@ export function MainScreen() {
       <GameScreen key={gameId} id={gameId} />
     ) : tab === "games" && gamesView === "chess" && localOpen ? (
       <LocalGame />
+    ) : tab === "games" && gamesView === "chess" && tournamentOpen != null ? (
+      <TournamentScreen key={tournamentOpen} id={tournamentOpen} />
     ) : tab === "games" && gamesView === "caro" && caroId != null ? (
       <CaroGame key={caroId} id={caroId} />
     ) : tab === "games" && gamesView === "caro" && caroBot ? (

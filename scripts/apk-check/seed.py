@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Tạo dữ liệu thử cho máy chủ Think chạy trong GitHub Actions (workflow "Kiểm tra APK").
 
-Máy chủ phải chạy với ADMIN_PASSWORD đặt sẵn. Tạo 2 tài khoản:
+Máy chủ phải chạy với ADMIN_PASSWORD đặt sẵn. Tạo 3 tài khoản:
   tester / tester12345  (app trên máy ảo đăng nhập bằng tài khoản này)
   ban    / ban12345     (gửi tin nhắn, đăng bài, có điểm Xếp Khối, có nông trại để các màn hình có dữ liệu)
+  hai    / hai12345     (cùng "ban" mời người thử vào một giải đấu cờ vua)
 """
 import json
 import os
@@ -71,6 +72,7 @@ def main():
 
     tester, tester_id = member("tester", "Người Thử", "tester12345")
     ban, ban_id = member("ban", "Bạn Bè", "ban12345")
+    hai, hai_id = member("hai", "Bạn Hai", "hai12345")
 
     dm = ban.call("/api/conversations/dm", "POST", {"userId": tester_id})
     conv = (dm.get("conversation") or dm).get("id")
@@ -85,7 +87,12 @@ def main():
     ban.call("/api/games/blocks/scores", "POST", {"scores": [{"id": "seed-ban-00000001", "score": 1234, "moves": 60, "lines": 20, "durationMs": 300000, "playedAt": now - 60000}]})
     # Nông trại của "ban": có sẵn 2 ô lúa mì chín để người thử ghé vườn
     ban.call("/api/farm")
-    out = {"testerId": tester_id, "banId": ban_id, "dm": conv}
+    # Giải đấu cờ vua: "ban" mời người thử và "hai"; "hai" đã nhận lời, người thử nhận lời trên app thì giải bắt đầu
+    t = ban.call("/api/chess/tournaments", "POST", {"name": "Cờ nhà", "players": [tester_id, hai_id], "days": 1, "rounds": 1, "rated": False})
+    tid = (t.get("tournament") or {}).get("id")
+    if tid:
+        hai.call(f"/api/chess/tournaments/{tid}/join", "POST", {})
+    out = {"testerId": tester_id, "banId": ban_id, "dm": conv, "tournamentId": tid}
     print(json.dumps(out))
 
 

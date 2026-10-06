@@ -548,6 +548,32 @@ def s_chess_analysis():
         raise RuntimeError("Không về được mục Trò chơi")
 
 
+def s_chess_tournament():
+    """Giải đấu: mở lời mời từ trang Cờ vua, nhận lời thì giải bắt đầu (bảng xếp hạng); xem ván bạn bè đang đánh"""
+    tap_scrolled(r"^Cờ vua\.")
+    if wait_for(r"^Bàn phân tích$", 20) is None:
+        raise RuntimeError("Không mở được trang Cờ vua")
+    tap_scrolled(r"^Giải Cờ nhà\. ")
+    tap(r"^Nhận lời$", 20)
+    if wait_for(r"BẢNG XẾP HẠNG", 25) is None:
+        raise RuntimeError("Nhận lời nhưng giải không bắt đầu")
+    if find(r"^Hạng 1: ") is None:
+        raise RuntimeError("Không thấy bảng xếp hạng của giải")
+    back()
+    if wait_for(r"^Bàn phân tích$", 10) is None:
+        raise RuntimeError("Không quay lại được trang Cờ vua")
+    # Ván Bạn Bè – Bạn Hai trong giải: người thử vào xem
+    tap_scrolled(r"^Xem ván ")
+    if wait_for(r" vs ", 20) is None:
+        raise RuntimeError("Không mở được ván bạn bè đang đánh")
+    back()
+    if wait_for(r"^Bàn phân tích$", 10) is None:
+        raise RuntimeError("Không quay lại được trang Cờ vua")
+    back()
+    if wait_for(HUB, 10) is None:
+        raise RuntimeError("Không về được mục Trò chơi")
+
+
 def s_blocks():
     tap_scrolled(r"^Xếp Khối\.")  # thẻ game, không phải dòng trong khung Quiz hôm nay
     if wait_for(r"^Điểm \d+", 20) is None:
@@ -1000,6 +1026,7 @@ def main():
         step("Rời ván cờ", s_chess_back)
         step("Cờ vua hai người một máy: phong cấp (lỗi bản 0.6)", s_chess_local_promo)
         step("Cờ vua: bàn phân tích (Stockfish trên máy chủ)", s_chess_analysis)
+        step("Cờ vua: giải đấu, xem ván bạn bè", s_chess_tournament)
         step("Xếp Khối (có âm thanh)", s_blocks)
         step("Thoát Xếp Khối", s_blocks_back)
         step("Chuỗi hằng ngày của các game", s_streaks_all)

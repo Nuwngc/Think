@@ -230,6 +230,11 @@ ensureColumn('chess_games', 'takebacks', 'takebacks INTEGER NOT NULL DEFAULT 0')
 // 2.7.0: cờ theo ngày (thời gian mỗi nước, ms; 0 = ván thường), câu nói nhanh gần nhất trong ván người với người
 ensureColumn('chess_games', 'daily_ms', 'daily_ms INTEGER NOT NULL DEFAULT 0');
 ensureColumn('chess_games', 'chat', 'chat TEXT');
+// 2.8.0: ván thuộc giải đấu nào; xin đi lại trong ván với bạn (bên xin, số nước lúc xin)
+ensureColumn('chess_games', 'tournament_id', 'tournament_id INTEGER');
+ensureColumn('chess_games', 'takeback_offer', 'takeback_offer TEXT');
+ensureColumn('chess_games', 'takeback_ply', 'takeback_ply INTEGER');
+db.exec('CREATE INDEX IF NOT EXISTS idx_chess_tournament ON chess_games(tournament_id)');
 if (!db.prepare('PRAGMA table_info(messages)').all().some((c) => c.name === 'updated_at')) {
   // Thời điểm tin nhắn thay đổi lần cuối (thu hồi, cảm xúc, dọn ảnh) để máy người dùng đồng bộ
   db.exec('ALTER TABLE messages ADD COLUMN updated_at INTEGER');

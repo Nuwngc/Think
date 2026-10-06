@@ -3,7 +3,7 @@ import { create } from "zustand";
 
 import { api, ApiError } from "../api";
 import { myColor, tcLabel } from "./format";
-import type { ChessAnalysis, ChessBot, ChessGame, ChessPhrase, ChessRating } from "./types";
+import type { ChessAnalysis, ChessBot, ChessGame, ChessPhrase, ChessRating, ChessTournament } from "./types";
 
 // Dữ liệu cờ vua trong app. Kết nối realtime và thông báo nhỏ nằm ở src/store.ts, gắn vào qua bindChess().
 
@@ -45,6 +45,14 @@ type State = {
   analyses: Record<number, ChessAnalysis>;
   /** Lịch sử ván đã xong (tải dần) */
   history: { ids: number[]; hasMore: boolean; loading: boolean; loaded: boolean };
+  /** Giải đấu của tôi (và giải đang xem) */
+  tournaments: Record<number, ChessTournament>;
+  /** Giải đang mở toàn màn hình */
+  tournamentOpen: number | null;
+  /** Lỗi khi tải giải đang mở */
+  tournamentError: string | null;
+  /** Ván bạn bè đang đánh (không có mình) */
+  live: ChessGame[];
 };
 
 const emptyHistory = () => ({ ids: [] as number[], hasMore: false, loading: false, loaded: false });
@@ -72,6 +80,10 @@ export const useChess = create<State>(() => ({
   sending: {},
   analyses: {},
   history: emptyHistory(),
+  tournaments: {},
+  tournamentOpen: null,
+  tournamentError: null,
+  live: [],
 }));
 
 const get = useChess.getState;
@@ -82,7 +94,7 @@ type Bridge = {
   closed?: () => void;
   meId: () => number;
   nameOf: (id: number | null | undefined) => string;
-  toast: (text: string, extra?: { title?: string; senderId?: number; chessGameId?: number }) => void;
+  toast: (text: string, extra?: { title?: string; senderId?: number; chessGameId?: number; chessTournamentId?: number }) => void;
   onTab: () => boolean;
   showChess: () => void;
 };
@@ -124,6 +136,10 @@ export function resetChess() {
     sending: {},
     analyses: {},
     history: emptyHistory(),
+    tournaments: {},
+    tournamentOpen: null,
+    tournamentError: null,
+    live: [],
   });
 }
 
@@ -195,6 +211,8 @@ export async function loadChess() {
       };
     });
     upsert(list);
+    loadTournaments();
+    loadLive();
   } catch (err) {
     set({ error: err instanceof Error ? err.message : "Không tải được cờ vua." });
   } finally {
@@ -408,6 +426,18 @@ async function act(fn: () => Promise<{ game: ChessGame }>) {
 }
 
 export const resign = (id: number) => act(() => api.chessResign(id));
+/** Ván giao hữu với bạn: xin đi lại / trả lời lời xin */
+export const askTakeback = (id: number, action: "offer" | "accept" | "decline") => act(() => api.chessTakebackAsk(id, action));
+
+/** Lấy PGN của một ván (máy chủ ghi tên người chơi, ngày, kết quả) */
+export async function gamePgn(id: number) {
+  try {
+    return await api.chessPgn(id);
+  } catch (err) {
+    bridge.toast(err instanceof Error ? err.message : "Không lấy được PGN của ván.");
+    return null;
+  }
+}
 export const abort = (id: number) => act(() => api.chessAbort(id));
 export const draw = (id: number, action: "offer" | "accept" | "decline") => act(() => api.chessDraw(id, action));
 
@@ -478,6 +508,116 @@ export function onAnalysisEvent(data: { gameId: number; analysis: ChessAnalysis 
   }
 }
 
+/* ---------------- Giải đấu vòng tròn, ván bạn bè đang đánh ---------------- */
+
+/** "Giải mùa thu" giữ nguyên, "Cờ nhà" thành "Giải Cờ nhà" (giống web và máy chủ) */
+export const tLabel = (name: string) => (/^giải\s/i.test(name) ? name : `Giải ${name}`);
+
+function putTournaments(list: ChessTournament[]) {
+  set((s) => {
+    const tournaments = { ...s.tournaments };
+    for (const t of list) tournaments[t.id] = t;
+    return { tournaments };
+  });
+}
+
+export async function loadTournaments() {
+  try {
+    const data = await api.chessTournaments();
+    putTournaments(data.tournaments);
+  } catch {
+    /* thử lại lần sau */
+  }
+}
+
+export async function loadTournament(id: number) {
+  try {
+    const { tournament } = await api.chessTournament(id);
+    putTournaments([tournament]);
+    if (get().tournamentOpen === id) set({ tournamentError: null });
+  } catch (err) {
+    if (get().tournamentOpen === id) set({ tournamentError: err instanceof Error ? err.message : "Không tải được giải đấu." });
+  }
+}
+
+/** Mở trang một giải (TournamentScreen). Mở ván từ trang giải thì Quay lại về trang giải. */
+export function openTournament(id: number) {
+  set({ tournamentOpen: id, tournamentError: null, openId: null, analysis: null, localOpen: false });
+  loadTournament(id);
+}
+export function closeTournament() {
+  set({ tournamentOpen: null, tournamentError: null });
+}
+
+export async function createTournament(body: { name: string; players: number[]; days: number; rounds: number; rated: boolean }) {
+  const { tournament } = await api.chessCreateTournament(body);
+  putTournaments([tournament]);
+  openTournament(tournament.id);
+  return tournament;
+}
+
+export async function tournamentAct(id: number, action: "join" | "decline" | "start" | "cancel") {
+  try {
+    const { tournament } = await api.chessTournamentAct(id, action);
+    putTournaments([tournament]);
+    if (tournament.status === "active") loadChess();
+    return tournament;
+  } catch (err) {
+    bridge.toast(err instanceof Error ? err.message : "Chưa làm được.");
+    loadTournament(id);
+    return null;
+  }
+}
+
+/** Giải của tôi: đang mời / đang đấu trước, giải đã xong chỉ giữ 3 giải gần nhất */
+export function myTournaments(tournaments: Record<number, ChessTournament>, meId: number) {
+  const order: Record<string, number> = { open: 0, active: 1, finished: 2 };
+  const when = (t: ChessTournament) => t.endedAt || t.startedAt || t.createdAt;
+  const list = Object.values(tournaments)
+    .filter((t) => order[t.status] != null && t.players.some((p) => p.userId === meId && p.status !== "declined"))
+    .sort((a, b) => order[a.status] - order[b.status] || when(b) - when(a));
+  return [...list.filter((t) => t.status !== "finished"), ...list.filter((t) => t.status === "finished").slice(0, 3)];
+}
+
+export async function loadLive() {
+  try {
+    const { games } = await api.chessLive();
+    set({ live: games });
+  } catch {
+    /* thôi */
+  }
+}
+
+export function onTournamentEvent(data: { tournament: ChessTournament }) {
+  const t = data?.tournament;
+  if (!t) return;
+  const prev = get().tournaments[t.id];
+  putTournaments([t]);
+  const me = bridge.meId();
+  const meP = t.players.find((p) => p.userId === me);
+  const here = get().tournamentOpen === t.id;
+  if (!prev && meP?.status === "invited") {
+    bridge.toast(`${bridge.nameOf(t.creatorId)} mời bạn vào ${tLabel(t.name)}. Chạm để xem.`, {
+      title: "🏆 Giải đấu cờ vua",
+      senderId: t.creatorId,
+      chessTournamentId: t.id,
+    });
+  }
+  if (prev?.status === "active" && t.status === "finished" && !here) {
+    bridge.toast(
+      t.winners.includes(me) ? `🏆 Bạn vô địch ${tLabel(t.name)}!` : `🏆 ${t.winners.map((id) => bridge.nameOf(id)).join(", ")} vô địch ${tLabel(t.name)}.`,
+      { chessTournamentId: t.id },
+    );
+  }
+  if (prev?.status === "open" && t.status === "active") loadChess();
+}
+
+/** Máy chủ báo tải lại (vd giải vừa bắt đầu, có ván mới) */
+export function onChessRefresh(data: { tournamentId?: number } | null) {
+  loadChess();
+  if (data?.tournamentId != null && get().tournamentOpen === data.tournamentId) loadTournament(data.tournamentId);
+}
+
 /* ---------------- Sự kiện realtime ---------------- */
 
 export function onChessEvent(event: "chess:game" | "chess:challenge", data: { game: ChessGame }) {
@@ -487,6 +627,9 @@ export function onChessEvent(event: "chess:game" | "chess:challenge", data: { ga
   const prev = get().games[g.id];
   upsert([g]);
   const open = get().openId === g.id;
+  // Ván của giải đang mở: cập nhật bảng xếp hạng / số nước
+  if (g.tournament && get().tournamentOpen === g.tournament.id && (!prev || prev.status !== g.status || prev.moves.length !== g.moves.length))
+    loadTournament(g.tournament.id);
 
   if (event === "chess:challenge") {
     if (g.status === "challenge" && g.opponentId === me && !prev) {
@@ -518,12 +661,13 @@ export function onChessEvent(event: "chess:game" | "chess:challenge", data: { ga
   }
 }
 
-/** Số việc cần làm ở tab Cờ vua: lời thách đấu gửi tới mình + ván đang tới lượt mình */
+/** Số việc cần làm ở tab Cờ vua: lời thách đấu gửi tới mình + ván đang tới lượt mình + lời mời vào giải đấu */
 export function chessBadge(s: State, meId: number) {
   let n = 0;
   for (const g of Object.values(s.games)) {
     if (g.status === "challenge" && g.opponentId === meId) n++;
     else if (g.status === "active" && myColor(g, meId) === g.turn) n++;
   }
+  for (const t of Object.values(s.tournaments || {})) if (t.status === "open" && t.players.some((p) => p.userId === meId && p.status === "invited")) n++;
   return n;
 }

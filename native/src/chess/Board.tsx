@@ -7,6 +7,7 @@ import { ClassBadge } from "./Analysis";
 import { squareAt, squares, squareXY } from "./anim";
 import { makeLayout, type Layout, type Sprite } from "./layout";
 import { PIECES } from "./pieces";
+import { premoveTargets } from "./premove";
 import { themeOf, usePrefs } from "./prefs";
 import type { Color, MoveClass } from "./types";
 
@@ -19,6 +20,8 @@ const SELECTED = "rgba(242,176,30,0.75)";
 const CHECK = "rgba(214,48,32,0.7)";
 const HINT = "rgba(20,32,28,0.28)";
 const HOVER = "rgba(255,255,255,0.75)";
+/** Ô của nước đi trước: xanh dương để khác màu vàng của nước vừa đi (giống bản web) */
+const PREMOVE = "rgba(48,110,210,0.5)";
 
 const FILES = "abcdefgh";
 const NAMES: Record<string, string> = { k: "Vua", q: "Hậu", r: "Xe", b: "Tượng", n: "Mã", p: "Tốt" };
@@ -39,7 +42,7 @@ type SquareProps = {
   /** Màu ô sáng / tối (theo Tùy chọn → Màu bàn cờ) */
   colors: { light: string; dark: string };
   size: number;
-  mark: "last" | "sel" | "check" | null;
+  mark: "last" | "sel" | "check" | "pre" | null;
   hover: boolean;
   fileLabel: string | null;
   rankLabel: string | null;
@@ -63,7 +66,7 @@ const SquareView = memo(function SquareView({ sq, light, colors, size, mark, hov
             StyleSheet.absoluteFill,
             mark === "check"
               ? { backgroundColor: CHECK, borderRadius: size / 2, transform: [{ scale: 0.92 }] }
-              : { backgroundColor: mark === "sel" ? SELECTED : LAST },
+              : { backgroundColor: mark === "sel" ? SELECTED : mark === "pre" ? PREMOVE : LAST },
           ]}
         />
       ) : null}
@@ -139,6 +142,12 @@ export type BoardProps = {
   onIllegal?: () => void;
   /** Tô sáng một ô (vd gợi ý của câu đố: quân cần đi) */
   highlight?: string | null;
+  /** Đi trước (premove): màu quân của mình khi chưa tới lượt (null = không cho) */
+  premoveColor?: Color | null;
+  /** Nước đi trước đang đặt */
+  premove?: { from: string; to: string } | null;
+  /** Đặt / bỏ (null) nước đi trước */
+  onPremove?: (pm: { from: string; to: string } | null) => void;
 };
 
 const ARROW = "rgba(21,120,90,0.78)";
@@ -188,6 +197,9 @@ export function Board({
   badge,
   onIllegal,
   highlight,
+  premoveColor,
+  premove,
+  onPremove,
 }: BoardProps) {
   const cell = Math.floor(size / 8);
   const themeId = usePrefs((p) => p.theme);
@@ -239,6 +251,10 @@ export function Board({
     }
     return map;
   }, [chess, selected, canMove]);
+
+  // Đi trước: chưa tới lượt, chọn quân mình thì hiện các ô có thể đặt nước
+  const pre = !canMove && premoveColor && onPremove ? premoveColor : null;
+  const preTargets = useMemo(() => new Set(pre && selected && !premove ? premoveTargets(fen, selected) : []), [pre, selected, premove, fen]);
 
   const checkSq = useMemo(() => {
     if (!chess.inCheck()) return null;
@@ -322,12 +338,27 @@ export function Board({
   }, []);
   /** Chỗ ngón tay chạm xuống (tọa độ màn hình) của lần chạm này */
   const start = useRef<{ x: number; y: number } | null>(null);
-  const drag = useRef<{ from: Square; id: number; moves: Move[] } | null>(null);
-  const state = useRef({ selected, targets, canMove, chess, movable, onMove, onIllegal, layout, cell, orientation });
-  state.current = { selected, targets, canMove, chess, movable, onMove, onIllegal, layout, cell, orientation };
+  const drag = useRef<{ from: Square; id: number; moves: Move[]; pre: string[] | null } | null>(null);
+  const state = useRef({ selected, targets, canMove, chess, movable, onMove, onIllegal, layout, cell, orientation, pre, preTargets, premove, onPremove, fen });
+  state.current = { selected, targets, canMove, chess, movable, onMove, onIllegal, layout, cell, orientation, pre, preTargets, premove, onPremove, fen };
 
   const press = useCallback((sq: Square) => {
     const { selected: sel, targets: tg, canMove: can, chess: ch, movable: mv, onMove: done, onIllegal: bad } = state.current;
+    const st = state.current;
+    if (st.pre) {
+      // Đi trước: đã đặt nước thì chạm bất kỳ đâu để bỏ; chọn quân mình rồi chọn ô đến
+      if (st.premove) {
+        st.onPremove?.(null);
+        setSelected(null);
+      } else if (sel && st.preTargets.has(sq)) {
+        st.onPremove?.({ from: sel, to: sq });
+        setSelected(null);
+      } else {
+        const p = ch.get(sq);
+        setSelected(p && p.color === st.pre && sel !== sq ? sq : null);
+      }
+      return;
+    }
     if (!can) return;
     const moves = sel ? tg.get(sq) : undefined;
     if (sel && moves?.length) {
@@ -368,10 +399,10 @@ export function Board({
         onMoveShouldSetPanResponderCapture: (_e, g) => {
           const st = state.current;
           const s0 = start.current;
-          if (!st.canMove || !s0 || Math.hypot(g.dx, g.dy) < 6) return false;
+          if (!(st.canMove || st.pre) || !s0 || Math.hypot(g.dx, g.dy) < 6) return false;
           const sq = squareOf(s0.x, s0.y);
           const p = sq ? st.chess.get(sq) : null;
-          return Boolean(p && p.color === st.movable);
+          return Boolean(p && p.color === (st.canMove ? st.movable : st.pre));
         },
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
@@ -380,7 +411,8 @@ export function Board({
           const from = s0 ? squareOf(s0.x, s0.y) : null;
           const sp = from ? st.layout.sprites.find((x) => x.sq === from) : null;
           if (!from || !sp) return;
-          drag.current = { from, id: sp.id, moves: st.chess.moves({ square: from, verbose: true }) as Move[] };
+          const preList = st.canMove ? null : premoveTargets(st.fen, from);
+          drag.current = { from, id: sp.id, moves: preList ? [] : (st.chess.moves({ square: from, verbose: true }) as Move[]), pre: preList };
           setSelected(from);
           setDragId(sp.id);
           setHover(from);
@@ -404,6 +436,16 @@ export function Board({
           const to = squareOf(g.moveX, g.moveY);
           const moves = to ? d.moves.filter((m) => m.to === to) : [];
           const v = pos.get(d.id);
+          if (d.pre) {
+            // Đi trước: quân về chỗ cũ (chưa đi thật), ô đi và ô đến tô xanh
+            if (v)
+              Animated.timing(v, { toValue: squareXY(d.from, c, o), duration: 160, easing: Easing.out(Easing.cubic), useNativeDriver: nativeDriver }).start();
+            if (to && d.pre.includes(to)) {
+              state.current.onPremove?.({ from: d.from, to });
+              setSelected(null);
+            } else setSelected(d.from);
+            return;
+          }
           if (to && moves.length) {
             v?.setValue(squareXY(to, c, o)); // thả đúng ô: quân nằm luôn ở đó, không trượt lại
             const before = state.current.layout.fen;
@@ -453,9 +495,20 @@ export function Board({
           {order.map((f, fi) => {
             const sq = `${FILES[f]}${8 - r}` as Square;
             const code = cur.get(sq) || null;
-            const mark = sq === selected ? "sel" : sq === checkSq ? "check" : showLast && (sq === lf || sq === lt) ? "last" : null;
+            const isPre = premove && (sq === premove.from || sq === premove.to);
+            const mark = isPre
+              ? "pre"
+              : sq === selected
+                ? pre
+                  ? "pre"
+                  : "sel"
+                : sq === checkSq
+                  ? "check"
+                  : showLast && (sq === lf || sq === lt)
+                    ? "last"
+                    : null;
             // Trình đọc màn hình vẫn báo ô đi được kể cả khi tắt chấm chỉ dẫn
-            const label = `${sq}${code ? `, ${NAMES[code[1].toLowerCase()]} ${code[0] === "w" ? "trắng" : "đen"}` : ""}${targets.has(sq) ? ", đi được" : ""}`;
+            const label = `${sq}${code ? `, ${NAMES[code[1].toLowerCase()]} ${code[0] === "w" ? "trắng" : "đen"}` : ""}${targets.has(sq) ? ", đi được" : preTargets.has(sq) ? ", đi trước được" : ""}${premove && sq === premove.to ? ", nước đi trước" : ""}`;
             return (
               <SquareView
                 key={sq}
@@ -501,7 +554,7 @@ export function Board({
           <PieceSprite key={sp.id} code={sp.code} size={cell} pos={valueOf(sp)} lifted={sp.id === dragId} />
         ))}
         {/* Chấm chỉ dẫn nằm trên quân (vòng tròn quanh quân có thể ăn) */}
-        {[...targets.keys()].map((sq) => {
+        {[...targets.keys(), ...preTargets].map((sq) => {
           if (!hints) return null;
           const { x, y } = squareXY(sq, cell, orientation);
           return (

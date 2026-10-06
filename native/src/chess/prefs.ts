@@ -18,6 +18,8 @@ export type ChessPrefs = {
   sound: boolean;
   /** Bong bóng câu nói của máy và câu nói nhanh của bạn bè */
   talk: boolean;
+  /** Đi trước (premove): lúc đối thủ đang nghĩ thì chọn sẵn nước, tới lượt tự đi */
+  premove: boolean;
   /** Màu bàn cờ (BOARD_THEMES) */
   theme: string;
 };
@@ -34,7 +36,17 @@ export const BOARD_THEMES = [
 
 export const themeOf = (id: string) => BOARD_THEMES.find((t) => t.id === id) || BOARD_THEMES[0];
 
-export const DEFAULT_PREFS: ChessPrefs = { hints: true, lastMove: true, coords: true, arrows: true, anim: true, sound: true, talk: true, theme: "green" };
+export const DEFAULT_PREFS: ChessPrefs = {
+  hints: true,
+  lastMove: true,
+  coords: true,
+  arrows: true,
+  anim: true,
+  sound: true,
+  talk: true,
+  premove: true,
+  theme: "green",
+};
 
 const KEY = "think.chessPrefs";
 

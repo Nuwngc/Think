@@ -1,9 +1,10 @@
+import * as Clipboard from "expo-clipboard";
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { AccessibilityInfo, ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { shareGame } from "../social/store";
-import { hideToast, leaveGame, useStore } from "../store";
+import { hideToast, leaveGame, showToast, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import { Avatar, Button, confirm, Icon, IconButton, useStyles } from "../ui";
 import { AnalysisPanel, EvalBar, EvalGraph, ReviewCoach } from "./Analysis";
@@ -11,9 +12,27 @@ import { Board, PieceImage } from "./Board";
 import { clockText, material, MOVE_CLASS, myColor, NOTABLE, opponentColor, outcomeFor, reasonText, replay, resultTitle, tcLabel } from "./format";
 import { SideAvatar, useNow, useSide } from "./parts";
 import { loadPrefs, usePrefs } from "./prefs";
+import { resolvePremove } from "./premove";
 import { PhrasesSheet, PrefsSheet } from "./Sheets";
 import { holdSounds, playSound, soundForSan } from "./sound";
-import { abort, answerChallenge, askHint, closeGame, draw, loadGameFresh, openAnalysis, playMove, rematch, resign, takeBack, useChess } from "./store";
+import {
+  abort,
+  answerChallenge,
+  askHint,
+  askTakeback,
+  closeGame,
+  draw,
+  gamePgn,
+  loadGameFresh,
+  openAnalysis,
+  openTournament,
+  playMove,
+  rematch,
+  resign,
+  takeBack,
+  tLabel,
+  useChess,
+} from "./store";
 import type { ChessGame, Color } from "./types";
 
 // Màn hình một ván cờ: bàn cờ, đồng hồ hai bên, danh sách nước đi, mời hòa / đầu hàng, kết quả.
@@ -64,7 +83,7 @@ function Header({ title, sub, right }: { title: string; sub?: string; right?: Re
   );
 }
 
-const modeText = (g: ChessGame) => `${tcLabel(g)} · ${g.bot ? "Chơi với máy" : g.rated ? "Tính điểm ELO" : "Giao hữu"}`;
+const modeText = (g: ChessGame) => `${tcLabel(g)} · ${g.bot ? "Chơi với máy" : g.tournament ? tLabel(g.tournament.name) : g.rated ? "Tính điểm ELO" : "Giao hữu"}`;
 
 /* =========================================================
    Ván cờ
@@ -123,6 +142,22 @@ function Game({ g }: { g: ChessGame }) {
   const fen = showBest ? fens[ply - 1] : live ? g.fen : fens[ply] || g.fen;
   const lastMove = !showBest && ply > 0 ? g.moves[ply - 1] : null;
   const movable = live && active && mine && g.turn === mine && !sending ? mine : null;
+  // Đi trước (premove): đối thủ đang nghĩ thì chọn sẵn nước; tới lượt mình thì tự đi nếu còn hợp lệ.
+  // tb: số lần đi lại lúc đặt (ván vừa đi lại thì bỏ nước đã đặt)
+  const [premove, setPremove] = useState<{ from: string; to: string; tb: number } | null>(null);
+  const preColor = prefs.premove && live && active && mine && g.turn !== mine ? mine : null;
+  useEffect(() => {
+    if (!premove) return;
+    if (!active || !mine || premove.tb !== (g.takebacks || 0)) {
+      setPremove(null);
+      return;
+    }
+    if (g.turn !== mine || sending) return;
+    setPremove(null);
+    const uci = resolvePremove(g.fen, premove);
+    if (uci) playMove(g.id, uci);
+    else AccessibilityInfo.announceForAccessibility("Nước đi trước không còn hợp lệ nên đã bỏ.");
+  }, [premove, active, mine, g.turn, g.fen, g.takebacks, sending, g.id]);
   const mat = useMemo(() => material(fen), [fen]);
   useEffect(() => setBestView(false), [ply]);
 
@@ -238,7 +273,19 @@ function Game({ g }: { g: ChessGame }) {
     }
   }
 
-  const canAbort = active && mine && total < 2;
+  const canAbort = active && mine && total < 2 && !g.tournament;
+  // Xin đi lại (ván giao hữu với bạn, không trong giải)
+  const canAskBack = Boolean(active && mine && !g.bot && !g.rated && !g.tournament);
+  const myMoves = mine === "w" ? Math.ceil(total / 2) : Math.floor(total / 2);
+  const backFromOpp = canAskBack && mine && g.takebackOffer === opponentColor(mine);
+  const backFromMe = canAskBack && g.takebackOffer === mine;
+
+  async function copyPgn() {
+    const text = await gamePgn(g.id);
+    if (!text) return;
+    await Clipboard.setStringAsync(text);
+    showToast("Đã chép PGN của ván. Dán vào Bàn phân tích hoặc trang cờ khác để xem.");
+  }
   const offerFromOpp = active && mine && g.drawOffer === opponentColor(mine);
   const offerFromMe = active && mine && g.drawOffer === mine;
   const firstLeft = g.firstMoveDeadline ? g.firstMoveDeadline - g.serverNow - elapsed : null;
@@ -279,6 +326,9 @@ function Game({ g }: { g: ChessGame }) {
           lastMove={lastMove}
           onMove={(uci) => playMove(g.id, uci)}
           onIllegal={() => playSound("illegal")}
+          premoveColor={preColor}
+          premove={premove}
+          onPremove={(pm) => setPremove(pm ? { ...pm, tb: g.takebacks || 0 } : null)}
           hints={prefs.hints}
           showLast={prefs.lastMove}
           coords={prefs.coords}
@@ -356,6 +406,27 @@ function Game({ g }: { g: ChessGame }) {
               {status}
             </Text>
           ) : null}
+          {premove && active ? (
+            <Pressable onPress={() => setPremove(null)} style={[s.banner, { backgroundColor: c.field }]} accessibilityRole="button" accessibilityLabel={`Bỏ nước đi trước ${premove.from} ${premove.to}`}>
+              <Icon name="schedule" size={18} color={c.text2} />
+              <Text style={s.bannerText}>
+                Đã đặt nước đi trước {premove.from}–{premove.to}. <Text style={{ color: c.accent, fontWeight: "800" }}>Bỏ</Text>
+              </Text>
+            </Pressable>
+          ) : null}
+          {g.tournament ? (
+            <Pressable
+              onPress={() => openTournament(g.tournament!.id)}
+              style={[s.banner, { backgroundColor: c.turmericWash }]}
+              accessibilityRole="button"
+              accessibilityLabel={`Ván thuộc ${tLabel(g.tournament.name)}. Xem bảng xếp hạng`}
+            >
+              <Text style={{ fontSize: 18 }}>🏆</Text>
+              <Text style={s.bannerText}>
+                Ván thuộc {tLabel(g.tournament.name)}. <Text style={{ color: c.accent, fontWeight: "800" }}>Xem bảng xếp hạng</Text>
+              </Text>
+            </Pressable>
+          ) : null}
 
           {offerFromOpp ? (
             <View style={[s.offer, { backgroundColor: c.jadeWash }]}>
@@ -366,6 +437,17 @@ function Game({ g }: { g: ChessGame }) {
             </View>
           ) : offerFromMe ? (
             <Text style={s.muted}>Bạn đã mời hòa, chờ {opp.name} trả lời.</Text>
+          ) : null}
+
+          {backFromOpp ? (
+            <View style={[s.offer, { backgroundColor: c.jadeWash }]}>
+              <Icon name="undo" size={22} color={c.accent} />
+              <Text style={[s.bannerText, { color: c.text }]}>{opp.name} xin đi lại nước vừa rồi.</Text>
+              <Button title="Cho đi lại" small busy={busy === "back-accept"} onPress={() => run("back-accept", () => askTakeback(g.id, "accept"))} />
+              <Button title="Không" small kind="secondary" busy={busy === "back-decline"} onPress={() => run("back-decline", () => askTakeback(g.id, "decline"))} />
+            </View>
+          ) : backFromMe ? (
+            <Text style={s.muted}>Bạn đã xin đi lại, chờ {opp.name} trả lời.</Text>
           ) : null}
 
           {!active ? <Result g={g} mine={mine} /> : null}
@@ -393,11 +475,30 @@ function Game({ g }: { g: ChessGame }) {
               </Text>
             </View>
           ) : null}
+          {!active && total > 0 ? (
+            <Button title="Chép PGN" icon="content-copy" kind="secondary" small style={{ alignSelf: "center" }} busy={busy === "pgn"} onPress={() => run("pgn", copyPgn)} />
+          ) : null}
 
           {!active ? <AnalysisPanel g={g} ply={ply} onJump={(p) => jump(p)} viewer={!mine} /> : null}
 
-          {canTalk ? (
-            <Button title="Nói nhanh" icon="chat-bubble-outline" kind="secondary" small style={{ alignSelf: "center" }} onPress={() => setPhrasesOpen(true)} />
+          {canAskBack || canTalk ? (
+            <View style={[s.actions, { justifyContent: "center" }]}>
+              {canAskBack ? (
+                <Button
+                  title="Xin đi lại"
+                  icon="undo"
+                  kind="secondary"
+                  small
+                  style={{ flex: 1 }}
+                  disabled={!myMoves || Boolean(g.takebackOffer) || sending}
+                  busy={busy === "back-offer"}
+                  onPress={() => run("back-offer", () => askTakeback(g.id, "offer"))}
+                />
+              ) : null}
+              {canTalk ? (
+                <Button title="Nói nhanh" icon="chat-bubble-outline" kind="secondary" small style={canAskBack ? { flex: 1 } : undefined} onPress={() => setPhrasesOpen(true)} />
+              ) : null}
+            </View>
           ) : null}
           {active && mine && g.bot ? (
             <View style={s.actions}>
@@ -466,7 +567,12 @@ function Game({ g }: { g: ChessGame }) {
                   style={{ flex: 1 }}
                   busy={busy === "resign"}
                   onPress={async () => {
-                    if (await confirm("Đầu hàng?", g.rated ? "Bạn sẽ thua ván này và bị trừ điểm ELO." : "Bạn sẽ thua ván này.", "Đầu hàng"))
+                    const why = g.tournament
+                      ? `Bạn thua ván này, ${opp.name} được 1 điểm trong giải.`
+                      : g.rated
+                        ? "Bạn sẽ thua ván này và bị trừ điểm ELO."
+                        : "Bạn sẽ thua ván này.";
+                    if (await confirm("Đầu hàng?", why, "Đầu hàng"))
                       run("resign", () => resign(g.id));
                   }}
                 />

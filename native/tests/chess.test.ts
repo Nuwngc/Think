@@ -11,6 +11,13 @@ const api = vi.hoisted(() => ({
   chessHint: vi.fn(),
   chessTakeback: vi.fn(),
   chessSay: vi.fn(),
+  chessTakebackAsk: vi.fn(),
+  chessPgn: vi.fn(),
+  chessLive: vi.fn(),
+  chessTournaments: vi.fn(),
+  chessTournament: vi.fn(),
+  chessCreateTournament: vi.fn(),
+  chessTournamentAct: vi.fn(),
 }));
 
 vi.mock("../src/api", () => {
@@ -31,8 +38,20 @@ import { clockText, coachText, evalText, material, MOVE_CLASS, moveComment, outc
 import { playAt, pvText } from "../src/chess/analysisBoard";
 import { localState, localStatusText } from "../src/chess/local";
 import { BOARD_THEMES, themeOf } from "../src/chess/prefs";
+import { movesFromPgn, pgnOf } from "../src/chess/pgn";
+import { premoveTargets, resolvePremove } from "../src/chess/premove";
 import {
   askHint,
+  askTakeback,
+  closeTournament,
+  createTournament,
+  loadLive,
+  myTournaments,
+  onChessRefresh,
+  onTournamentEvent,
+  openTournament,
+  tLabel,
+  tournamentAct,
   bindChess,
   chessBadge,
   closeGame,
@@ -47,7 +66,7 @@ import {
   takeBack,
   useChess,
 } from "../src/chess/store";
-import type { ChessGame } from "../src/chess/types";
+import type { ChessGame, ChessTournament } from "../src/chess/types";
 
 const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -385,5 +404,148 @@ describe("cờ vua 2.7", () => {
     api.chessSay.mockRejectedValueOnce(new ApiError("Từ từ thôi, đợi vài giây nhé.", 429));
     expect(await sayPhrase(1, "hi")).toBe(false);
     expect(toasts).toContain("Từ từ thôi, đợi vài giây nhé.");
+  });
+});
+
+function tournament(over: Partial<ChessTournament> = {}): ChessTournament {
+  return {
+    id: 7,
+    name: "Giải mùa thu",
+    creatorId: 2,
+    status: "open",
+    daily: 86400000,
+    rated: false,
+    rounds: 1,
+    createdAt: 10,
+    startedAt: null,
+    endedAt: null,
+    players: [
+      { userId: 2, status: "joined" },
+      { userId: 1, status: "invited" },
+      { userId: 3, status: "invited" },
+    ],
+    standings: [],
+    games: [],
+    winners: [],
+    ...over,
+  };
+}
+
+describe("cờ vua 2.8", () => {
+  it("đi trước: ô theo cách quân đi, không xét quân chắn", () => {
+    const sorted = (a: string[]) => [...a].sort();
+    // Tốt trắng ở hàng 2: đi 1, 2 ô và hai ô chéo (ăn quân có thể xuất hiện)
+    expect(sorted(premoveTargets(START, "e2"))).toEqual(["d3", "e3", "e4", "f3"]);
+    // Mã: không ra ngoài bàn; ô có quân mình vẫn đặt được (quân đó có thể bị ăn trước)
+    expect(sorted(premoveTargets(START, "g1"))).toEqual(["e2", "f3", "h3"]);
+    // Xe bị quân chắn vẫn có cả hàng / cột (trừ ô vua e1)
+    expect(premoveTargets(START, "a1")).toHaveLength(13);
+    expect(premoveTargets(START, "a1")).toContain("a8");
+    // Vua ở e1: thêm ô nhập thành
+    expect(premoveTargets(START, "e1")).toEqual(expect.arrayContaining(["g1", "c1", "d2"]));
+    // Không bao giờ đặt vào ô vua mình
+    expect(premoveTargets(START, "d1")).not.toContain("e1");
+    expect(premoveTargets(START, "e4")).toEqual([]);
+  });
+
+  it("đi trước: tới lượt thì kiểm tra lại, phong cấp thành Hậu", () => {
+    const after = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2";
+    expect(resolvePremove(after, { from: "g1", to: "f3" })).toBe("g1f3");
+    expect(resolvePremove(after, { from: "e4", to: "e5" })).toBeNull(); // bị chặn
+    expect(resolvePremove("8/P6k/8/8/8/8/8/K7 w - - 0 1", { from: "a7", to: "a8" })).toBe("a7a8q");
+  });
+
+  it("PGN: đọc ván dán vào, bỏ bình luận và nhánh phụ, báo lỗi dễ hiểu", () => {
+    expect(movesFromPgn('[Event "x"]\n\n1. e4 e5 2. Nf3 {hay} Nc6 (2... d6) 3. Bb5 a6 *')).toEqual(["e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "a7a6"]);
+    expect(() => movesFromPgn("1. e4 e5 2. Qh5 Ke6 3. Qxe5")).toThrow('Nước "Ke6" không hợp lệ');
+    expect(() => movesFromPgn("1. e4 e5 2. Qh5 Ke9")).toThrow("Không đọc được PGN này.");
+    expect(() => movesFromPgn("   ")).toThrow("Chưa có PGN để dán.");
+    expect(() => movesFromPgn('[SetUp "1"]\n[FEN "8/8/8/8/8/8/4K3/k7 w - - 0 1"]\n\n1. Kd3')).toThrow("thế cờ riêng");
+    const pgn = pgnOf(["e2e4", "e7e5", "g1f3"], new Date(2026, 9, 6));
+    expect(pgn).toContain('[Event "Bàn phân tích"]');
+    expect(pgn).toContain('[Date "2026.10.06"]');
+    expect(pgn).toContain("1. e4 e5 2. Nf3");
+    expect(movesFromPgn(pgn)).toEqual(["e2e4", "e7e5", "g1f3"]);
+  });
+
+  it("tên giải không lặp chữ Giải", () => {
+    expect(tLabel("Giải mùa thu")).toBe("Giải mùa thu");
+    expect(tLabel("Cờ nhà")).toBe("Giải Cờ nhà");
+  });
+
+  it("giải đấu: lời mời báo, nhận lời, tạo giải mở trang giải, danh sách của tôi", async () => {
+    const toasts: { text: string; extra?: unknown }[] = [];
+    resetChess();
+    bindChess({ meId: () => 1, nameOf: (id) => (id === 2 ? "Bình" : "Ai đó"), toast: (text, extra) => toasts.push({ text, extra }), onTab: () => false, showChess: () => undefined });
+    onTournamentEvent({ tournament: tournament() });
+    expect(toasts[0].text).toBe("Bình mời bạn vào Giải mùa thu. Chạm để xem.");
+    expect(toasts[0].extra).toMatchObject({ chessTournamentId: 7 });
+    expect(chessBadge(useChess.getState(), 1)).toBe(1); // lời mời vào giải là một việc cần làm
+    // Nhận lời: giải bắt đầu thì tải lại cờ vua
+    api.chess.mockResolvedValue({ rating: null, bots: [], challenges: [], active: [], recent: [] });
+    api.chessTournaments.mockResolvedValue({ tournaments: [], dailyDays: [1, 2] });
+    api.chessLive.mockResolvedValue({ games: [] });
+    api.chessTournamentAct.mockResolvedValueOnce({ tournament: tournament({ status: "active", players: tournament().players.map((p) => ({ ...p, status: "joined" as const })) }) });
+    const t = await tournamentAct(7, "join");
+    expect(t?.status).toBe("active");
+    expect(useChess.getState().tournaments[7].status).toBe("active");
+    expect(api.chess).toHaveBeenCalled();
+    // Lỗi: báo, tải lại giải
+    api.chessTournamentAct.mockRejectedValueOnce(new ApiError("Giải đã bắt đầu, không đổi được nữa.", 409));
+    api.chessTournament.mockResolvedValueOnce({ tournament: tournament({ status: "active" }) });
+    expect(await tournamentAct(7, "decline")).toBeNull();
+    expect(toasts.map((x) => x.text)).toContain("Giải đã bắt đầu, không đổi được nữa.");
+    // Tạo giải: mở trang giải
+    api.chessCreateTournament.mockResolvedValueOnce({ tournament: tournament({ id: 9, name: "Cờ nhà", creatorId: 1 }) });
+    api.chessTournament.mockResolvedValueOnce({ tournament: tournament({ id: 9, name: "Cờ nhà", creatorId: 1 }) });
+    await createTournament({ name: "Cờ nhà", players: [2, 3], days: 1, rounds: 1, rated: false });
+    expect(useChess.getState().tournamentOpen).toBe(9);
+    closeTournament();
+    expect(useChess.getState().tournamentOpen).toBeNull();
+    // Danh sách của tôi: đang mời trước, đang đấu sau, giải đã xong giữ 3 giải
+    const list = {
+      1: tournament({ id: 1, status: "active", startedAt: 5 }),
+      2: tournament({ id: 2, status: "open" }),
+      3: tournament({ id: 3, status: "finished", endedAt: 1 }),
+      4: tournament({ id: 4, status: "finished", endedAt: 4 }),
+      5: tournament({ id: 5, status: "finished", endedAt: 3 }),
+      6: tournament({ id: 6, status: "finished", endedAt: 2 }),
+      8: tournament({ id: 8, status: "cancelled" }),
+      10: tournament({ id: 10, status: "open", players: [{ userId: 1, status: "declined" }] }),
+    };
+    expect(myTournaments(list, 1).map((x) => x.id)).toEqual([2, 1, 4, 5, 6]);
+    // Giải xong khi không mở trang giải: báo nhà vô địch
+    onTournamentEvent({ tournament: tournament({ id: 1, status: "active" }) });
+    onTournamentEvent({ tournament: tournament({ id: 1, status: "finished", winners: [1] }) });
+    expect(toasts.map((x) => x.text)).toContain("🏆 Bạn vô địch Giải mùa thu!");
+  });
+
+  it("máy chủ báo tải lại: tải cờ vua và giải đang mở", async () => {
+    resetChess();
+    bindChess({ meId: () => 1, nameOf: () => "Bình", toast: () => undefined, onTab: () => false, showChess: () => undefined });
+    api.chess.mockClear();
+    api.chessTournament.mockClear();
+    api.chessTournament.mockResolvedValue({ tournament: tournament({ status: "active" }) });
+    openTournament(7);
+    onChessRefresh({ tournamentId: 7 });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.chess).toHaveBeenCalled();
+    expect(api.chessTournament).toHaveBeenCalledTimes(2);
+    closeTournament();
+  });
+
+  it("xin đi lại với bạn và ván bạn bè đang đánh", async () => {
+    resetChess();
+    bindChess({ meId: () => 1, nameOf: () => "Bình", toast: () => undefined, onTab: () => false, showChess: () => undefined });
+    onChessEvent("chess:game", { game: game({ rated: false, moves: ["e2e4"], turn: "b" }) });
+    api.chessTakebackAsk.mockResolvedValueOnce({ game: game({ rated: false, moves: ["e2e4"], turn: "b", takebackOffer: "w" }) });
+    await askTakeback(1, "offer");
+    expect(useChess.getState().games[1].takebackOffer).toBe("w");
+    // Đồng ý đi lại: ván ít nước hơn nhưng takebacks tăng nên vẫn nhận
+    onChessEvent("chess:game", { game: game({ rated: false, moves: [], turn: "w", takebacks: 1, takebackOffer: null }) });
+    expect(useChess.getState().games[1].moves).toEqual([]);
+    api.chessLive.mockResolvedValueOnce({ games: [game({ id: 5, whiteId: 2, blackId: 3 })] });
+    await loadLive();
+    expect(useChess.getState().live.map((g) => g.id)).toEqual([5]);
   });
 });
