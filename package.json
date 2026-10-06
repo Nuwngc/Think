@@ -1,6 +1,6 @@
 {
   "name": "think-chat",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "private": true,
   "description": "Web chat PWA cho hội bạn: tài khoản do admin cấp, thông báo đẩy, đổi tên / mật khẩu / ảnh đại diện",
   "main": "server.js",

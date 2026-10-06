@@ -1,5 +1,5 @@
 /* Service worker: lưu giao diện để mở nhanh + hiện thông báo đẩy kể cả khi đã đóng app */
-const CACHE = 'think-v17';
+const CACHE = 'think-v18';
 // Ảnh trong tin nhắn và ảnh đại diện đã xem được giữ lại trên máy (tên file không bao giờ đổi),
 // nên vẫn hiện được khi mất mạng hoặc khi máy chủ đã dọn ảnh cũ. Tắt "Lưu trên máy" thì không giữ nữa.
 const MEDIA = 'think-media';
@@ -198,7 +198,8 @@ async function showMessage(d) {
     }
   } catch { /* trình duyệt không hỗ trợ đọc thông báo cũ */ }
   const line = d.isGroup ? `${d.senderName}: ${d.text}` : d.text;
-  lines = lines.concat(line).slice(-5);
+  // Cuộc trò chuyện đã khóa: chỉ một dòng "có tin nhắn mới", không lặp lại
+  lines = d.locked ? [line] : lines.concat(line).slice(-5);
   count += 1;
   const title = d.isGroup ? d.convTitle : d.senderName;
   return self.registration.showNotification(count > 1 ? `${title} (${count} tin nhắn)` : title, {

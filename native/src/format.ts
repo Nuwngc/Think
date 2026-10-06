@@ -85,7 +85,7 @@ export function listNames(ids: number[] | undefined, { meId, nameOf }: Names) {
 
 /** Tin hệ thống trong nhóm, lưu dạng JSON, hiển thị theo tên hiện tại của mọi người */
 export function systemText(m: Pick<Message, "text" | "senderId">, names: Names) {
-  let d: { event?: string; name?: string; targets?: number[]; text?: string | null; image?: boolean; emoji?: string } = {};
+  let d: { event?: string; name?: string; targets?: number[]; text?: string | null; image?: boolean; emoji?: string; removed?: boolean } = {};
   try {
     d = JSON.parse(m.text || "{}");
   } catch {
@@ -109,6 +109,8 @@ export function systemText(m: Pick<Message, "text" | "senderId">, names: Names) 
       return `${actor} đã đổi chủ đề thành ${d.name || "mới"}`;
     case "emoji":
       return `${actor} đã đổi biểu tượng cảm xúc nhanh thành ${d.emoji}`;
+    case "avatar":
+      return d.removed ? `${actor} đã xóa ảnh nhóm` : `${actor} đã đổi ảnh nhóm`;
     default:
       return "Cuộc trò chuyện vừa được cập nhật";
   }
@@ -163,7 +165,11 @@ export function joinedText(ts: number | null | undefined) {
 }
 
 /** Dòng xem trước trong danh sách chat: "Bạn: …", "Minh: …" (nhóm) */
-export function previewText(m: ChatItem, c: Pick<Conversation, "type">, names: Names) {
+/** Xem trước tin của cuộc trò chuyện đã khóa (danh sách, thông báo nhỏ, bong bóng chat): không lộ nội dung */
+export const LOCKED_PREVIEW = "🔒 Tin nhắn đã khóa";
+
+export function previewText(m: ChatItem, c: Pick<Conversation, "type"> & { locked?: boolean }, names: Names) {
+  if (c.locked) return LOCKED_PREVIEW;
   if (m.kind === "system") return systemText(m, names);
   const who = m.senderId === names.meId ? "Bạn" : c.type !== "dm" ? names.nameOf(m.senderId) : "";
   return who ? `${who}: ${messageSummary(m, names)}` : messageSummary(m, names);

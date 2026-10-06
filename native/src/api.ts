@@ -39,7 +39,7 @@ export class ApiError extends Error {
   }
 }
 
-type Method = "GET" | "POST" | "PATCH" | "DELETE";
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 type Options = { method?: Method; body?: unknown; timeout?: number; auth?: boolean; token?: string | null };
 
 let onUnauthorized: ((message: string) => void) | null = null;
@@ -270,6 +270,20 @@ export const api = {
 
   removeMember: (id: number, userId: number) =>
     request<{ ok: true }>(`/api/groups/${id}/members/${userId}`, { method: "DELETE" }),
+
+  /** Ảnh đại diện nhóm (máy đã thu nhỏ trước khi gửi) */
+  uploadGroupAvatar: (id: number, fileUri: string, mime: string) => uploadRaw<{ conversation: Conversation }>(`/api/groups/${id}/avatar`, fileUri, mime),
+  removeGroupAvatar: (id: number) => request<{ conversation: Conversation }>(`/api/groups/${id}/avatar`, { method: "DELETE" }),
+
+  /* ---------------- Khóa cuộc trò chuyện bằng mật khẩu (src/chat-lock.js) ---------------- */
+
+  /** Đặt khóa / đổi mật khẩu (đang khóa thì gửi kèm mật khẩu cũ) */
+  setChatLock: (id: number, password: string, current?: string) =>
+    request<{ conversation: Conversation }>(`/api/conversations/${id}/lock`, { method: "PUT", body: { password, current } }),
+  unlockChat: (id: number, password: string) => request<{ ok: true }>(`/api/conversations/${id}/unlock`, { method: "POST", body: { password } }),
+  /** Bỏ khóa bằng mật khẩu khóa, hoặc bằng mật khẩu đăng nhập khi quên */
+  removeChatLock: (id: number, body: { password: string } | { accountPassword: string }) =>
+    request<{ conversation: Conversation }>(`/api/conversations/${id}/lock`, { method: "DELETE", body }),
 
   /* ---------------- Thông báo đẩy ---------------- */
 

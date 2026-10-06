@@ -226,7 +226,16 @@
     el.classList.toggle('is-group', group);
     el.classList.toggle('is-team', Boolean(team));
     el.classList.toggle('is-online', Boolean(!group && !team && dot && user && user.online && user.id !== state.me?.id));
-    if (team) {
+    if (team && team.avatar) {
+      // Ảnh nhóm (2.9.0): lỗi tải ảnh thì quay về chữ cái
+      el.style.setProperty('--av', colorOf(team.id + 3));
+      const img = h('img', { src: team.avatar, alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' });
+      img.addEventListener('error', () => {
+        img.remove();
+        el.append(initialOf(team.name));
+      }, { once: true });
+      el.append(img);
+    } else if (team) {
       el.style.setProperty('--av', colorOf(team.id + 3));
       el.append(initialOf(team.name));
     } else if (group) {
@@ -275,6 +284,7 @@
       case 'pin': return `${actor} đã ghim một tin nhắn${d.text ? `: “${d.text}”` : d.image ? ' (ảnh)' : ''}`;
       case 'theme': return `${actor} đã đổi chủ đề thành ${d.name || 'mới'}`;
       case 'emoji': return `${actor} đã đổi biểu tượng cảm xúc nhanh thành ${d.emoji}`;
+      case 'avatar': return d.removed ? `${actor} đã xóa ảnh nhóm` : `${actor} đã đổi ảnh nhóm`;
       default: return 'Cuộc trò chuyện vừa được cập nhật';
     }
   }
@@ -655,11 +665,23 @@
     return `${hasImage ? '📷 ' : ''}${String(m.text || '').replace(/\s+/g, ' ')}`;
   }
   function previewText(m, c) {
+    if (c && c.locked) return LOCKED_PREVIEW; // cuộc trò chuyện đã khóa: không lộ nội dung
     if (m.kind === 'system') return systemText(m);
     const who = m.senderId === state.me.id ? 'Bạn' : c.type !== 'dm' ? nameOf(m.senderId) : '';
     return who ? `${who}: ${messageSummary(m)}` : messageSummary(m);
   }
   const lastActivity = (c) => c.lastMessage?.createdAt || c.createdAt || 0;
+
+  /* ----- Khóa cuộc trò chuyện bằng mật khẩu (2.9.0, máy chủ: src/chat-lock.js) -----
+     Mở khóa xong thì xem được tới khi rời cuộc trò chuyện hoặc ẩn trang quá RELOCK_MS; nút ổ khóa trên đầu khung chat khóa lại ngay. */
+  const LOCKED_PREVIEW = '🔒 Tin nhắn đã khóa';
+  const RELOCK_MS = 2 * 60 * 1000;
+  const locks = { open: new Map(), hiddenAt: 0, mode: 'unlock', error: '', busy: false };
+  const isGated = (c) => Boolean(c && c.locked && !((locks.open.get(c.id) || 0) > Date.now()));
+  // Rời một cuộc trò chuyện đã mở khóa: còn xem lại được trong RELOCK_MS
+  function leaveUnlocked(id) {
+    if (id != null && locks.open.get(id) === Infinity) locks.open.set(id, Date.now() + RELOCK_MS);
+  }
 
   function renderConvList() {
     if (!state.me) return;
@@ -698,6 +720,7 @@
       h('span', { class: 'conv-main' },
         h('span', { class: 'conv-row' },
           h('span', { class: 'conv-name', text: convTitle(c) }),
+          c.locked ? h('span', { class: 'conv-flag', title: 'Đã khóa bằng mật khẩu', 'aria-label': 'Đã khóa bằng mật khẩu' }, icon('lock')) : null,
           muted ? h('span', { class: 'conv-flag', title: 'Đã tắt thông báo', 'aria-label': 'Đã tắt thông báo' }, icon('bell-off')) : null,
           c.pinnedAt ? h('span', { class: 'conv-flag', title: 'Đã ghim', 'aria-label': 'Đã ghim' }, icon('pin')) : null,
           h('time', { class: 'conv-time', text: lm ? shortTime(lm.createdAt) : '' })),
@@ -727,6 +750,18 @@
     fillConvAvatar($('#chat-avatar'), c);
     $('#chat-name').textContent = convTitle(c);
     $('#group-info-btn').hidden = IN_BUBBLE;
+    const gated = isGated(c);
+    $('#chat-pane').classList.toggle('is-locked', gated);
+    $('#chat-lock-btn').hidden = !c.locked || gated;
+    // Khóa / bỏ khóa trên máy khác khi đang mở cuộc trò chuyện này
+    const gateShown = !$('#chat-lock').hidden;
+    if (gated && !gateShown) renderLockGate();
+    else if (!gated && gateShown) {
+      hideLockGate();
+      state.currentId = null;
+      openConversation(c.id);
+      return;
+    }
     applyTheme(c);
     // Chat riêng: nút thách đấu cờ vua
     const chessBtn = $('#chess-dm-btn');
@@ -779,10 +814,27 @@
       voice.cancel(); // đang ghi âm dở cho cuộc trò chuyện khác: bỏ
       voice.stop();
     }
+    if (changed) leaveUnlocked(state.currentId);
     state.currentId = id;
     document.body.classList.add('in-chat');
     $('#chat-empty').hidden = true;
     $('#chat-pane').hidden = false;
+    if (isGated(state.convs.get(id))) {
+      // Đã khóa: hỏi mật khẩu trước, chưa tải / hiện tin nhắn
+      if (changed) {
+        locks.mode = 'unlock';
+        locks.error = '';
+        closeChatSearch();
+        hideMentions();
+      }
+      renderChatHeader();
+      renderConvList();
+      renderLockGate();
+      reportVisibility();
+      return;
+    }
+    if (locks.open.has(id) || state.convs.get(id)?.locked) locks.open.set(id, Infinity);
+    hideLockGate();
     renderChatHeader();
     renderConvList();
     if (changed) {
@@ -832,6 +884,8 @@
       voice.cancel();
       voice.stop();
     }
+    leaveUnlocked(state.currentId);
+    hideLockGate();
     state.currentId = null;
     closeChatSearch();
     hideMentions();
@@ -910,7 +964,7 @@
   function renderMessages({ toBottom = false, preserve = false } = {}) {
     const id = state.currentId;
     const c = state.convs.get(id);
-    if (id == null || !c) return;
+    if (id == null || !c || isGated(c)) return;
     const b = state.msgs.get(id);
     const wasNear = isNearBottom();
     const prevHeight = messagesEl.scrollHeight;
@@ -1743,6 +1797,13 @@
     const c = state.convs.get(state.currentId);
     const body = $('#conv-body');
     if (!c) return;
+    if (isGated(c)) {
+      body.replaceChildren(h('div', { class: 'profile' },
+        convAvatarEl(c, 'avatar-xl', { dot: false }),
+        h('p', { class: 'profile-title', text: convTitle(c) }),
+        h('p', { class: 'hint', text: 'Cuộc trò chuyện đang khóa. Mở khóa để xem và tùy chỉnh.' })));
+      return;
+    }
     const t = THEMES[c.theme] || THEMES.default;
     const pins = state.pins.get(c.id) || [];
     const quick = (label, ic, run, on) => h('button', { class: `conv-quick${on ? ' is-on' : ''}`, type: 'button', onclick: run },
@@ -1761,6 +1822,7 @@
         }, isMuted(c)),
         quick(c.pinnedAt ? 'Bỏ ghim' : 'Ghim lên đầu', 'pin', () => setPrefs(c, { pinned: !c.pinnedAt }), Boolean(c.pinnedAt)),
         c.type === 'group' ? quick('Thành viên', 'group', () => navigate('#/group', { replace: true })) : null),
+      lockPanel(c),
       h('div', { class: 'panel' },
         h('h3', { text: `Chủ đề: ${t.name}` }),
         h('div', { class: 'ctheme-grid', role: 'radiogroup', 'aria-label': 'Chủ đề' },
@@ -1791,6 +1853,193 @@
           ? h('div', { class: 'media-grid is-mini' }, media.map((x) => mediaThumb(x)))
           : h('p', { class: 'hint', text: chatPlus.media.loading ? 'Đang tải…' : 'Chưa có ảnh nào.' })));
     if (chatPlus.media.conv !== c.id && !chatPlus.media.loading) renderMedia(true, { quiet: true });
+  }
+
+  /* ----- Màn khóa trong khung chat (cuộc trò chuyện đã khóa, chưa nhập mật khẩu) ----- */
+  function renderLockGate() {
+    const c = state.convs.get(state.currentId);
+    const el = $('#chat-lock');
+    if (!c) return;
+    $('#chat-pane').classList.add('is-locked');
+    messagesEl.replaceChildren();
+    const forgot = locks.mode === 'forgot';
+    const pw = h('input', {
+      type: 'password', class: 'search-input', maxlength: forgot ? '128' : '32', enterkeyhint: 'go',
+      autocomplete: forgot ? 'current-password' : 'off',
+      placeholder: forgot ? 'Mật khẩu đăng nhập' : 'Mật khẩu khóa',
+      'aria-label': forgot ? 'Mật khẩu đăng nhập' : 'Mật khẩu khóa',
+    });
+    const err = h('p', { class: 'form-error', role: 'alert', text: locks.error });
+    err.hidden = !locks.error;
+    const submit = h('button', { class: `btn ${forgot ? 'btn-danger' : 'btn-primary'} btn-block`, type: 'submit' }, forgot ? 'Bỏ khóa' : 'Mở khóa');
+    const form = h('form', { class: 'chat-lock-form', novalidate: true }, pw, err, submit);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submitUnlock(c, pw.value, submit);
+    });
+    el.replaceChildren(h('div', { class: 'chat-lock-box' },
+      h('span', { class: 'chat-lock-ic', 'aria-hidden': 'true' }, icon('lock')),
+      h('h3', { text: forgot ? 'Bỏ khóa bằng mật khẩu đăng nhập' : 'Cuộc trò chuyện đã khóa' }),
+      h('p', { class: 'hint', text: forgot
+        ? 'Nhập mật khẩu bạn dùng để đăng nhập Think. Cuộc trò chuyện sẽ hết khóa, muốn khóa lại thì đặt mật khẩu mới.'
+        : 'Nhập mật khẩu bạn đã đặt cho cuộc trò chuyện này để xem tin nhắn.' }),
+      form,
+      h('button', {
+        class: 'chat-lock-link', type: 'button',
+        onclick: () => {
+          locks.mode = forgot ? 'unlock' : 'forgot';
+          locks.error = '';
+          renderLockGate();
+        },
+      }, forgot ? 'Quay lại nhập mật khẩu khóa' : 'Quên mật khẩu?')));
+    el.hidden = false;
+    setTimeout(() => { if (!el.hidden) pw.focus({ preventScroll: true }); }, 60);
+  }
+  function hideLockGate() {
+    const el = $('#chat-lock');
+    el.hidden = true;
+    el.replaceChildren();
+    $('#chat-pane').classList.remove('is-locked');
+  }
+  async function submitUnlock(c, value, btn) {
+    if (!value) {
+      locks.error = locks.mode === 'forgot' ? 'Nhập mật khẩu đăng nhập.' : 'Nhập mật khẩu khóa.';
+      renderLockGate();
+      return;
+    }
+    await withBusy(btn, async () => {
+      try {
+        if (locks.mode === 'forgot') {
+          const { conversation } = await api(`/api/conversations/${c.id}/lock`, { method: 'DELETE', body: { accountPassword: value } });
+          keepConv(conversation);
+          toast('Đã bỏ khóa cuộc trò chuyện.');
+        } else {
+          await api(`/api/conversations/${c.id}/unlock`, { method: 'POST', body: { password: value } });
+        }
+        locks.open.set(c.id, Infinity);
+        locks.error = '';
+        locks.mode = 'unlock';
+        if (state.currentId === c.id) {
+          state.currentId = null; // mở lại từ đầu: tải tin nhắn, bản nháp, tin ghim
+          openConversation(c.id);
+        }
+      } catch (err) {
+        locks.error = err.message;
+        if (state.currentId === c.id) renderLockGate();
+      }
+    });
+  }
+  // Nút ổ khóa trên đầu khung chat: khóa lại ngay
+  function lockNow() {
+    const c = state.convs.get(state.currentId);
+    if (!c || !c.locked) return;
+    locks.open.delete(c.id);
+    if (voice) {
+      voice.cancel();
+      voice.stop();
+    }
+    closeChatSearch();
+    hideMentions();
+    locks.mode = 'unlock';
+    locks.error = '';
+    renderChatHeader();
+    renderLockGate();
+    toast('Đã khóa lại cuộc trò chuyện.');
+  }
+  // Ẩn trang quá lâu: khóa lại mọi cuộc trò chuyện đã mở khóa
+  function relockAll() {
+    locks.open.clear();
+    const c = state.convs.get(state.currentId);
+    if (c && c.locked) {
+      locks.mode = 'unlock';
+      locks.error = '';
+      renderChatHeader();
+      renderLockGate();
+    }
+  }
+
+  /* ----- Phần "Khóa bằng mật khẩu" trong bảng Tùy chỉnh đoạn chat ----- */
+  const lockUi = { conv: null, mode: null, key: null, el: null };
+  function setLockMode(mode) {
+    lockUi.mode = mode;
+    lockUi.key = null;
+    renderConvSheet();
+    setTimeout(() => $('#conv-lock input')?.focus(), 40);
+  }
+  function lockPanel(c) {
+    if (lockUi.conv !== c.id) {
+      lockUi.conv = c.id;
+      lockUi.mode = null;
+    }
+    const mode = lockUi.mode;
+    const key = `${c.id}:${c.locked ? 1 : 0}:${mode || ''}`;
+    if (lockUi.key === key && lockUi.el) return lockUi.el; // giữ nguyên chữ đang gõ khi bảng được vẽ lại
+    lockUi.key = key;
+    const field = (name, label, auto) => h('label', { class: 'field' }, h('span', { text: label }),
+      h('input', { name, type: 'password', maxlength: name === 'account' ? '128' : '32', autocomplete: auto }));
+    let body;
+    if (!mode) {
+      body = h('div', { class: 'btn-row' }, c.locked
+        ? [
+            h('button', { class: 'btn btn-sm', type: 'button', onclick: () => setLockMode('change') }, 'Đổi mật khẩu'),
+            h('button', { class: 'btn btn-sm btn-danger-quiet', type: 'button', onclick: () => setLockMode('remove') }, 'Bỏ khóa'),
+          ]
+        : [h('button', { class: 'btn btn-sm btn-primary', type: 'button', onclick: () => setLockMode('set') }, icon('lock'), 'Đặt mật khẩu')]);
+    } else {
+      const err = h('p', { class: 'form-error', role: 'alert', hidden: true });
+      const submit = h('button', { class: `btn btn-sm ${mode === 'remove' || mode === 'forgot' ? 'btn-danger' : 'btn-primary'}`, type: 'submit' },
+        { set: 'Khóa cuộc trò chuyện', change: 'Lưu mật khẩu mới', remove: 'Bỏ khóa', forgot: 'Bỏ khóa' }[mode]);
+      const form = h('form', { class: 'stack lock-form', novalidate: true },
+        mode === 'change' || mode === 'remove' ? field('current', 'Mật khẩu khóa hiện tại', 'off') : null,
+        mode === 'forgot' ? field('account', 'Mật khẩu đăng nhập Think', 'current-password') : null,
+        mode === 'set' || mode === 'change' ? field('next', mode === 'set' ? 'Mật khẩu khóa (4–32 ký tự)' : 'Mật khẩu mới (4–32 ký tự)', 'new-password') : null,
+        mode === 'set' || mode === 'change' ? field('again', 'Nhập lại mật khẩu', 'new-password') : null,
+        err,
+        h('div', { class: 'btn-row' }, h('button', { class: 'btn btn-sm', type: 'button', onclick: () => setLockMode(null) }, 'Hủy'), submit),
+        mode === 'remove' ? h('button', { class: 'chat-lock-link', type: 'button', onclick: () => setLockMode('forgot') }, 'Quên mật khẩu? Dùng mật khẩu đăng nhập') : null);
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const v = (name) => (form.elements[name] ? form.elements[name].value : '');
+        const fail = (m) => {
+          err.textContent = m;
+          err.hidden = false;
+        };
+        if ((mode === 'set' || mode === 'change') && ([...v('next')].length < 4 || [...v('next')].length > 32)) return fail('Mật khẩu khóa cần từ 4 đến 32 ký tự.');
+        if ((mode === 'set' || mode === 'change') && v('next') !== v('again')) return fail('Hai lần nhập mật khẩu chưa giống nhau.');
+        if ((mode === 'change' || mode === 'remove') && !v('current')) return fail('Nhập mật khẩu khóa hiện tại.');
+        if (mode === 'forgot' && !v('account')) return fail('Nhập mật khẩu đăng nhập.');
+        withBusy(submit, async () => {
+          try {
+            const req = mode === 'set' || mode === 'change'
+              ? api(`/api/conversations/${c.id}/lock`, { method: 'PUT', body: { password: v('next'), current: v('current') || undefined } })
+              : api(`/api/conversations/${c.id}/lock`, { method: 'DELETE', body: mode === 'forgot' ? { accountPassword: v('account') } : { password: v('current') } });
+            const { conversation } = await req;
+            keepConv(conversation);
+            if (conversation.locked) locks.open.set(c.id, state.currentId === c.id ? Infinity : 0); // đang ở trong: vẫn xem tiếp
+            else locks.open.delete(c.id);
+            toast({
+              set: 'Đã khóa. Lần sau mở cuộc trò chuyện này phải nhập mật khẩu.',
+              change: 'Đã đổi mật khẩu khóa.',
+              remove: 'Đã bỏ khóa cuộc trò chuyện.',
+              forgot: 'Đã bỏ khóa cuộc trò chuyện.',
+            }[mode]);
+            lockUi.mode = null;
+            lockUi.key = null;
+            renderConvSheet();
+            renderChatHeader();
+            renderConvList();
+          } catch (e2) {
+            fail(e2.message);
+          }
+        });
+      });
+      body = form;
+    }
+    lockUi.el = h('div', { class: 'panel', id: 'conv-lock' },
+      h('h3', { text: c.locked ? '🔒 Đang khóa bằng mật khẩu' : 'Khóa bằng mật khẩu' }),
+      h('p', { class: 'hint', text: 'Chỉ khóa trên tài khoản của bạn (cả web và app): mở cuộc trò chuyện này phải nhập mật khẩu, danh sách và thông báo không hiện nội dung tin nhắn. Người khác không bị ảnh hưởng.' }),
+      body);
+    return lockUi.el;
   }
 
   /* ----- Ảnh đã gửi ----- */
@@ -3010,7 +3259,7 @@ ${sections}
     receive(msg);
     clearTyping(msg.conversationId, msg.senderId);
     if (!mine && msg.kind !== 'system') {
-      const here = state.currentId === msg.conversationId && document.visibilityState === 'visible';
+      const here = state.currentId === msg.conversationId && document.visibilityState === 'visible' && !isGated(c);
       if (here && document.hasFocus() && wasNear) {
         markRead(msg.conversationId);
       } else {
@@ -3055,11 +3304,15 @@ ${sections}
       payload: {
         type: 'message',
         conversationId: c.id,
-        isGroup: c.type !== 'dm',
-        convTitle: convTitle(c),
-        senderName: nameOf(msg.senderId),
-        text: msg.image && !msg.text ? '📷 Đã gửi một ảnh' : messageSummary(msg),
-        icon: userOf(msg.senderId)?.avatar || '/icons/icon-192.png',
+        ...(c.locked
+          ? { isGroup: false, convTitle: 'Think', senderName: '🔒 Think', text: 'Có tin nhắn mới trong cuộc trò chuyện đã khóa', icon: '/icons/icon-192.png', locked: true }
+          : {
+              isGroup: c.type !== 'dm',
+              convTitle: convTitle(c),
+              senderName: nameOf(msg.senderId),
+              text: msg.image && !msg.text ? '📷 Đã gửi một ảnh' : messageSummary(msg),
+              icon: userOf(msg.senderId)?.avatar || '/icons/icon-192.png',
+            }),
         url: `/#/c/${c.id}`,
         createdAt: msg.createdAt,
       },
@@ -3210,7 +3463,7 @@ ${sections}
   const readTimers = new Map();
   function markRead(convId) {
     const c = state.convs.get(convId);
-    if (!c || document.visibilityState !== 'visible') return;
+    if (!c || document.visibilityState !== 'visible' || isGated(c)) return;
     const lastId = c.lastMessage?.id || 0;
     if (!c.unread && (c.lastReadId || 0) >= lastId) return;
     c.unread = 0;
@@ -3226,6 +3479,8 @@ ${sections}
 
   document.addEventListener('visibilitychange', () => {
     reportVisibility();
+    if (document.visibilityState === 'hidden') locks.hiddenAt = Date.now();
+    else if (locks.hiddenAt && Date.now() - locks.hiddenAt > RELOCK_MS) relockAll(); // ẩn trang lâu: khóa lại
     if (document.visibilityState !== 'visible' || !state.me) return;
     if (state.currentId != null && isNearBottom()) markRead(state.currentId);
     updateBadge();
@@ -3881,9 +4136,12 @@ ${sections}
     const ids = c.memberIds || [];
     const isOwner = c.createdBy === state.me.id;
     $('#group-profile').replaceChildren(
-      convAvatarEl(c, 'avatar-xl', { dot: false }),
+      h('button', { class: 'group-photo', type: 'button', 'aria-label': 'Đổi ảnh nhóm', onclick: () => $('#group-photo-input').click() },
+        convAvatarEl(c, 'avatar-xl', { dot: false }),
+        h('span', { class: 'group-photo-cam', 'aria-hidden': 'true' }, icon('camera'))),
       h('p', { class: 'profile-title', text: c.name }),
       h('p', { class: 'hint', text: `${ids.length} thành viên` }));
+    $('#group-photo-remove').hidden = !c.avatar;
     const nameInput = $('#group-name-form').elements.groupName;
     if (document.activeElement !== nameInput) nameInput.value = c.name;
     const sorted = [...ids].sort((a, b) => (b === c.createdBy) - (a === c.createdBy)
@@ -3945,6 +4203,48 @@ ${sections}
       }
     });
   });
+  // Ảnh nhóm: thu nhỏ còn 320px vuông rồi gửi (POST /api/groups/<mã>/avatar)
+  $('#group-photo-btn').addEventListener('click', () => $('#group-photo-input').click());
+  $('#group-photo-input').addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    const c = state.convs.get(state.currentId);
+    if (!file || !c || c.type !== 'group') return;
+    if (file.type && !/^image\//.test(file.type)) {
+      toast('Hãy chọn một file ảnh.');
+      return;
+    }
+    await withBusy($('#group-photo-btn'), async () => {
+      try {
+        const { blob } = await prepareImage(file, { max: 320, square: true, quality: 0.88 });
+        const { conversation } = await api(`/api/groups/${c.id}/avatar`, { method: 'POST', raw: blob });
+        keepConv(conversation);
+        toast('Đã đổi ảnh nhóm.');
+        renderGroupInfo();
+        renderChatHeader();
+        renderConvList();
+      } catch (err) {
+        toast(err.message || 'Không đổi được ảnh nhóm.');
+      }
+    });
+  });
+  $('#group-photo-remove').addEventListener('click', (e) => {
+    const c = state.convs.get(state.currentId);
+    if (!c || !c.avatar || !window.confirm('Xóa ảnh nhóm? Nhóm sẽ dùng lại chữ cái đầu của tên.')) return;
+    withBusy(e.currentTarget, async () => {
+      try {
+        const { conversation } = await api(`/api/groups/${c.id}/avatar`, { method: 'DELETE' });
+        keepConv(conversation);
+        toast('Đã xóa ảnh nhóm.');
+        renderGroupInfo();
+        renderChatHeader();
+        renderConvList();
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+  });
+
   $('#group-add-toggle').addEventListener('click', () => {
     groupAdd.open = !groupAdd.open;
     groupAdd.selected.clear();
@@ -4482,6 +4782,7 @@ ${sections}
       case 'new-group': navigate('#/new-group', { replace: true }); break;
       case 'group-info': navigate('#/group'); break;
       case 'conv-info': navigate('#/conv'); break;
+      case 'chat-lock-now': lockNow(); break;
       case 'chat-search': openChatSearch(); break;
       case 'chat-search-close': closeChatSearch(); break;
       case 'composer-more': openComposerMenu(el); break;

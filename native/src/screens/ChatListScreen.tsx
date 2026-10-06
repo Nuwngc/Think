@@ -240,7 +240,7 @@ const ConvRow = memo(function ConvRow({
       delayLongPress={380}
       style={({ pressed }) => [s.row, pressed && { backgroundColor: c.field }]}
       accessibilityRole="button"
-      accessibilityLabel={`${title}${conv.pinnedAt ? ", đã ghim" : ""}${muted ? ", đã tắt thông báo" : ""}${unread ? `, ${unread} tin chưa đọc` : ""}. ${preview}`}
+      accessibilityLabel={`${title}${conv.locked ? ", đã khóa" : ""}${conv.pinnedAt ? ", đã ghim" : ""}${muted ? ", đã tắt thông báo" : ""}${unread ? `, ${unread} tin chưa đọc` : ""}. ${preview}`}
       accessibilityHint={onLongPress ? "Chạm giữ để ghim hoặc tắt thông báo" : undefined}
     >
       <ConvAvatar conv={conv} users={users} meId={meId} size={52} />
@@ -249,6 +249,7 @@ const ConvRow = memo(function ConvRow({
           <Text style={[s.rowTitle, unread > 0 && s.bold]} numberOfLines={1}>
             {title}
           </Text>
+          {conv.locked ? <Icon name="lock" size={15} color={c.muted} /> : null}
           {muted ? <Icon name="notifications-off" size={15} color={c.muted} /> : null}
           {conv.pinnedAt ? <Icon name="push-pin" size={15} color={c.muted} /> : null}
           <Text style={[s.rowTime, unread > 0 && { color: c.accent, fontWeight: "700" }]}>{lm ? shortTime(lm.createdAt) : ""}</Text>

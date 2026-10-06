@@ -474,10 +474,12 @@
             <p id="chat-status"></p>
           </div>
           <button class="icon-btn" type="button" id="chess-dm-btn" data-action="chess-challenge" aria-label="Thách một ván cờ" hidden><svg class="ic ic-knight"><use href="#i-knight"/></svg></button>
+          <button class="icon-btn" type="button" id="chat-lock-btn" data-action="chat-lock-now" aria-label="Khóa lại cuộc trò chuyện" title="Khóa lại" hidden><svg class="ic"><use href="#i-lock"/></svg></button>
           <button class="icon-btn" type="button" id="chat-search-btn" data-action="chat-search" aria-label="Tìm tin nhắn"><svg class="ic"><use href="#i-search"/></svg></button>
           <button class="icon-btn" type="button" id="group-info-btn" data-action="conv-info" aria-label="Tùy chỉnh đoạn chat"><svg class="ic"><use href="#i-info"/></svg></button>
           <button class="icon-btn bubble-only" type="button" data-action="open-app" aria-label="Mở trong app Think"><svg class="ic"><use href="#i-expand"/></svg></button>
         </header>
+        <div id="chat-lock" class="chat-lock" hidden></div>
         <div id="pin-bar" class="pin-bar" hidden></div>
         <div id="chat-search" class="chat-search" hidden>
           <div class="chat-search-bar">
@@ -623,6 +625,11 @@
       </header>
       <div class="sheet-body">
         <div class="profile" id="group-profile"></div>
+        <div class="group-photo-actions">
+          <button class="btn btn-sm" type="button" id="group-photo-btn">Đổi ảnh nhóm</button>
+          <button class="btn btn-sm btn-danger-quiet" type="button" id="group-photo-remove" hidden>Xóa ảnh</button>
+          <input id="group-photo-input" type="file" accept="image/*" hidden>
+        </div>
         <form id="group-name-form" class="panel" novalidate>
           <h3>Tên nhóm</h3>
           <div class="inline">

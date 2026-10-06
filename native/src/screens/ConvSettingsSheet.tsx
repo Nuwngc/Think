@@ -10,6 +10,7 @@ import { useColors, type Colors } from "../theme";
 import type { Conversation } from "../types";
 import { Button, ConvAvatar, Icon, type IconName, SectionLabel, Sheet, SheetItem, useStyles } from "../ui";
 import { MediaGrid, NO_PINS, useMedia } from "./ChatExtras";
+import { LockSection } from "./ChatLock";
 
 /** Chữ mô tả trạng thái thông báo */
 export function muteText(c: Conversation) {
@@ -114,6 +115,8 @@ export function ConvSettingsSheet({
             setTimeout(onMembers, 250);
           })}
         </View>
+
+        <LockSection conv={conv} />
 
         <SectionLabel>Chủ đề: {theme.name}</SectionLabel>
         <View style={s.themeGrid} accessibilityRole="radiogroup" accessibilityLabel="Chủ đề">

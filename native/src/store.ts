@@ -58,6 +58,7 @@ import {
 import { clearToken, currentToken, getToken, setToken } from "./session";
 import { mentionIds } from "./chatPlus";
 import { emojiOf, isMuted } from "./chatThemes";
+import { afterBackground, isGated as gatedNow, leaveUnlocked as leaveUntil } from "./chatLock";
 import type { ChatItem, Conversation, Me, Message, PendingMessage, Pin, Reaction, User } from "./types";
 
 /* =========================================================
@@ -119,6 +120,8 @@ type State = {
   storageVersion: number;
   /** Tăng khi có báo lỗi app mới (chỉ admin nhận) */
   errorsVersion: number;
+  /** Cuộc trò chuyện đã khóa mà mình vừa mở khóa: mã -> mở tới lúc nào (Infinity: đang xem) */
+  unlocked: Record<number, number>;
 };
 
 const initial: State = {
@@ -148,6 +151,7 @@ const initial: State = {
   update: null,
   storageVersion: 0,
   errorsVersion: 0,
+  unlocked: {},
 };
 
 export const useStore = create<State>(() => ({ ...initial }));
@@ -521,8 +525,16 @@ export async function openConversation(id: number) {
     (inChess() && useChess.getState().openId != null) ||
     (inCaro() && (useCaro.getState().openId != null || useCaro.getState().botOpen)) ||
     (get().tab === "games" && (get().gamesView === "farm" || get().gamesView === "puzzle"));
+  const prev = get().currentId;
+  if (prev != null && prev !== id) leaveUnlocked(prev);
   set({ currentId: id, atBottom: true, tab: keepGame ? "games" : "chats" });
   hideToastFor(id);
+  if (isGated(get().convs[id])) {
+    // Đã khóa: hỏi mật khẩu trước (ChatScreen hiện màn khóa), chưa tải tin nhắn
+    reportVisibility();
+    return;
+  }
+  if (get().convs[id]?.locked) set((st) => ({ unlocked: { ...st.unlocked, [id]: Infinity } }));
   dismissConversation(id);
   loadPins(id);
   const box = get().msgs[id];
@@ -532,7 +544,73 @@ export async function openConversation(id: number) {
 }
 
 export function closeConversation() {
+  leaveUnlocked(get().currentId);
   set({ currentId: null });
+}
+
+/* =========================================================
+   Khóa cuộc trò chuyện bằng mật khẩu (2.9.0, máy chủ: src/chat-lock.js)
+   Mở khóa xong thì xem được tới khi rời cuộc trò chuyện hoặc để app chạy nền quá RELOCK_MS.
+   ========================================================= */
+
+/** Cuộc trò chuyện đã khóa và chưa mở khóa: không hiện tin nhắn */
+export function isGated(c: Pick<Conversation, "id" | "locked"> | undefined, unlocked: Record<number, number> = get().unlocked) {
+  return gatedNow(c, unlocked);
+}
+
+/** Rời một cuộc trò chuyện đã mở khóa: còn xem lại được trong RELOCK_MS */
+function leaveUnlocked(id: number | null) {
+  const next = leaveUntil(get().unlocked, id);
+  if (next !== get().unlocked) set({ unlocked: next });
+}
+
+/** Nhập mật khẩu để xem; quên mật khẩu thì bỏ khóa bằng mật khẩu đăng nhập (forgot) */
+export async function unlockConversation(id: number, password: string, forgot = false) {
+  if (forgot) {
+    const { conversation } = await api.removeChatLock(id, { accountPassword: password });
+    keepConv(conversation);
+  } else {
+    await api.unlockChat(id, password);
+  }
+  set((st) => ({ unlocked: { ...st.unlocked, [id]: Infinity } }));
+  if (get().currentId === id) {
+    dismissConversation(id);
+    loadPins(id);
+    const box = get().msgs[id];
+    if (!box || !box.loaded || box.stale) await loadMessages(id);
+    else markRead(id);
+  }
+}
+
+/** Nút ổ khóa trên đầu khung chat: khóa lại ngay */
+export function lockConversationNow(id: number) {
+  set((st) => {
+    const unlocked = { ...st.unlocked };
+    delete unlocked[id];
+    return { unlocked };
+  });
+}
+
+/** Đặt khóa / đổi mật khẩu (current: mật khẩu cũ khi đổi). Đang ở trong cuộc trò chuyện thì vẫn xem tiếp. */
+export async function setChatLock(id: number, password: string, current?: string) {
+  const { conversation } = await api.setChatLock(id, password, current);
+  keepConv(conversation);
+  if (get().currentId === id) set((st) => ({ unlocked: { ...st.unlocked, [id]: Infinity } }));
+}
+
+export async function removeChatLock(id: number, body: { password: string } | { accountPassword: string }) {
+  const { conversation } = await api.removeChatLock(id, body);
+  keepConv(conversation);
+}
+
+/** Đổi / xóa ảnh nhóm */
+export async function setGroupAvatar(id: number, img: { uri: string; mime: string } | null) {
+  const { conversation } = img ? await api.uploadGroupAvatar(id, img.uri, img.mime) : await api.removeGroupAvatar(id);
+  keepConv(conversation);
+}
+
+function keepConv(conversation: Conversation) {
+  set((st) => ({ convs: { ...st.convs, [conversation.id]: { ...conversation, reads: st.convs[conversation.id]?.reads } } }));
 }
 
 const inChess = () => get().tab === "games" && get().gamesView === "chess";
@@ -708,7 +786,7 @@ const readTimers = new Map<number, ReturnType<typeof setTimeout>>();
 export function markRead(convId: number) {
   const s = get();
   const c = s.convs[convId];
-  if (!c || !s.appActive || s.offline) return;
+  if (!c || !s.appActive || s.offline || isGated(c, s.unlocked)) return;
   const lastId = c.lastMessage?.id || 0;
   if (!c.unread && (c.lastReadId || 0) >= lastId) return;
   patchConv(convId, (cc) => ({ unread: 0, lastReadId: Math.max(cc.lastReadId || 0, lastId) }));
@@ -1340,7 +1418,7 @@ async function onMessageNew(msg: Message) {
   receive(msg);
   clearTyping(msg.conversationId, msg.senderId);
   if (mine || msg.kind === "system") return;
-  const here = s.currentId === msg.conversationId && s.appActive;
+  const here = s.currentId === msg.conversationId && s.appActive && !isGated(s.convs[msg.conversationId], s.unlocked);
   if (here && s.atBottom) {
     markRead(msg.conversationId);
     return;
@@ -1432,10 +1510,15 @@ let started = false;
 let backgroundTimer: ReturnType<typeof setTimeout> | null = null;
 const BACKGROUND_DISCONNECT = 45 * 1000;
 
+let hiddenAt = 0;
+
 function onAppState(st: string) {
   const active = st === "active";
   if (active === get().appActive) return;
   set({ appActive: active });
+  // Chạy nền lâu: khóa lại các cuộc trò chuyện đã mở khóa
+  if (!active) hiddenAt = Date.now();
+  else set({ unlocked: afterBackground(get().unlocked, hiddenAt) });
   reportVisibility();
   if (backgroundTimer) clearTimeout(backgroundTimer);
   backgroundTimer = null;
