@@ -452,6 +452,129 @@ def s_chat_lock():
         api_call(f"/api/conversations/{conv}/lock", {"password": LOCK_PASSWORD}, token=token, method="DELETE")
 
 
+class Callee:
+    """Bạn Bè nghe máy qua Socket.IO (python-socketio, workflow cài sẵn). Không có thư viện thì bỏ qua phần nghe máy."""
+
+    def __init__(self):
+        self.events = []
+        self.sio = None
+        try:
+            import socketio  # noqa: PLC0415
+        except ImportError:
+            return
+        token, _ = login_token("ban", "ban12345")
+        sio = socketio.Client(reconnection=False)
+        for ev in ("call:incoming", "call:signal", "call:ended"):
+            sio.on(ev, (lambda name: lambda data: self.events.append((name, data)))(ev))
+        sio.connect(args.server, auth={"token": token}, transports=["websocket"], wait_timeout=15)
+        self.sio = sio
+
+    def wait(self, name, pred=lambda d: True, timeout=20):
+        end = time.time() + timeout
+        while time.time() < end:
+            for ev, data in self.events:
+                if ev == name and pred(data):
+                    return data
+            time.sleep(0.3)
+        return None
+
+    def call(self, name, data):
+        return self.sio.call(name, data, timeout=15)
+
+    def close(self):
+        if self.sio:
+            self.sio.disconnect()
+
+
+def s_call():
+    """Gọi thoại: bấm nút gọi trong chat riêng → máy chủ thấy đang đổ chuông → Bạn Bè nghe máy (qua Socket.IO) →
+    app gửi lời mời kết nối WebRTC có tiếng (SDP m=audio) → gác máy, nhật ký cuộc gọi hiện trong chat"""
+    tap(r"^Bạn Bè($|[,.])")
+    if wait_for(r"Tối nay chơi cờ không", 20) is None:
+        raise RuntimeError("Không mở được cuộc trò chuyện với Bạn Bè")
+    hide_keyboard()
+    token, _ = login_token(args.user, args.password)
+    callee = Callee()
+    notes = []
+    try:
+        tap(r"^Gọi thoại$")
+        call = None
+        end = time.time() + 20
+        while time.time() < end:
+            call = api_call("/api/calls/current", token=token).get("call")
+            if call:
+                break
+            time.sleep(1)
+        if not call or call.get("state") != "ringing":
+            raise RuntimeError(f"Máy chủ không thấy cuộc gọi đang đổ chuông: {call}")
+        if wait_for(r"^Đang đổ chuông", 10) is None:
+            raise RuntimeError("Không thấy màn hình đang gọi")
+        notes.append("đổ chuông")
+        if callee.sio:
+            if callee.wait("call:incoming", lambda d: d.get("id") == call["id"], 10) is None:
+                raise RuntimeError("Bạn Bè không nhận được cuộc gọi đến")
+            res = callee.call("call:accept", {"callId": call["id"]})
+            if not res or res.get("error"):
+                raise RuntimeError(f"Không nghe máy được: {res}")
+            offer = callee.wait("call:signal", lambda d: ((d.get("data") or {}).get("sdp") or {}).get("type") == "offer", 25)
+            if offer is None:
+                raise RuntimeError("Nghe máy rồi nhưng app không gửi lời mời kết nối WebRTC")
+            sdp = offer["data"]["sdp"].get("sdp", "")
+            if "m=audio" not in sdp:
+                raise RuntimeError("Lời mời kết nối không có tiếng (m=audio)")
+            notes.append(f"app gửi SDP {len(sdp)} ký tự (có m=audio)")
+            if callee.wait("call:signal", lambda d: "candidate" in (d.get("data") or {}), 10):
+                notes.append("có ICE candidate")
+        tap(r"^Kết thúc$")
+        end = time.time() + 15
+        while time.time() < end and api_call("/api/calls/current", token=token).get("call"):
+            time.sleep(1)
+        if api_call("/api/calls/current", token=token).get("call"):
+            raise RuntimeError("Bấm Kết thúc nhưng máy chủ vẫn thấy đang gọi")
+        if wait_for(r"Cuộc gọi thoại", 15) is None:
+            raise RuntimeError("Không thấy nhật ký cuộc gọi trong chat")
+        if callee.sio:
+            # Cuộc gọi đến: Bạn Bè gọi, app hiện màn hình cuộc gọi đến (chuông, rung), bấm Từ chối
+            time.sleep(2)
+            _, conv = dm_with_tester()
+            r = callee.call("call:start", {"conversationId": conv, "video": False})
+            if not r or not r.get("call"):
+                raise RuntimeError(f"Bạn Bè không gọi được: {r}")
+            if wait_for(r"^Cuộc gọi thoại đến$", 15) is None:
+                raise RuntimeError("App không hiện cuộc gọi đến")
+            tap(r"^Từ chối$")
+            if callee.wait("call:ended", lambda d: d.get("callId") == r["call"]["id"] and d.get("reason") == "declined", 10) is None:
+                raise RuntimeError("Bấm Từ chối nhưng người gọi không nhận được")
+            notes.append("cuộc gọi đến: từ chối được")
+        hide_keyboard()
+        back()
+        if wait_for(r"^Trò chơi", 10) is None:
+            raise RuntimeError("Không về được danh sách tin nhắn")
+    finally:
+        callee.close()
+    return ", ".join(notes)
+
+
+def s_ai():
+    """Think AI: mở "Hỏi Think AI" từ nút Tin nhắn mới, gửi một câu → Think AI trả lời (máy chủ thử chưa có khóa API nên trả lời cách cài)"""
+    tap(r"^Tin nhắn mới$")
+    tap(r"^Hỏi Think AI$")
+    if wait_for(r"Trợ lý AI · luôn sẵn sàng", 15) is None:
+        raise RuntimeError("Không mở được cuộc trò chuyện với Think AI")
+    box = wait_for(r"Nhập tin nhắn", 10)
+    if box is None:
+        raise RuntimeError("Không thấy ô nhập tin nhắn")
+    tap_xy(*center(box))
+    type_text("xinchao")
+    tap(r"^Gửi$")
+    if wait_for(r"Think AI chưa được cài đặt", 20) is None:
+        raise RuntimeError("Think AI không trả lời")
+    hide_keyboard()
+    back()
+    if wait_for(r"^Trò chơi", 10) is None:
+        raise RuntimeError("Không về được danh sách tin nhắn")
+
+
 def s_games_hub():
     tap(r"^Trò chơi")
     if wait_for(r"Xếp Khối", 15) is None:
@@ -1031,7 +1154,8 @@ def main():
     sdk = int(re.sub(r"\D", "", sh("getprop ro.build.version.sdk")) or 0)
     if sdk >= 33:
         sh(f"pm grant {PKG} android.permission.POST_NOTIFICATIONS")
-    sh(f"pm grant {PKG} android.permission.RECORD_AUDIO")  # tin nhắn thoại (người dùng thật được hỏi lần đầu)
+    sh(f"pm grant {PKG} android.permission.RECORD_AUDIO")  # tin nhắn thoại, gọi điện (người dùng thật được hỏi lần đầu)
+    sh(f"pm grant {PKG} android.permission.CAMERA")  # gọi video
     sh("settings put global window_animation_scale 0")
     sh("settings put global transition_animation_scale 0")
     sh("settings put global animator_duration_scale 0")
@@ -1048,6 +1172,8 @@ def main():
         step("Tin nhắn thoại (giữ nút micro)", s_voice)
         step("Rời cuộc trò chuyện", s_chat_back)
         step("Khóa cuộc trò chuyện bằng mật khẩu", s_chat_lock)
+        step("Gọi thoại: đổ chuông, nghe máy, gác máy", s_call)
+        step("Think AI: hỏi trợ lý", s_ai)
         step("Mục Trò chơi", s_games_hub)
         step("Nông trại: thu hoạch, gieo hạt (có âm thanh)", s_farm)
         step("Nông trại: ghé vườn bạn rồi quay lại", s_farm_visit)

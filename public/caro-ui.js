@@ -1814,7 +1814,7 @@ window.ThinkCaro = (() => {
       const pick = { id: presetId != null ? presetId : null };
       const opts = { turn: { v: 30 }, rule: { v: 'free' }, side: { v: 'random' }, rated: true };
       const people = [...state.users.values()]
-        .filter((u) => u.id !== meId() && !u.disabled)
+        .filter((u) => u.id !== meId() && !u.disabled && !u.bot)
         .sort((a, b) => Number(b.online) - Number(a.online) || a.displayName.localeCompare(b.displayName, 'vi'));
       const list = h('ul', { class: 'people-list chess-people', role: 'radiogroup', 'aria-label': 'Đối thủ' });
       const search = h('input', { class: 'search-input', type: 'search', placeholder: 'Tìm người', 'aria-label': 'Tìm người để thách đấu', autocomplete: 'off' });

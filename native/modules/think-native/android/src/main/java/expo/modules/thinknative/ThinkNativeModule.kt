@@ -16,9 +16,13 @@ class ThinkNativeModule : Module() {
     Name("ThinkNative")
 
     // Bong bóng chat báo cho JavaScript: mở cuộc trò chuyện khác, bị tắt từ thông báo, bị kéo vào ✕...
-    Events("onChatHead")
+    Events("onChatHead", "onCallAction")
 
     OnCreate {
+      // Nút "Kết thúc" trong thông báo "Đang trong cuộc gọi" (CallService.kt)
+      CallService.onAction = { type ->
+        sendEvent("onCallAction", Bundle().apply { putString("type", type) })
+      }
       ChatHeads.emitter = { type, convId ->
         sendEvent("onChatHead", Bundle().apply {
           putString("type", type)
@@ -28,6 +32,7 @@ class ThinkNativeModule : Module() {
     }
 
     OnDestroy {
+      CallService.onAction = null
       ChatHeads.emitter = null
     }
 
@@ -109,6 +114,37 @@ class ThinkNativeModule : Module() {
     Function("openApp") {
       ChatHeads.minimizeBubble()
       ChatHeads.openApp(context)
+    }
+
+    /* ---------------- Gọi thoại / gọi video (CallAudio.kt) ---------------- */
+
+    // Bắt đầu cuộc gọi: chế độ gọi điện (khử tiếng vọng), loa ngoài (gọi video) hay loa trong, giữ màn hình sáng
+    Function("callAudioStart") { speaker: Boolean ->
+      CallAudio.start(context, speaker)
+      CallAudio.keepScreenOn(appContext.currentActivity, true)
+    }
+
+    Function("callAudioStop") {
+      CallAudio.stop(context)
+      CallAudio.keepScreenOn(appContext.currentActivity, false)
+    }
+
+    Function("callSpeaker") { on: Boolean ->
+      CallAudio.setSpeaker(context, on)
+    }
+
+    // Gọi thoại áp tai: tắt màn hình khi mặt gần cảm biến
+    Function("callProximity") { on: Boolean ->
+      CallAudio.setProximity(context, on)
+    }
+
+    // Thông báo "Đang trong cuộc gọi": vẫn dùng micro được khi chuyển sang app khác
+    Function("callServiceStart") { title: String, video: Boolean ->
+      CallService.start(context, title, video)
+    }
+
+    Function("callServiceStop") {
+      CallService.stop(context)
     }
 
     // Chỉ dùng trong bản thử (workflow "Kiểm tra APK") để kiểm tra phần báo lỗi crash

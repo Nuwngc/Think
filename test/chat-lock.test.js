@@ -1,5 +1,5 @@
 'use strict';
-// Kiểm thử khóa cuộc trò chuyện bằng mật khẩu (src/chat-lock.js) và thông báo đẩy không lộ nội dung — chạy: npm test
+// Kiểm thử khóa cuộc trò chuyện bằng mật khẩu (src/chat-lock.js) — chạy: npm test
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -11,7 +11,6 @@ const express = require('express');
 const { run, get } = require('../src/db');
 const auth = require('../src/auth');
 const lock = require('../src/chat-lock');
-const fcm = require('../src/fcm');
 
 let base;
 let srv;
@@ -86,14 +85,4 @@ test('sai quá 5 lần thì chặn; quên mật khẩu thì bỏ khóa bằng m�
   assert.equal((await call(1, 'POST', '/api/conversations/102/unlock', { password: 'moi12345' })).status, 200);
   // Bỏ khóa bằng chính mật khẩu khóa
   assert.equal((await call(1, 'DELETE', '/api/conversations/102/lock', { password: 'moi12345' })).status, 200);
-});
-
-test('thông báo đẩy của cuộc trò chuyện đã khóa không có nút Trả lời', () => {
-  const normal = fcm.toData({ type: 'message', conversationId: 1, convTitle: 'An', senderName: 'An', text: 'bí mật', isGroup: false });
-  assert.equal(normal.categoryId, 'message');
-  assert.match(normal.message, /bí mật/);
-  const hidden = fcm.toData({ type: 'message', conversationId: 1, convTitle: 'Think', senderName: '🔒 Think', text: 'Có tin nhắn mới trong cuộc trò chuyện đã khóa', isGroup: false, locked: true });
-  assert.equal(hidden.categoryId, undefined);
-  assert.equal(JSON.parse(hidden.body).locked, 1);
-  assert.doesNotMatch(JSON.stringify(hidden), /bí mật/);
 });

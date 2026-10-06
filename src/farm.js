@@ -134,7 +134,7 @@ function setupFarm({ app, io, requireAuth, requireReady, isActive, notify, nameO
     return s;
   }
 
-  const activeUser = (id) => get('SELECT id FROM users WHERE id = ? AND disabled = 0', id);
+  const activeUser = (id) => get("SELECT id FROM users WHERE id = ? AND disabled = 0 AND role <> 'bot'", id);
 
   app.get('/api/farm', ...auth, handle((req, res) => {
     const now = clock();

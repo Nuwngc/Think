@@ -26,8 +26,16 @@ Dữ liệu ở `public/puzzles/<game>.json` và bản giống hệt `native/src
 
 ## Khóa cuộc trò chuyện, ảnh nhóm
 
-- Khóa bằng mật khẩu là riêng từng người (`members.lock_hash`, `src/chat-lock.js`). Chỗ nào hiện nội dung tin nhắn ra ngoài khung chat (xem trước ở danh sách, thông báo nhỏ, thông báo đẩy `notifyMembers`, `/api/app/notification`, bong bóng chat) phải kiểm tra `locked` để không lộ nội dung. Web: `isGated` trong `public/app.js`; app: `native/src/chatLock.ts` + `previewText` trong `native/src/format.ts`.
+- Khóa bằng mật khẩu là riêng từng người (`members.lock_hash`, `src/chat-lock.js`). Theo ý chủ dự án: thông báo (đẩy, trong app) và bong bóng chat vẫn **đầy đủ**; chỉ khi mở cuộc trò chuyện mới hỏi mật khẩu, và danh sách cuộc trò chuyện không hiện nội dung tin. Chỗ mở khung chat (web `openConversation` / `isGated` trong `public/app.js`; app `ChatScreen` → `ChatLockGate`, `native/src/chatLock.ts`) phải giữ màn khóa, kể cả khung chat nổi của bong bóng.
 - Ảnh nhóm ở `conversations.avatar` (file trong `uploads/avatars/`, tên bắt đầu bằng `g<mã nhóm>-`); nhóm bị xóa thì xóa luôn ảnh.
+
+## Think AI, gọi thoại / gọi video (2.10.0)
+
+- Think AI là một tài khoản `role = 'bot'` (`src/ai.js`, tạo khi máy chủ khởi động, `password_hash = '!'` nên không đăng nhập được). Mọi chỗ liệt kê người dùng (chọn người nhắn tin, tạo / thêm nhóm, thách cờ, giải đấu, thành viên phòng chung, danh sách admin) phải lọc `u.bot` (máy chủ: `role <> 'bot'`). Gợi ý @nhắc tên thì thêm Think AI lên đầu. `bootstrapAdmin` đếm người dùng **không tính** bot.
+- Khóa API AI chỉ nằm ở `settings('ai')` hoặc biến môi trường; API admin chỉ trả `keyHint`. Không bao giờ trả khóa về máy người dùng, không đưa vào log.
+- Cuộc gọi: máy chủ chỉ chuyển lời (`src/calls.js`, Socket.IO), không xử lý tiếng / hình. Web `public/calls-ui.js` và app `native/src/calls/engine.ts` làm giống nhau (người gọi tạo offer sau `call:accepted`, người nghe tạo answer; ICE đến trước SDP thì xếp hàng). Đổi luồng một bên thì sửa cả bên kia, chạy lại kịch bản gọi chéo web ↔ app.
+- App: `native/src/calls/rtc.tsx` dùng `react-native-webrtc` (giữ đúng bản tương thích Expo 54: `react-native-webrtc` 124.0.x + `@config-plugins/react-native-webrtc` 13.0.0); `rtc.web.tsx` là bản cho trình duyệt (chạy thử app bằng `expo export --platform web`). Loa, chế độ gọi, dịch vụ chạy nền ở `CallAudio.kt`, `CallService.kt` (dịch vụ loại microphone để nói được khi app ở nền).
+- Tin hệ thống cuộc gọi `{ event: 'call', video, status, duration, to }`: chữ hiển thị ở `callText` (web) và `native/src/format.ts` phải giống nhau.
 
 ## Tin nhắn thoại, thành tựu
 

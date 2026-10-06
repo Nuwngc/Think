@@ -360,7 +360,7 @@ function ensureGeneralRoom() {
 const GENERAL_ID = ensureGeneralRoom();
 run(
   `INSERT OR IGNORE INTO members (conversation_id, user_id, last_read_id)
-   SELECT ?, id, COALESCE((SELECT last_message_id FROM conversations WHERE id = ?), 0) FROM users`,
+   SELECT ?, id, COALESCE((SELECT last_message_id FROM conversations WHERE id = ?), 0) FROM users WHERE role <> 'bot'`,
   GENERAL_ID,
   GENERAL_ID
 );

@@ -153,6 +153,24 @@ async function uploadRaw<T>(path: string, fileUri: string, mime: string): Promis
 
 /* ---------------- Đăng nhập & tài khoản ---------------- */
 
+export type AiSettings = {
+  enabled: boolean;
+  provider: "gemini" | "openai";
+  model: string;
+  baseUrl: string;
+  hasKey: boolean;
+  keyHint: string | null;
+  keySource: "settings" | "env" | null;
+  perUserDaily: number;
+  totalDaily: number;
+  search: boolean;
+  ready: boolean;
+  usedToday: number;
+  botId: number | null;
+};
+
+export type TurnSettings = { turnUrls: string; turnUsername: string; hasCredential: boolean; envTurn: boolean; cloudflare: boolean };
+
 export const api = {
   config: () => request<{ appName: string; appPush?: boolean }>("/api/config", { auth: false, timeout: 75000 }),
 
@@ -498,6 +516,14 @@ export const api = {
   /* ---------------- Quản trị ---------------- */
 
   adminUsers: () => request<{ users: AdminUser[] }>("/api/admin/users"),
+  // Think AI + máy chủ TURN cho cuộc gọi (2.10.0, máy chủ src/ai.js, src/calls.js). Khóa API chỉ gửi lên, không bao giờ nhận về.
+  aiSettings: () => request<{ ai: AiSettings }>("/api/admin/ai"),
+  saveAiSettings: (body: Partial<Omit<AiSettings, "hasKey" | "keyHint" | "keySource" | "ready" | "usedToday" | "botId">> & { apiKey?: string }) =>
+    request<{ ai: AiSettings }>("/api/admin/ai", { method: "PUT", body }),
+  testAi: () => request<{ ok: true; reply: string; model: string }>("/api/admin/ai/test", { method: "POST", body: {} }),
+  turnSettings: () => request<{ calls: TurnSettings }>("/api/admin/calls"),
+  saveTurnSettings: (body: { turnUrls: string; turnUsername: string; turnCredential?: string }) =>
+    request<{ calls: TurnSettings }>("/api/admin/calls", { method: "PUT", body }),
 
   createUser: (body: { username: string; displayName: string; password?: string; role: "admin" | "member" }) =>
     request<{ user: AdminUser; password: string }>("/api/admin/users", { method: "POST", body }),

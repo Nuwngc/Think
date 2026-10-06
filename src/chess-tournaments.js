@@ -238,8 +238,8 @@ function setupTournaments({ app, auth, handle, ChessError, emitTo, pushIfAway, n
     if (others.length < MIN_PLAYERS - 1) throw new ChessError(400, `Mời ít nhất ${MIN_PLAYERS - 1} người (giải có từ ${MIN_PLAYERS} người).`);
     if (others.length > MAX_PLAYERS - 1) throw new ChessError(400, `Giải có tối đa ${MAX_PLAYERS} người.`);
     for (const id of others) {
-      const u = get('SELECT id, disabled FROM users WHERE id = ?', id);
-      if (!u || u.disabled) throw new ChessError(404, 'Có người không còn dùng Think nữa.');
+      const u = get('SELECT id, disabled, role FROM users WHERE id = ?', id);
+      if (!u || u.disabled || u.role === 'bot') throw new ChessError(404, 'Có người không còn dùng Think nữa.');
     }
     const open = get("SELECT COUNT(*) AS n FROM chess_tournaments WHERE creator_id = ? AND status IN ('open', 'active')", uid).n;
     if (open >= MAX_OPEN) throw new ChessError(429, `Bạn đang có ${MAX_OPEN} giải chưa xong. Đợi một giải xong rồi tạo tiếp nhé.`);

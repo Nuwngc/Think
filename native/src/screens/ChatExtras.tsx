@@ -380,13 +380,16 @@ export function MentionList({ conv, draft, onPicked }: { conv: Conversation; dra
   const people = useMemo(() => {
     if (token == null) return [] as User[];
     const k = fold(token);
-    const ids = conv.type === "group" ? conv.memberIds || [] : Object.values(users).filter((u) => !u.disabled).map((u) => u.id);
-    return ids
+    const ids = conv.type === "group" ? conv.memberIds || [] : Object.values(users).filter((u) => !u.disabled && !u.bot).map((u) => u.id);
+    const list = ids
       .filter((id) => id !== me?.id)
       .map((id) => users[id])
-      .filter((u): u is User => Boolean(u) && !u.disabled && (!k || fold(u.displayName).includes(k) || u.username.includes(k)))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName, "vi"))
-      .slice(0, 5);
+      .filter((u): u is User => Boolean(u) && !u.disabled && !u.bot && (!k || fold(u.displayName).includes(k) || u.username.includes(k)))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, "vi"));
+    // Think AI luôn có trong gợi ý (gõ @ là thấy), dù không là thành viên nhóm
+    const bot = Object.values(users).find((u) => u.bot && !u.disabled);
+    if (bot && (!k || fold(bot.displayName).includes(k) || "ai".startsWith(k))) list.unshift(bot);
+    return list.slice(0, 5);
   }, [token, conv, users, me]);
   if (!people.length || token == null) return null;
   return (
@@ -406,7 +409,7 @@ export function MentionList({ conv, draft, onPicked }: { conv: Conversation; dra
           <Text style={[s.name, { color: c.text, flex: 1 }]} numberOfLines={1}>
             {u.displayName}
           </Text>
-          <Text style={s.sub}>@{u.username}</Text>
+          <Text style={s.sub}>{u.bot ? "Trợ lý AI" : `@${u.username}`}</Text>
         </Pressable>
       ))}
     </View>

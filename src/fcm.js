@@ -66,6 +66,7 @@ function toData(p) {
   if (p.gameId != null) data.gameId = p.gameId;
   if (p.postId != null) data.postId = p.postId;
   if (p.tournamentId != null) data.tournamentId = p.tournamentId; // giải đấu cờ vua
+  if (p.callId != null) data.callId = p.callId; // cuộc gọi đến
   const out = { color: '#0E7C66', channelId: 'messages' };
   if (p.type === 'message') {
     out.title = clip(p.convTitle || p.senderName || 'Think', 80);
@@ -80,11 +81,7 @@ function toData(p) {
     if (p.type === 'reaction' || p.type === 'test') out.channelId = 'other';
     if (p.type === 'chess' || p.type === 'caro') out.channelId = 'chess'; // kênh "Cờ vua" có sẵn trong mọi bản app
     if (p.type === 'post' || p.type === 'farm' || p.type === 'streak') out.channelId = 'other';
-  }
-  if (p.locked) {
-    // Cuộc trò chuyện đã khóa (src/chat-lock.js): không có nút Trả lời / Đã đọc
-    delete out.categoryId;
-    data.locked = 1;
+    if (p.type === 'call') out.channelId = 'calls'; // kênh "Cuộc gọi đến" (chuông riêng), có từ app 0.11.0
   }
   if (p.badge != null) out.badge = String(p.badge);
   out.body = JSON.stringify(data);

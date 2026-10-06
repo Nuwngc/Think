@@ -34,10 +34,12 @@ export function NewChatSheet({ visible, onClose }: { visible: boolean; onClose: 
   const people = useMemo(() => {
     const q = fold(query);
     return Object.values(users)
-      .filter((u) => u.id !== me?.id && !u.disabled)
+      .filter((u) => u.id !== me?.id && !u.disabled && !u.bot)
       .filter((u) => !q || fold(u.displayName).includes(q) || fold(u.username).includes(q))
       .sort((a, b) => Number(b.online) - Number(a.online) || a.displayName.localeCompare(b.displayName, "vi"));
   }, [users, me, query]);
+
+  const bot = useMemo(() => Object.values(users).find((u) => u.bot && !u.disabled) || null, [users]);
 
   const startDm = async (u: User) => {
     if (busy) return;
@@ -100,6 +102,25 @@ export function NewChatSheet({ visible, onClose }: { visible: boolean; onClose: 
         <Field label="Tên nhóm (có thể bỏ trống)" value={name} onChangeText={setName} maxLength={60} placeholder="Ví dụ: Đi Đà Lạt" />
       )}
       <Field value={query} onChangeText={setQuery} placeholder="Tìm theo tên" autoCorrect={false} />
+      {mode === "people" && bot && (!query || fold("think ai tro ly").includes(fold(query))) ? (
+        <Pressable
+          onPress={() => startDm(bot)}
+          style={({ pressed }) => [s.person, pressed && { backgroundColor: c.field }]}
+          accessibilityRole="button"
+          accessibilityLabel="Hỏi Think AI"
+          accessibilityState={{ busy: busy === bot.id }}
+        >
+          <Avatar user={bot} size={44} dot={false} />
+          <View style={{ flex: 1 }}>
+            <Text style={[s.name, { color: c.accent }]} numberOfLines={1}>
+              Hỏi Think AI
+            </Text>
+            <Text style={s.sub} numberOfLines={1}>
+              Trợ lý AI: hỏi đáp, dịch, viết hộ, gợi ý…
+            </Text>
+          </View>
+        </Pressable>
+      ) : null}
       {people.length ? null : <Text style={s.sub}>Không tìm thấy ai.</Text>}
       {people.map((u) => {
         const on = picked.includes(u.id);

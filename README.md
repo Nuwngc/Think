@@ -8,7 +8,9 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - Mỗi người tự đổi được: tên hiển thị, lời giới thiệu, ảnh đại diện, **ảnh bìa**, mật khẩu.
 - **Trang cá nhân và bảng tin** (mục 15): đăng bài (chữ + ảnh), thả tim ❤️, bình luận, xem trang của từng người; **chia sẻ ván cờ** lên trang cá nhân hoặc gửi vào cuộc trò chuyện.
 - Phòng chung cho cả nhóm, nhắn riêng 1-1, và **nhóm chat riêng** tự tạo (đặt tên, **đổi tên, đổi ảnh nhóm**, thêm/xóa người, rời nhóm, có trưởng nhóm).
-- **Khóa cuộc trò chuyện bằng mật khẩu** (mục 18, mới ở 2.9.0): đặt mật khẩu riêng cho một cuộc trò chuyện (nhóm hay riêng) trên tài khoản của mình; mở ra phải nhập mật khẩu, danh sách và thông báo không lộ nội dung. Có trên web và App Think Beta.
+- **Think AI** (mục 25, mới ở 2.10.0): trợ lý AI ngay trong chat như Meta AI — **nhắn riêng cho Think AI** hoặc gõ **@Think AI** trong nhóm / phòng chung để hỏi đáp, dịch, viết hộ, gợi ý, gửi ảnh nhờ xem giúp. Dùng **Google Gemini (có gói miễn phí)** hoặc dịch vụ kiểu OpenAI; admin dán khóa API trong **Quản trị → AI, gọi**. Có trên web và App Think Beta.
+- **Gọi thoại, gọi video** (mục 26, mới ở 2.10.0): gọi 1-1 trong cuộc trò chuyện riêng, giữa web và app đều được: chuông, rung, tắt micro, tắt / đổi máy ảnh, loa ngoài (app), nhật ký cuộc gọi và nút **Gọi lại** trong chat, thông báo cuộc gọi đến và **cuộc gọi nhỡ**. Tiếng và hình đi thẳng giữa hai máy (WebRTC).
+- **Khóa cuộc trò chuyện bằng mật khẩu** (mục 18, mới ở 2.9.0): đặt mật khẩu riêng cho một cuộc trò chuyện (nhóm hay riêng) trên tài khoản của mình; thông báo và bong bóng chat vẫn đầy đủ, nhưng bấm vào (hay mở từ danh sách) thì phải nhập mật khẩu mới xem được; danh sách không hiện nội dung tin. Có trên web và App Think Beta.
 - Gửi ảnh (tự nén trên máy trước khi gửi), dán ảnh bằng Ctrl+V trên máy tính.
 - Thanh điều hướng dưới cùng: **Tin nhắn**, **Trò chơi** (Nông trại, Xếp Khối, Cờ vua, Cờ caro), **Cá nhân** (trang cá nhân + bảng tin; nút ⚙ **Cài đặt**: tên, giới thiệu, ảnh bìa, giao diện sáng/tối, thông báo, lưu trên máy, đổi mật khẩu) và **Quản trị** (chỉ admin thấy).
 - **Lưu trên máy người dùng**: tin nhắn và ảnh được giữ lại trên điện thoại, mở app là xem được ngay kể cả khi mất mạng hay máy chủ đang thức dậy. Tải lịch sử chat thành file, tải ảnh về máy.
@@ -334,6 +336,10 @@ git pull && npm install --omit=dev && pm2 restart think-chat
 | `RESET_ADMIN_PASSWORD` | Đặt lại mật khẩu admin khi khởi động (xóa đi sau khi dùng) | trống |
 | `FIREBASE_PREFIX` | Tiền tố tên bảng trên Firestore, đổi nếu chạy nhiều app chung một project | `think` |
 | `CORS_ORIGINS` | Chỉ dùng khi chạy thử App Think Beta trên trình duyệt ở địa chỉ khác, vd `http://localhost:8081` | trống |
+| `GEMINI_API_KEY` | Khóa Google Gemini cho Think AI (thay cho dán khóa trong Quản trị → AI, gọi) | trống |
+| `AI_PROVIDER`, `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL` | Think AI dùng dịch vụ kiểu OpenAI (`AI_PROVIDER=openai`), hoặc đổi model | Gemini, `gemini-flash-latest` |
+| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | Máy chủ TURN cho cuộc gọi (cũng đặt được trong Quản trị → AI, gọi) | trống |
+| `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | Dùng TURN của Cloudflare (máy chủ tự lấy mật khẩu tạm) | trống |
 
 Màu sắc nằm ở đầu file `public/app.css` (biến `--jade`, `--turmeric`). Icon app nằm trong `public/icons/`.
 
@@ -479,7 +485,8 @@ Có trên bản web và App Think Beta (cùng dữ liệu):
 - **Ảnh nhóm, tên nhóm** (2.9.0): mở **Thông tin nhóm** (ⓘ trên đầu khung chat → **Thành viên**; trên web chạm tên nhóm cũng được), chạm ảnh nhóm hoặc nút **Đổi ảnh nhóm** để chọn ảnh (tự cắt vuông, thu nhỏ trước khi gửi), **Xóa ảnh** để dùng lại chữ cái đầu; sửa ô **Tên nhóm** rồi bấm Lưu. Thành viên nào cũng đổi được, cả nhóm thấy dòng "… đã đổi ảnh nhóm". API `POST` / `DELETE /api/groups/<mã>/avatar`, `PATCH /api/groups/<mã>`.
 - **Khóa cuộc trò chuyện bằng mật khẩu** (2.9.0): ⓘ **Tùy chỉnh đoạn chat → Khóa bằng mật khẩu → Đặt mật khẩu** (4–32 ký tự, nhập hai lần). Khóa **chỉ trên tài khoản của bạn** (cả web và app, mọi máy), người khác trong cuộc trò chuyện không bị ảnh hưởng.
   - Mở cuộc trò chuyện đã khóa phải nhập mật khẩu; chưa nhập thì không tải, không hiện tin nhắn và không tính là đã đọc. Nhập sai 5 lần phải đợi 15 phút.
-  - Danh sách cuộc trò chuyện có biểu tượng 🔒 và chỉ ghi "🔒 Tin nhắn đã khóa"; thông báo nhỏ trong app cũng vậy; **thông báo đẩy** không có tên người gửi, không có nội dung, không có nút Trả lời; app không hiện bong bóng chat cho cuộc trò chuyện đã khóa.
+  - **Thông báo vẫn đầy đủ**: thông báo đẩy, thông báo nhỏ trong app và **bong bóng chat** vẫn có tên người gửi và nội dung như thường (thông báo vẫn có nút Trả lời / Đã đọc). **Bấm vào** thông báo, thông báo nhỏ hay bong bóng thì phải nhập mật khẩu mới vào được cuộc trò chuyện (khung chat nổi của bong bóng cũng hỏi mật khẩu).
+  - Danh sách cuộc trò chuyện có biểu tượng 🔒 và chỉ ghi "🔒 Tin nhắn đã khóa" thay cho nội dung tin mới nhất.
   - Mở khóa xong thì xem được tới khi rời cuộc trò chuyện **2 phút** hoặc ẩn trang / để app chạy nền quá 2 phút (lúc đó tự khóa lại). Nút **ổ khóa** trên đầu khung chat khóa lại ngay.
   - **Đổi mật khẩu** (nhập mật khẩu cũ), **Bỏ khóa**; **quên mật khẩu** thì bỏ khóa bằng mật khẩu đăng nhập Think (ở màn nhập mật khẩu, bấm "Quên mật khẩu?").
   - Mật khẩu lưu trên máy chủ dạng mã băm scrypt (giống mật khẩu đăng nhập), không ai đọc được. API (`src/chat-lock.js`): `PUT /api/conversations/<mã>/lock` `{ password, current }`, `POST /api/conversations/<mã>/unlock` `{ password }`, `DELETE /api/conversations/<mã>/lock` `{ password }` hoặc `{ accountPassword }`; cuộc trò chuyện có thêm `locked` (riêng từng người) và `avatar` (ảnh nhóm).
@@ -495,7 +502,7 @@ Có trên bản web và App Think Beta (cùng dữ liệu):
 ## 19. Báo lỗi app và Kiểm tra APK
 
 - **Báo lỗi tự động**: App Think Beta tự gửi về máy chủ khi bị tắt đột ngột (crash Java / Kotlin, lỗi JavaScript làm tắt app — ghi lại ngay, lần mở sau gửi), khi một màn hình bị lỗi (hiện "Có lỗi xảy ra" với nút Thử lại thay vì tắt app) và lỗi chạy ngầm. Bản web cũng gửi lỗi trang. Admin xem ở **Quản trị → Báo lỗi app**: loại lỗi, số lần, tên máy, Android / **HarmonyOS**, bản app, ai gặp, ở màn hình nào, chi tiết kỹ thuật; lỗi giống nhau được gộp. Có lỗi làm tắt app mới thì admin đang mở trang này thấy ngay.
-- **Kiểm tra APK** (`.github/workflows/apk-check.yml`): mỗi lần sửa `native/`, GitHub build một bản thử rồi **chạy trên máy ảo Android 10 và Android 14**, bấm qua các màn hình như người dùng thật (đăng nhập, nhắn tin, nông trại, cờ vua, Xếp Khối, trang cá nhân, chạy nền, tắt màn hình, **bong bóng chat**, báo lỗi), chụp màn hình và đọc logcat để bắt crash **trước khi phát hành**. Kết quả: trang của lần chạy (Summary) và nhánh `apk-check-results`. Chạy tay: tab Actions → **Kiểm tra APK** → Run workflow. Bước "Kiểm tra code" còn so phiên bản các thư viện native với bản Expo (`npm run check:native`) — lỗi crash ở bản 0.1.4 / 0.1.5 là do một thư viện bị cài lệch phiên bản.
+- **Kiểm tra APK** (`.github/workflows/apk-check.yml`): mỗi lần sửa `native/`, GitHub build một bản thử rồi **chạy trên máy ảo Android 10 và Android 14**, bấm qua các màn hình như người dùng thật (đăng nhập, nhắn tin, **gọi thoại** (một tài khoản thử nghe máy qua Socket.IO), **Think AI**, nông trại, cờ vua, Xếp Khối, trang cá nhân, chạy nền, tắt màn hình, **bong bóng chat**, báo lỗi), chụp màn hình và đọc logcat để bắt crash **trước khi phát hành**. Kết quả: trang của lần chạy (Summary) và nhánh `apk-check-results`. Chạy tay: tab Actions → **Kiểm tra APK** → Run workflow. Bước "Kiểm tra code" còn so phiên bản các thư viện native với bản Expo (`npm run check:native`) — lỗi crash ở bản 0.1.4 / 0.1.5 là do một thư viện bị cài lệch phiên bản.
 
 ## 20. Nông trại
 
@@ -583,6 +590,34 @@ Trang cá nhân (web và App Think Beta) có mục **Thành tựu**: 14 huy hi�
 
 Máy chủ tự tính từ dữ liệu có sẵn mỗi lần mở trang cá nhân (`src/achievements.js`, trả về trong `GET /api/users/<mã>/profile`), nên thành tích cũ cũng được tính. Vừa đạt bậc mới thì lần mở trang cá nhân kế tiếp có thông báo nhỏ "🏆 Thành tựu mới" và nhãn **Mới** (chỉ chủ trang thấy). Thêm huy hiệu: thêm một dòng vào `DEFS` và cách tính trong `valuesOf`.
 
+## 25. Think AI
+
+Trợ lý AI trong chat, có trên web và App Think Beta (giống Meta AI trong Messenger).
+
+- **Nhắn riêng**: nút bút chì **Tin nhắn mới → Hỏi Think AI** (hoặc trang cá nhân của Think AI → Hỏi Think AI). Cuộc trò chuyện mới có vài câu hỏi gợi ý, chạm là gửi. Think AI nhớ khoảng 16 tin gần nhất của cuộc trò chuyện, đọc được **ảnh** bạn gửi (chưa nghe được tin nhắn thoại).
+- **Trong nhóm và phòng chung**: gõ **@** rồi chọn **Think AI** (hoặc gõ thẳng `@Think AI` / `@AI`), hoặc **trả lời** một tin của Think AI. Think AI đọc vài tin gần đây của nhóm (biết ai nói gì), trả lời ngay dưới tin của người gọi. Think AI không là thành viên nhóm, không thêm vào nhóm được, không có trong danh sách chọn người.
+- Lúc Think AI đang nghĩ thì hiện "Think AI đang nhập…"; trả lời xong có thông báo như tin nhắn thường. Chữ trả lời được bỏ định dạng Markdown cho dễ đọc, tối đa 3.900 ký tự.
+- **Cài đặt (admin)**: **Quản trị → AI, gọi**.
+  1. Vào **aistudio.google.com** bằng tài khoản Google → **Get API key** → **Create API key** → chép khóa.
+  2. Dán vào ô **Khóa API** → **Lưu** → **Thử khóa** (thấy "✅ Khóa dùng được" là xong).
+  - Model mặc định `gemini-flash-latest` (luôn là bản Gemini Flash mới nhất). Gói miễn phí của Google có hạn mức theo ngày (xem trong AI Studio); hết lượt thì Think AI báo "hết lượt miễn phí", hôm sau dùng tiếp.
+  - **Cho tra Google**: Think AI tra Google cho câu hỏi về tin tức, thời tiết… (Gemini; có thể tốn hạn mức hơn).
+  - **Kiểu OpenAI**: dùng OpenAI, Groq, OpenRouter, DeepSeek… — chọn "Kiểu OpenAI", nhập **Địa chỉ API** (vd `https://api.groq.com/openai/v1`), **Model** và khóa của dịch vụ đó.
+  - **Mỗi người / ngày**, **Cả nhóm / ngày**: giới hạn số câu hỏi (mặc định 40 và 300), mỗi người tối đa 6 câu mỗi phút. Tắt **Bật Think AI** thì Think AI trả lời "đang tạm nghỉ".
+- Khóa API chỉ lưu trên máy chủ (trong database), **không bao giờ gửi về máy người dùng**, trang Quản trị chỉ hiện 4 ký tự cuối. Không gửi khóa qua tin nhắn. Có thể đặt bằng biến môi trường `GEMINI_API_KEY` trên Render thay vì dán trong app.
+- Máy chủ: `src/ai.js` (tài khoản Think AI có `role = 'bot'`, không đăng nhập được; `GET /api/ai`, `GET` / `PUT /api/admin/ai`, `POST /api/admin/ai/test`). Người dùng trong `/api/users` có thêm `bot: true` cho Think AI.
+
+## 26. Gọi thoại, gọi video
+
+Có trên web và App Think Beta (gọi chéo được: web gọi app, app gọi web). Chỉ trong **cuộc trò chuyện riêng** (1-1).
+
+- **Gọi**: nút 📞 (**Gọi thoại**) và 🎥 (**Gọi video**) trên đầu khung chat riêng. Trên điện thoại, nút **Tìm tin nhắn** và **Thách cờ** chuyển vào ⓘ **Tùy chỉnh đoạn chat** cho đỡ chật. Lần đầu máy hỏi quyền micro (và máy ảnh khi gọi video).
+- **Nghe máy**: màn hình cuộc gọi đến có chuông, rung, nút **Trả lời** / **Từ chối**. App đang đóng thì có thông báo "Đang gọi cho bạn… Bấm để trả lời" (kênh **Cuộc gọi đến** có chuông riêng); bấm vào là mở app và hiện màn hình cuộc gọi. Đổ chuông tối đa 45 giây.
+- **Trong cuộc gọi**: đồng hồ thời lượng, **tắt micro**, **tắt máy ảnh**, **đổi máy ảnh trước / sau**, **loa ngoài** (app: gọi thoại mặc định áp tai, màn hình tự tắt khi áp tai; gọi video mặc định loa ngoài), **kết thúc**. Bên kia tắt micro / máy ảnh thì có dòng báo. Trong app, chuyển sang app khác vẫn nói chuyện được (thông báo "Đang gọi…" có nút **Kết thúc**).
+- **Nhật ký**: cuộc trò chuyện có dòng "📞 Cuộc gọi thoại · 2:31", "📹 Bạn đã lỡ cuộc gọi video từ An", "… đã từ chối cuộc gọi" kèm nút **Gọi lại**; cuộc gọi nhỡ có thông báo đẩy.
+- **Máy chủ TURN** (nếu cần): tiếng và hình đi thẳng giữa hai máy. Hai bên cùng wifi / mạng thường thì gọi được ngay; nếu cả hai dùng 4G hoặc mạng công ty chặn kết nối thẳng, cuộc gọi báo "Không nối được tiếng" — lúc đó admin vào **Quản trị → AI, gọi → Cuộc gọi: máy chủ TURN** nhập địa chỉ `turn:…`, tên đăng nhập, mật khẩu của một dịch vụ TURN (vd Metered.ca, Cloudflare Calls có gói miễn phí), hoặc đặt biến `TURN_URLS` / `CF_TURN_KEY_ID`. Máy chủ Think không chuyển tiếp tiếng / hình (không tốn băng thông Render).
+- Máy chủ: `src/calls.js` (chuyển lời mời và thông tin kết nối qua Socket.IO: `call:start`, `call:accept`, `call:decline`, `call:end`, `call:signal`, `call:media`, `call:rejoin`; `GET /api/calls/current`, `GET /api/calls/ice`, `GET` / `PUT /api/admin/calls`). Web: `public/calls-ui.js`. App: `native/src/calls/` (thư viện `react-native-webrtc`; âm thanh, loa, dịch vụ chạy nền trong `native/modules/think-native`: `CallAudio.kt`, `CallService.kt`).
+
 ## Cấu trúc thư mục
 
 ```
@@ -595,6 +630,8 @@ src/auth.js          Mã hóa mật khẩu (scrypt), phiên đăng nhập
 src/push.js          Thông báo đẩy (Web Push / VAPID)
 src/fcm.js           Thông báo đẩy cho App Think Beta (Firebase Cloud Messaging)
 src/chat-lock.js     Khóa cuộc trò chuyện bằng mật khẩu riêng của từng người (đặt, mở, bỏ khóa)
+src/ai.js            Think AI: tài khoản trợ lý, gọi Gemini / dịch vụ kiểu OpenAI, giới hạn lượt hỏi, cài đặt admin
+src/calls.js         Gọi thoại / gọi video: mời gọi, đổ chuông, chuyển thông tin kết nối WebRTC, nhật ký, máy chủ TURN
 src/chess.js         Cờ vua: thách đấu, đồng hồ, ELO, bảng xếp hạng, API /api/chess
 src/chess-engine.js  Hàng đợi gửi việc cho máy cờ; src/chess-worker.js chạy máy cờ trong luồng riêng
 src/chess-analysis.js Đánh giá ván đã xong bằng Stockfish (xếp loại thiên tài … sai lầm nghiêm trọng, độ chính xác)
@@ -628,7 +665,7 @@ public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu 
                      caro-core.js + caro-ui.js + caro.css (Cờ caro), farm-ui.js + farm.css (Nông trại),
                      streaks.js + streaks.css (chuỗi hằng ngày), chess-anim.js (quân cờ trượt),
                      puzzles-core.js (luật câu đố) + puzzles-ui.js + puzzles.css (quiz, thử thách), puzzles/ (dữ liệu câu đố),
-                     voice-core.js + voice-ui.js (tin nhắn thoại: ghi âm, nghe),
+                     voice-core.js + voice-ui.js (tin nhắn thoại: ghi âm, nghe), calls-ui.js (gọi thoại / gọi video),
                      theme.js (nền sáng/tối), chess/pieces/ (hình quân cờ), chess/sounds/, blocks/sounds/ (âm thanh),
                      farm/emoji/ (hình Twemoji), farm/sounds/
 public/download/     File cài app Android (think.apk) và version.json

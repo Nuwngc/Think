@@ -340,7 +340,7 @@ export function CreateTournamentSheet({ visible, onClose }: { visible: boolean; 
   const people = useMemo(
     () =>
       Object.values(users)
-        .filter((u) => u.id !== meId && !u.disabled)
+        .filter((u) => u.id !== meId && !u.disabled && !u.bot)
         .sort((a, b) => Number(b.online) - Number(a.online) || a.displayName.localeCompare(b.displayName, "vi")),
     [users, meId],
   );

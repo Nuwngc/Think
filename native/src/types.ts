@@ -11,10 +11,12 @@ export type User = {
   /** Lời giới thiệu ngắn */
   bio?: string;
   joinedAt?: number | null;
-  role: "admin" | "member";
+  role: "admin" | "member" | "bot";
   disabled: boolean;
   online: boolean;
   lastSeen: number | null;
+  /** Think AI (2.10.0): tài khoản trợ lý AI, không đăng nhập được */
+  bot?: boolean;
 };
 
 export type Me = User & { mustChangePassword: boolean };

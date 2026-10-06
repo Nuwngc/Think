@@ -38,7 +38,15 @@ type ThinkNativeModule = {
   bubbleConv(): number;
   minimizeBubble(): void;
   openApp(): void;
+  /** Gọi thoại / gọi video (2.10.0): CallAudio.kt */
+  callAudioStart?(speaker: boolean): void;
+  callAudioStop?(): void;
+  callSpeaker?(on: boolean): boolean;
+  callProximity?(on: boolean): void;
+  callServiceStart?(title: string, video: boolean): void;
+  callServiceStop?(): void;
   addListener(event: "onChatHead", listener: (e: ChatHeadEvent) => void): { remove(): void };
+  addListener(event: "onCallAction", listener: (e: { type: string }) => void): { remove(): void };
 };
 
 export const ThinkNative: ThinkNativeModule | null =

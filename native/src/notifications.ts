@@ -12,6 +12,7 @@ import { PUSH_CONFIGURED } from "./config";
 export const CHANNEL_MESSAGES = "messages";
 export const CHANNEL_OTHER = "other";
 export const CHANNEL_CHESS = "chess";
+export const CHANNEL_CALLS = "calls";
 export const CATEGORY_MESSAGE = "message";
 export const NOTIFICATION_TASK = "think-notification-action";
 
@@ -58,6 +59,17 @@ export function setupNotifications() {
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 120, 80, 120],
           lightColor: "#F2B01E",
+          showBadge: false,
+        });
+        // Có người gọi đến khi app đang đóng (2.10.0): chuông riêng, rung dài, hiện cả trên màn hình khóa
+        await Notifications.setNotificationChannelAsync(CHANNEL_CALLS, {
+          name: "Cuộc gọi đến",
+          description: "Có người gọi thoại / gọi video cho bạn",
+          importance: Notifications.AndroidImportance.MAX,
+          sound: "call_ring.wav",
+          vibrationPattern: [0, 700, 900, 700, 900, 700],
+          lightColor: "#0E7C66",
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
           showBadge: false,
         });
         await Notifications.setNotificationChannelAsync(CHANNEL_OTHER, {

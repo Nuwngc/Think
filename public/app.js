@@ -225,7 +225,7 @@
     el.replaceChildren();
     el.classList.toggle('is-group', group);
     el.classList.toggle('is-team', Boolean(team));
-    el.classList.toggle('is-online', Boolean(!group && !team && dot && user && user.online && user.id !== state.me?.id));
+    el.classList.toggle('is-online', Boolean(!group && !team && dot && user && user.online && !user.bot && user.id !== state.me?.id));
     if (team && team.avatar) {
       // Ảnh nhóm (2.9.0): lỗi tải ảnh thì quay về chữ cái
       el.style.setProperty('--av', colorOf(team.id + 3));
@@ -285,8 +285,20 @@
       case 'theme': return `${actor} đã đổi chủ đề thành ${d.name || 'mới'}`;
       case 'emoji': return `${actor} đã đổi biểu tượng cảm xúc nhanh thành ${d.emoji}`;
       case 'avatar': return d.removed ? `${actor} đã xóa ảnh nhóm` : `${actor} đã đổi ảnh nhóm`;
+      case 'call': return callText(d, m);
       default: return 'Cuộc trò chuyện vừa được cập nhật';
     }
+  }
+
+  // Cuộc gọi (2.10.0): "📞 Cuộc gọi thoại · 2:31", "📹 Bạn đã lỡ cuộc gọi video từ An"...
+  function callText(d, m) {
+    const ic = d.video ? '📹' : '📞';
+    const kind = d.video ? 'video' : 'thoại';
+    const mine = m.senderId === state.me?.id; // mình là người gọi
+    const peer = nameOf(d.to || state.convs.get(m.conversationId)?.peerId);
+    if (d.status === 'ended') return `${ic} Cuộc gọi ${kind} · ${window.ThinkCalls ? window.ThinkCalls.clock(d.duration || 0) : `${d.duration || 0} giây`}`;
+    if (d.status === 'declined') return mine ? `${ic} ${peer} đã từ chối cuộc gọi ${kind}` : `${ic} Bạn đã từ chối cuộc gọi ${kind}`;
+    return mine ? `${ic} Cuộc gọi ${kind} không được trả lời` : `${ic} Bạn đã lỡ cuộc gọi ${kind} từ ${nameOf(m.senderId)}`;
   }
 
   /* =========================================================
@@ -373,6 +385,8 @@
   // Trang cá nhân và bảng tin (public/social-ui.js)
   // Tin nhắn thoại: ghi âm và nghe (public/voice-ui.js, public/voice-core.js)
   const voice = window.ThinkVoice && window.VoiceCore ? window.ThinkVoice.create({ h, icon, toast }) : null;
+  // Gọi thoại / gọi video (public/calls-ui.js, máy chủ src/calls.js). Khung chat nổi (bong bóng) không nhận cuộc gọi.
+  const calls = window.ThinkCalls && !IN_BUBBLE ? window.ThinkCalls.create({ h, icon, toast, state, avatarEl, userOf }) : null;
   const voiceLabel = (m) => `🎤 Tin nhắn thoại${m.audio && m.audio.ms && window.VoiceCore ? ` (${window.VoiceCore.clock(m.audio.ms)})` : ''}`;
 
   const social = window.ThinkSocial
@@ -413,6 +427,7 @@
     history.replaceState(null, '', '#/');
   }
   function teardown() {
+    if (calls) calls.reset();
     if (state.socket) {
       state.socket.removeAllListeners();
       state.socket.disconnect();
@@ -665,7 +680,6 @@
     return `${hasImage ? '📷 ' : ''}${String(m.text || '').replace(/\s+/g, ' ')}`;
   }
   function previewText(m, c) {
-    if (c && c.locked) return LOCKED_PREVIEW; // cuộc trò chuyện đã khóa: không lộ nội dung
     if (m.kind === 'system') return systemText(m);
     const who = m.senderId === state.me.id ? 'Bạn' : c.type !== 'dm' ? nameOf(m.senderId) : '';
     return who ? `${who}: ${messageSummary(m)}` : messageSummary(m);
@@ -673,7 +687,8 @@
   const lastActivity = (c) => c.lastMessage?.createdAt || c.createdAt || 0;
 
   /* ----- Khóa cuộc trò chuyện bằng mật khẩu (2.9.0, máy chủ: src/chat-lock.js) -----
-     Mở khóa xong thì xem được tới khi rời cuộc trò chuyện hoặc ẩn trang quá RELOCK_MS; nút ổ khóa trên đầu khung chat khóa lại ngay. */
+     Mở khóa xong thì xem được tới khi rời cuộc trò chuyện hoặc ẩn trang quá RELOCK_MS; nút ổ khóa trên đầu khung chat khóa lại ngay.
+     Thông báo nhỏ và thông báo đẩy vẫn đầy đủ; danh sách cuộc trò chuyện thì không hiện nội dung. */
   const LOCKED_PREVIEW = '🔒 Tin nhắn đã khóa';
   const RELOCK_MS = 2 * 60 * 1000;
   const locks = { open: new Map(), hiddenAt: 0, mode: 'unlock', error: '', busy: false };
@@ -705,7 +720,8 @@
     const unread = c.unread || 0;
     const preview = typers.length
       ? h('span', { class: 'conv-preview is-typing', text: isDm ? 'Đang nhập…' : `${nameOf(typers[0])} đang nhập…` })
-      : h('span', { class: 'conv-preview', text: lm ? previewText(lm, c) : isDm ? 'Chưa có tin nhắn' : 'Nơi cả nhóm cùng nói chuyện' });
+      // Đã khóa: danh sách không hiện nội dung (thông báo thì vẫn đầy đủ)
+      : h('span', { class: 'conv-preview', text: c.locked ? LOCKED_PREVIEW : lm ? previewText(lm, c) : isDm ? 'Chưa có tin nhắn' : 'Nơi cả nhóm cùng nói chuyện' });
     const muted = isMuted(c);
     return h('li', { class: `conv${unread ? ' has-unread' : ''}${muted ? ' is-muted' : ''}${c.id === state.currentId ? ' is-active' : ''}`, dataset: { conv: c.id } },
       h('a', {
@@ -763,9 +779,13 @@
       return;
     }
     applyTheme(c);
-    // Chat riêng: nút thách đấu cờ vua
+    // Chat riêng: nút gọi thoại / gọi video, thách đấu cờ vua (không có với Think AI)
+    const human = isDm && peer && !peer.disabled && !peer.bot;
+    $('#chat-pane').classList.toggle('is-dm', isDm);
+    $('#call-voice-btn').hidden = !calls || !human;
+    $('#call-video-btn').hidden = !calls || !human;
     const chessBtn = $('#chess-dm-btn');
-    chessBtn.hidden = !chess || !isDm || !peer || peer.disabled || IN_BUBBLE;
+    chessBtn.hidden = !chess || !human || IN_BUBBLE;
     chessBtn.setAttribute('aria-label', `Thách ${peer?.displayName || 'người này'} một ván cờ`);
     $('.chat-title').classList.toggle('is-link', c.type === 'group');
     const status = $('#chat-status');
@@ -776,10 +796,10 @@
       return;
     }
     if (isDm) {
-      status.textContent = peer?.disabled ? 'Tài khoản này đã bị khóa' : lastSeenText(peer);
+      status.textContent = peer?.bot ? 'Trợ lý AI · luôn sẵn sàng' : peer?.disabled ? 'Tài khoản này đã bị khóa' : lastSeenText(peer);
       status.classList.toggle('is-online', Boolean(peer?.online));
     } else {
-      const ids = c.type === 'group' ? c.memberIds || [] : [...state.users.values()].filter((u) => !u.disabled).map((u) => u.id);
+      const ids = c.type === 'group' ? c.memberIds || [] : [...state.users.values()].filter((u) => !u.disabled && !u.bot).map((u) => u.id);
       const active = ids.filter((uid) => uid !== state.me.id && userOf(uid)?.online).length;
       status.textContent = `${ids.length} thành viên${active ? `, ${active} người đang hoạt động` : ''}`;
       status.classList.remove('is-online');
@@ -991,7 +1011,9 @@
           lastDay = day;
         }
         if (m.kind === 'system') {
-          frag.append(h('div', { class: 'sys-msg' }, h('span', { text: systemText(m) })));
+          const call = c.type === 'dm' && calls && !userOf(c.peerId)?.disabled ? callInfo(m) : null;
+          frag.append(h('div', { class: `sys-msg${call ? ' sys-call' : ''}` }, h('span', { text: systemText(m) }),
+            call ? h('button', { class: 'sys-call-btn', type: 'button', text: 'Gọi lại', onclick: () => calls.start(c.id, Boolean(call.video)) }) : null));
           return;
         }
         const joinPrev = Boolean(prev && prev.kind !== 'system' && prev.senderId === m.senderId && dayKey(prev.createdAt) === day && m.createdAt - prev.createdAt < GROUP_GAP);
@@ -1000,7 +1022,7 @@
       });
       // "Đã xem" dưới tin cuối của mình (chat riêng)
       const last = b.list[b.list.length - 1];
-      if (c.type === 'dm' && last && last.id && last.senderId === state.me.id && !last.deleted) {
+      if (c.type === 'dm' && last && last.id && last.kind !== 'system' && last.senderId === state.me.id && !last.deleted) {
         const seen = (c.peerLastReadId || 0) >= last.id;
         frag.append(h('div', { class: 'seen' }, seen
           ? [avatarEl(userOf(c.peerId), 'avatar-xs', { dot: false }), h('span', { text: 'Đã xem' })]
@@ -1026,8 +1048,33 @@
     state.stickBottom = isNearBottom();
   }
 
+  function callInfo(m) {
+    if (!m.text || !m.text.includes('"call"')) return null;
+    try {
+      const d = JSON.parse(m.text);
+      return d.event === 'call' ? d : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Think AI (2.10.0): lời chào và vài câu hỏi gợi ý khi chưa nhắn gì
+  const AI_SUGGESTIONS = ['Gợi ý món ăn tối nay 🍜', 'Viết lời chúc sinh nhật cho bạn thân 🎂', 'Dịch sang tiếng Anh: Hẹn gặp lại cuối tuần nhé!', 'Giải thích ngắn gọn: lãi kép là gì?'];
+  function aiIntro(c, empty) {
+    return h('div', { class: 'intro ai-intro' },
+      convAvatarEl(c, 'avatar-xl', { dot: false }),
+      h('p', { class: 'intro-name', text: 'Think AI' }),
+      h('p', { class: 'intro-text', text: 'Trợ lý AI của Think. Hỏi mình bất cứ điều gì: giải thích, dịch, viết hộ, gợi ý… Gửi ảnh để mình xem giúp. Trong nhóm, gõ @Think AI là mình trả lời.' }),
+      h('p', { class: 'intro-text ai-note', text: 'AI có thể nhầm, hãy kiểm tra lại thông tin quan trọng.' }),
+      empty ? h('div', { class: 'ai-chips' }, AI_SUGGESTIONS.map((q) => h('button', {
+        class: 'ai-chip', type: 'button', text: q,
+        onclick: () => sendTextTo(c.id, q.replace(/\s*\p{Extended_Pictographic}+$/u, '')),
+      }))) : null);
+  }
+
   function introEl(c) {
     const peer = c.type === 'dm' ? userOf(c.peerId) : null;
+    if (peer?.bot) return aiIntro(c, !state.msgs.get(c.id)?.list.length);
     let text = 'Phòng chung của cả nhóm. Tin nhắn ở đây mọi thành viên đều đọc được.';
     if (c.type === 'dm') text = `Đây là đầu cuộc trò chuyện riêng giữa bạn và ${peer?.displayName || 'người này'}.`;
     if (c.type === 'group') {
@@ -1821,7 +1868,10 @@
           placeMenu(menuButtons(muteMenuItems(c)), r.left + r.width / 2, r.top, null);
         }, isMuted(c)),
         quick(c.pinnedAt ? 'Bỏ ghim' : 'Ghim lên đầu', 'pin', () => setPrefs(c, { pinned: !c.pinnedAt }), Boolean(c.pinnedAt)),
-        c.type === 'group' ? quick('Thành viên', 'group', () => navigate('#/group', { replace: true })) : null),
+        c.type === 'group' ? quick('Thành viên', 'group', () => navigate('#/group', { replace: true })) : null,
+        c.type === 'dm' && chess && !IN_BUBBLE && userOf(c.peerId) && !userOf(c.peerId).bot && !userOf(c.peerId).disabled
+          ? quick('Thách cờ', 'knight', () => { goBack(); setTimeout(() => chess.openChallenge(c.peerId), 260); })
+          : null),
       lockPanel(c),
       h('div', { class: 'panel' },
         h('h3', { text: `Chủ đề: ${t.name}` }),
@@ -2037,7 +2087,7 @@
     }
     lockUi.el = h('div', { class: 'panel', id: 'conv-lock' },
       h('h3', { text: c.locked ? '🔒 Đang khóa bằng mật khẩu' : 'Khóa bằng mật khẩu' }),
-      h('p', { class: 'hint', text: 'Chỉ khóa trên tài khoản của bạn (cả web và app): mở cuộc trò chuyện này phải nhập mật khẩu, danh sách và thông báo không hiện nội dung tin nhắn. Người khác không bị ảnh hưởng.' }),
+      h('p', { class: 'hint', text: 'Chỉ khóa trên tài khoản của bạn (cả web và app): mở cuộc trò chuyện này phải nhập mật khẩu, danh sách không hiện nội dung tin nhắn. Thông báo và bong bóng chat vẫn đầy đủ, bấm vào thì hỏi mật khẩu. Người khác không bị ảnh hưởng.' }),
       body);
     return lockUi.el;
   }
@@ -2339,8 +2389,9 @@
     if (!c) return [];
     if (c.type === 'group') return c.memberIds || [];
     if (c.type === 'dm') return [c.peerId];
-    return [...state.users.values()].filter((u) => !u.disabled).map((u) => u.id);
+    return [...state.users.values()].filter((u) => !u.disabled && !u.bot).map((u) => u.id);
   }
+  const aiBot = () => [...state.users.values()].find((u) => u.bot && !u.disabled) || null;
   function updateMentions() {
     const c = state.convs.get(state.currentId);
     const box = $('#mention-box');
@@ -2355,13 +2406,17 @@
       .filter((u) => u && !u.disabled && (!q || fold(u.displayName).includes(q) || u.username.includes(q)))
       .sort((a, b) => a.displayName.localeCompare(b.displayName, 'vi'))
       .slice(0, 6);
+    // Think AI luôn có trong gợi ý (gõ @ là thấy), dù không là thành viên nhóm
+    const bot = aiBot();
+    if (bot && (!q || fold(bot.displayName).includes(q) || 'ai'.startsWith(q))) people.unshift(bot);
+    if (people.length > 6) people.length = 6;
     if (!people.length) return hideMentions();
     chatPlus.mention = { start: before.length - m[1].length - 1, people, index: 0 };
     box.replaceChildren(...people.map((u, i) => h('button', {
       class: `mention-item${i === 0 ? ' is-active' : ''}`, type: 'button', role: 'option', 'aria-selected': i === 0 ? 'true' : 'false',
       onmousedown: (e) => e.preventDefault(),
       onclick: () => pickMention(u),
-    }, avatarEl(u, 'avatar-sm', { dot: false }), h('span', { class: 'person-name', text: u.displayName }), h('span', { class: 'person-sub', text: `@${u.username}` }))));
+    }, avatarEl(u, 'avatar-sm', { dot: false }), h('span', { class: 'person-name', text: u.displayName }), h('span', { class: 'person-sub', text: u.bot ? 'Trợ lý AI' : `@${u.username}` }))));
     box.hidden = false;
   }
   function hideMentions() {
@@ -3191,6 +3246,7 @@ ${sections}
         if (caro) caro.reload();
         if (streaks) streaks.load();
         if (puzzles) puzzles.load(); // gửi kết quả câu đố giải lúc mất mạng
+        if (calls) calls.onReconnect(); // đang gọi thì báo máy chủ mình đã nối lại
       }
       state.everConnected = true;
     });
@@ -3200,6 +3256,7 @@ ${sections}
       else if (err && err.message === 'must_change_password') showForce();
       else showOffline();
     });
+    if (calls) calls.bind(socket);
     socket.on('message:new', onMessageNew);
     socket.on('message:deleted', onMessageDeleted);
     socket.on('message:reactions', onReactions);
@@ -3304,15 +3361,11 @@ ${sections}
       payload: {
         type: 'message',
         conversationId: c.id,
-        ...(c.locked
-          ? { isGroup: false, convTitle: 'Think', senderName: '🔒 Think', text: 'Có tin nhắn mới trong cuộc trò chuyện đã khóa', icon: '/icons/icon-192.png', locked: true }
-          : {
-              isGroup: c.type !== 'dm',
-              convTitle: convTitle(c),
-              senderName: nameOf(msg.senderId),
-              text: msg.image && !msg.text ? '📷 Đã gửi một ảnh' : messageSummary(msg),
-              icon: userOf(msg.senderId)?.avatar || '/icons/icon-192.png',
-            }),
+        isGroup: c.type !== 'dm',
+        convTitle: convTitle(c),
+        senderName: nameOf(msg.senderId),
+        text: msg.image && !msg.text ? '📷 Đã gửi một ảnh' : messageSummary(msg),
+        icon: userOf(msg.senderId)?.avatar || '/icons/icon-192.png',
         url: `/#/c/${c.id}`,
         createdAt: msg.createdAt,
       },
@@ -4041,10 +4094,19 @@ ${sections}
     if (!state.me) return;
     const q = fold($('#people-search').value);
     const people = [...state.users.values()]
-      .filter((u) => u.id !== state.me.id && !u.disabled && (!q || fold(u.displayName).includes(q) || u.username.includes(q)))
+      .filter((u) => u.id !== state.me.id && !u.disabled && !u.bot && (!q || fold(u.displayName).includes(q) || u.username.includes(q)))
       .sort((a, b) => Number(b.online) - Number(a.online) || a.displayName.localeCompare(b.displayName, 'vi'));
     const ul = $('#people-list');
-    ul.replaceChildren(...people.map((u) => h('li', null,
+    // Think AI ở đầu danh sách
+    const bot = aiBot();
+    const askAi = bot && (!q || fold('think ai tro ly').includes(q))
+      ? h('li', null, h('button', { class: 'person ai-row', type: 'button', onclick: () => startDm(bot.id) },
+          avatarEl(bot, '', { dot: false }),
+          h('span', { class: 'person-main' },
+            h('span', { class: 'person-name', text: 'Hỏi Think AI' }),
+            h('span', { class: 'person-sub', text: 'Trợ lý AI: hỏi đáp, dịch, viết hộ, gợi ý…' }))))
+      : null;
+    ul.replaceChildren(...(askAi ? [askAi] : []), ...people.map((u) => h('li', null,
       h('button', { class: 'person', type: 'button', onclick: () => startDm(u.id) },
         avatarEl(u),
         h('span', { class: 'person-main' },
@@ -4074,7 +4136,7 @@ ${sections}
   function renderPicker(ul, { query, selected, exclude, onToggle }) {
     const q = fold(query);
     const people = [...state.users.values()]
-      .filter((u) => !u.disabled && !exclude.has(u.id) && (!q || fold(u.displayName).includes(q) || u.username.includes(q)))
+      .filter((u) => !u.disabled && !u.bot && !exclude.has(u.id) && (!q || fold(u.displayName).includes(q) || u.username.includes(q)))
       .sort((a, b) => a.displayName.localeCompare(b.displayName, 'vi'));
     ul.replaceChildren(...people.map((u) => h('li', null,
       h('button', {
@@ -4327,8 +4389,9 @@ ${sections}
     $('#admin-accounts').hidden = seg !== 'accounts';
     $('#admin-storage').hidden = seg !== 'storage';
     $('#admin-errors').hidden = seg !== 'errors';
+    $('#admin-ai').hidden = seg !== 'ai';
   }
-  const ADMIN_SEGS = ['accounts', 'storage', 'errors'];
+  const ADMIN_SEGS = ['accounts', 'storage', 'errors', 'ai'];
   $('.seg').addEventListener('click', (e) => {
     const btn = e.target.closest('.seg-btn');
     if (!btn || btn.dataset.seg === state.adminSeg) return;
@@ -4336,6 +4399,7 @@ ${sections}
     $(`#admin-${btn.dataset.seg}`).scrollTop = 0;
     if (btn.dataset.seg === 'storage') loadStorage();
     if (btn.dataset.seg === 'errors') loadErrors();
+    if (btn.dataset.seg === 'ai') loadAiAdmin();
   });
   $('.seg').addEventListener('keydown', (e) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
@@ -4345,6 +4409,117 @@ ${sections}
     $(`#seg-${next}`).focus();
     if (next === 'storage') loadStorage();
     if (next === 'errors') loadErrors();
+    if (next === 'ai') loadAiAdmin();
+  });
+
+  /* ----- Quản trị: Think AI + máy chủ TURN cho cuộc gọi (máy chủ: src/ai.js, src/calls.js) ----- */
+  async function loadAiAdmin() {
+    try {
+      const [{ ai }, { calls: turn }] = await Promise.all([api('/api/admin/ai'), api('/api/admin/calls')]);
+      fillAiForm(ai);
+      fillTurnForm(turn);
+    } catch (err) {
+      setFormError($('#ai-form'), err.message);
+    }
+  }
+  function fillAiForm(ai) {
+    const f = $('#ai-form');
+    f.enabled.checked = ai.enabled;
+    f.provider.value = ai.provider;
+    f.apiKey.value = '';
+    f.apiKey.placeholder = ai.hasKey ? `Đang dùng khóa ${ai.keyHint}${ai.keySource === 'env' ? ' (biến môi trường)' : ''}. Dán khóa mới để đổi` : 'Dán khóa API vào đây';
+    f.model.value = ai.model;
+    f.model.placeholder = ai.provider === 'gemini' ? 'gemini-flash-latest' : 'vd llama-3.3-70b-versatile';
+    f.baseUrl.value = ai.baseUrl || '';
+    f.search.checked = ai.search;
+    f.perUserDaily.value = ai.perUserDaily;
+    f.totalDaily.value = ai.totalDaily;
+    $('#ai-remove-key').hidden = !(ai.hasKey && ai.keySource === 'settings');
+    const st = $('#ai-state');
+    st.textContent = ai.ready ? 'Đang chạy' : !ai.enabled ? 'Đang tắt' : 'Chưa có khóa';
+    st.className = `ai-state${ai.ready ? ' is-on' : ''}`;
+    $('#ai-usage').textContent = `Hôm nay đã trả lời ${fmtNum(ai.usedToday)} câu hỏi.`;
+    aiProviderFields();
+    setFormError(f, '');
+  }
+  function aiProviderFields() {
+    const f = $('#ai-form');
+    const gemini = f.provider.value === 'gemini';
+    $('.ai-openai', f).hidden = gemini;
+    $('.ai-gemini', f).hidden = !gemini;
+  }
+  $('#ai-form').provider.addEventListener('change', aiProviderFields);
+  $('#ai-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    withBusy($('button[type="submit"]', f), async () => {
+      const body = {
+        enabled: f.enabled.checked,
+        provider: f.provider.value,
+        model: f.model.value.trim(),
+        baseUrl: f.provider.value === 'openai' ? f.baseUrl.value.trim() : '',
+        search: f.search.checked,
+        perUserDaily: Number(f.perUserDaily.value) || undefined,
+        totalDaily: Number(f.totalDaily.value) || undefined,
+      };
+      if (f.apiKey.value.trim()) body.apiKey = f.apiKey.value.trim();
+      try {
+        const { ai } = await api('/api/admin/ai', { method: 'PUT', body });
+        fillAiForm(ai);
+        toast(ai.ready ? 'Đã lưu. Think AI sẵn sàng trả lời.' : 'Đã lưu cài đặt Think AI.');
+      } catch (err) {
+        setFormError(f, err.message);
+      }
+    });
+  });
+  $('#ai-test').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    const out = $('#ai-test-result');
+    out.hidden = false;
+    out.textContent = 'Đang hỏi thử…';
+    out.classList.remove('is-error');
+    try {
+      const r = await api('/api/admin/ai/test', { method: 'POST' });
+      out.textContent = `✅ Khóa dùng được (${r.model}). Think AI trả lời: “${r.reply}”`;
+    } catch (err) {
+      out.textContent = `❌ ${err.message}`;
+      out.classList.add('is-error');
+    }
+  }));
+  $('#ai-remove-key').addEventListener('click', async () => {
+    if (!window.confirm('Xóa khóa API? Think AI sẽ ngừng trả lời cho đến khi có khóa mới.')) return;
+    try {
+      const { ai } = await api('/api/admin/ai', { method: 'PUT', body: { apiKey: '' } });
+      fillAiForm(ai);
+      toast('Đã xóa khóa API.');
+    } catch (err) {
+      toast(err.message);
+    }
+  });
+  function fillTurnForm(t) {
+    const f = $('#turn-form');
+    f.turnUrls.value = t.turnUrls;
+    f.turnUsername.value = t.turnUsername;
+    f.turnCredential.value = '';
+    f.turnCredential.placeholder = t.hasCredential ? 'Đã lưu (để trống = giữ)' : '';
+    $('#turn-state').textContent = t.turnUrls
+      ? 'Cuộc gọi đang dùng máy chủ TURN này khi cần.'
+      : t.cloudflare ? 'Đang dùng TURN của Cloudflare (biến môi trường).' : t.envTurn ? 'Đang dùng TURN đặt trong biến môi trường.' : 'Chưa có máy chủ TURN: gọi qua wifi thường vẫn được, một số mạng 4G có thể không nối được.';
+    setFormError(f, '');
+  }
+  $('#turn-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    withBusy($('button[type="submit"]', f), async () => {
+      const body = { turnUrls: f.turnUrls.value.trim(), turnUsername: f.turnUsername.value.trim() };
+      if (f.turnCredential.value) body.turnCredential = f.turnCredential.value;
+      try {
+        const { calls: t } = await api('/api/admin/calls', { method: 'PUT', body });
+        fillTurnForm(t);
+        toast('Đã lưu máy chủ TURN.');
+      } catch (err) {
+        setFormError(f, err.message);
+      }
+    });
   });
 
   /* ----- Quản trị: báo lỗi app (crash, lỗi JavaScript) ----- */
@@ -4786,6 +4961,12 @@ ${sections}
       case 'chat-search': openChatSearch(); break;
       case 'chat-search-close': closeChatSearch(); break;
       case 'composer-more': openComposerMenu(el); break;
+      case 'call-voice':
+      case 'call-video': {
+        const c = state.convs.get(state.currentId);
+        if (calls && c && c.type === 'dm') calls.start(c.id, el.dataset.action === 'call-video');
+        break;
+      }
       case 'chess-challenge': {
         const c = state.convs.get(state.currentId);
         if (chess && c && c.type === 'dm') chess.openChallenge(c.peerId);
