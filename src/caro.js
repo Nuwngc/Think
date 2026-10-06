@@ -266,8 +266,8 @@ function setupCaro({ app, io, requireAuth, requireReady, isActive, notify, nameO
   function createChallenge(uid, body) {
     const oppId = Number(body?.opponentId);
     if (!Number.isInteger(oppId) || oppId === uid) throw new CaroError(400, 'Chọn một người để thách đấu.');
-    const opp = get('SELECT id, disabled FROM users WHERE id = ?', oppId);
-    if (!opp || opp.disabled) throw new CaroError(404, 'Không tìm thấy người này.');
+    const opp = get('SELECT id, disabled, role FROM users WHERE id = ?', oppId);
+    if (!opp || opp.disabled || opp.role === 'bot') throw new CaroError(404, 'Không tìm thấy người này.'); // Think AI không chơi cờ
     const seconds = Number(body?.turnSeconds ?? 30);
     if (!TURN_SECONDS.includes(seconds)) throw new CaroError(400, 'Thời gian mỗi nước không hợp lệ.');
     const rule = Caro.RULES.includes(body?.rule) ? body.rule : 'free';

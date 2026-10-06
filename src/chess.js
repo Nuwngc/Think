@@ -798,8 +798,8 @@ function setupChess({ app, io, requireAuth, requireReady, isActive, notify, name
   function createChallenge(uid, body) {
     const oppId = Number(body?.opponentId);
     if (!Number.isInteger(oppId) || oppId === uid) throw new ChessError(400, 'Chọn một người để thách đấu.');
-    const opp = get('SELECT id, disabled FROM users WHERE id = ?', oppId);
-    if (!opp || opp.disabled) throw new ChessError(404, 'Không tìm thấy người này.');
+    const opp = get('SELECT id, disabled, role FROM users WHERE id = ?', oppId);
+    if (!opp || opp.disabled || opp.role === 'bot') throw new ChessError(404, 'Không tìm thấy người này.'); // Think AI không chơi cờ
     const tc = readTimeControl(body, { daily: true });
     const pending = get("SELECT COUNT(*) AS n FROM chess_games WHERE status = 'challenge' AND challenger_id = ?", uid).n;
     if (pending >= MAX_PENDING) throw new ChessError(429, 'Bạn đang chờ quá nhiều lời thách đấu. Hủy bớt rồi thử lại.');
