@@ -11,6 +11,7 @@ import { mentionParts, pollPercents } from "../chatPlus";
 import type { ChatTheme } from "../chatThemes";
 import { closePoll, openChess, showToast, useStore, votePoll } from "../store";
 import { StoryRefCard } from "../stories/StoryRefCard";
+import { TranslationBox } from "../ai/TranslationBox";
 import { useColors, type Colors } from "../theme";
 import type { ChatItem, Conversation, Message, User } from "../types";
 import { Avatar, Icon, useStyles } from "../ui";
@@ -72,6 +73,7 @@ export const MessageRow = memo(function MessageRow(p: MessageRowProps) {
         >
           {m.kind === "poll" && !m.deleted && !pending ? <PollCard {...p} mine={mine} /> : <Bubble {...p} mine={mine} />}
         </Pressable>
+        {!pending && !m.deleted ? <TranslationBox messageId={m.id as number} /> : null}
         {!m.deleted && m.reactions?.length ? (
           <Pressable onPress={() => p.onPressReactions(m)} style={[s.reacts, mine ? s.reactsMine : s.reactsTheirs]} accessibilityRole="button">
             <ReactionPill list={m.reactions} meId={meId} />

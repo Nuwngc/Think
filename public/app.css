@@ -1688,7 +1688,7 @@ html.in-call, html.in-call body { overflow: hidden; }
 .story-list::-webkit-scrollbar { display: none; }
 .story-li { flex: none; }
 .story-item {
-  display: flex; flex-direction: column; align-items: center; gap: 5px; width: 72px; padding: 4px 2px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px; width: 78px; padding: 4px 2px;
   border: 0; border-radius: 14px; background: none; color: var(--ink); font: inherit; cursor: pointer;
 }
 .story-item:hover { background: var(--field); }
@@ -1706,7 +1706,7 @@ html.in-call, html.in-call body { overflow: hidden; }
   display: grid; place-items: center; background: var(--jade); color: #fff; box-shadow: 0 0 0 2.5px var(--surface);
 }
 .story-plus .ic { width: 14px; height: 14px; stroke-width: 2.6; }
-.story-name { max-width: 68px; font-size: 12px; line-height: 1.2; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.story-name { max-width: 76px; font-size: 12px; line-height: 1.2; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 body.story-open { overflow: hidden; }
 .story-layer {
@@ -1845,3 +1845,37 @@ button.story-thumb:focus-visible { outline: 2px solid var(--jade); outline-offse
   .story-react { transition: none; }
   .story-react:hover { transform: none; }
 }
+
+/* ===== Think AI giúp đọc chat (2.14.0): tóm tắt tin chưa đọc, dịch tin nhắn ===== */
+.ai-sum[hidden] { display: none; }
+.ai-sum { flex: none; border-bottom: 1px solid var(--line); background: var(--surface); }
+.ai-sum.is-offer { display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 14px; background: var(--turmeric-wash); }
+.ai-sum-ic { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 50%; background: var(--turmeric); color: #3A2A00; }
+.ai-sum-ic .ic { width: 17px; height: 17px; }
+.ai-sum-text { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink-2); }
+.ai-sum-text strong { color: var(--ink); }
+.ai-sum-x { width: 36px; height: 36px; flex: none; }
+.ai-sum.is-card { display: grid; gap: 6px; padding: 10px 8px 10px 14px; max-height: 42vh; overflow-y: auto; overscroll-behavior: contain; }
+.ai-sum-head { display: flex; align-items: center; gap: 10px; }
+.ai-sum-title { flex: 1; min-width: 0; display: grid; }
+.ai-sum-title span { font-size: 12.5px; color: var(--muted); }
+.ai-sum-body { margin: 0; padding-right: 8px; white-space: pre-wrap; line-height: 1.5; font-size: 14.5px; max-width: 70ch; }
+.ai-sum-wait { margin: 0; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
+.ai-sum-note { margin: 0; font-size: 12px; color: var(--muted); }
+.ai-sum-note:empty { display: none; }
+.ai-dots { display: inline-flex; gap: 4px; }
+.ai-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--turmeric); animation: ai-dot 1s ease-in-out infinite; }
+.ai-dots i:nth-child(2) { animation-delay: .15s; }
+.ai-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes ai-dot { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+.msg-trans {
+  display: grid; gap: 2px; max-width: 100%; margin-top: 3px; padding: 6px 10px; border-radius: 12px;
+  border-left: 3px solid var(--turmeric); background: var(--turmeric-wash); color: var(--ink); font-size: 14px; line-height: 1.4;
+}
+.msg-trans.is-error { border-left-color: var(--danger); background: var(--danger-wash); }
+.msg-trans-label { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--turmeric-ink); }
+.msg-trans.is-error .msg-trans-label { color: var(--danger); font-weight: 400; font-size: 12.5px; }
+.msg-trans-label .ic { width: 13px; height: 13px; }
+.msg-trans-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg-trans-hide { margin-left: auto; padding: 2px 6px; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .ai-dots i { animation: none; } }

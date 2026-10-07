@@ -66,7 +66,8 @@ const SquareView = memo(function SquareView({ sq, light, colors, size, mark, hov
             StyleSheet.absoluteFill,
             mark === "check"
               ? { backgroundColor: CHECK, borderRadius: size / 2, transform: [{ scale: 0.92 }] }
-              : { backgroundColor: mark === "sel" ? SELECTED : mark === "pre" ? PREMOVE : LAST },
+              : // Ghi rõ borderRadius 0 (không bỏ trống): đổi từ ô bị chiếu sang ô thường thì Android báo "radius: Null"
+                { backgroundColor: mark === "sel" ? SELECTED : mark === "pre" ? PREMOVE : LAST, borderRadius: 0, transform: [{ scale: 1 }] },
           ]}
         />
       ) : null}

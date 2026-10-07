@@ -61,6 +61,7 @@ export function ConvSettingsSheet({
   onMembers,
   onPins,
   onChess,
+  onSummary,
   onOpenImage,
 }: {
   conv: Conversation;
@@ -71,6 +72,8 @@ export function ConvSettingsSheet({
   onPins: () => void;
   /** Chat riêng: Thách cờ (trên đầu khung chat chỉ còn nút gọi) */
   onChess?: () => void;
+  /** Think AI tóm tắt tin gần đây (2.14.0); không có khi Think AI chưa cài */
+  onSummary?: () => void;
   onOpenImage: (image: string) => void;
 }) {
   const c = useColors();
@@ -124,6 +127,18 @@ export function ConvSettingsSheet({
               })
             : null}
         </View>
+
+        {onSummary ? (
+          <SheetItem
+            icon="auto-awesome"
+            label="Tóm tắt tin gần đây"
+            hint="Think AI tóm tắt 100 tin gần nhất, chỉ bạn thấy"
+            onPress={() => {
+              onClose();
+              setTimeout(onSummary, 250);
+            }}
+          />
+        ) : null}
 
         <LockSection conv={conv} />
 

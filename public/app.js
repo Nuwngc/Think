@@ -460,6 +460,8 @@
   }
   function teardown() {
     if (calls) calls.reset();
+    translations.clear();
+    Object.assign(aiSum, { offer: null, convId: null, busy: false, text: '', error: '', meta: '' });
     if (stories) stories.reset();
     if (state.socket) {
       state.socket.removeAllListeners();
@@ -825,6 +827,7 @@
     $('#call-voice-btn').setAttribute('aria-label', isDm ? 'Gọi thoại' : 'Gọi nhóm');
     $('#call-video-btn').setAttribute('aria-label', isDm ? 'Gọi video' : 'Gọi video nhóm');
     renderGroupCallBar();
+    renderAiSum();
     const chessBtn = $('#chess-dm-btn');
     chessBtn.hidden = !chess || !human || IN_BUBBLE;
     chessBtn.setAttribute('aria-label', `Thách ${peer?.displayName || 'người này'} một ván cờ`);
@@ -848,6 +851,105 @@
   }
 
   // Thanh "Đang có cuộc gọi nhóm · Tham gia" trên đầu khung chat nhóm
+  /* ----- Think AI giúp đọc chat (2.14.0, máy chủ src/ai.js): tóm tắt tin chưa đọc, dịch tin nhắn -----
+     Kết quả chỉ hiện cho người hỏi, không gửi vào cuộc trò chuyện. Bản app: native/src/screens/AiHelpers.tsx */
+  const SUMMARY_UNREAD = 10; // từ 10 tin chưa đọc thì gợi ý tóm tắt
+  const aiSum = { offer: null, convId: null, busy: false, text: '', error: '', meta: '' };
+  const translations = new Map(); // messageId -> { busy, text, to, error }
+  const aiUsable = (c) => Boolean(state.aiReady && c && !IN_BUBBLE && !(c.type === 'dm' && userOf(c.peerId)?.bot));
+  const LANG_NAMES = { en: 'tiếng Anh', vi: 'tiếng Việt' };
+
+  // Mở cuộc trò chuyện (trước khi đánh dấu đã đọc): nhiều tin chưa đọc thì gợi ý tóm tắt
+  function offerSummary(c) {
+    if (!c || aiSum.offer?.convId === c.id || aiSum.convId === c.id) return;
+    aiSum.offer = c.unread >= SUMMARY_UNREAD ? { convId: c.id, afterId: c.lastReadId || 0, count: c.unread } : null;
+    Object.assign(aiSum, { convId: null, busy: false, text: '', error: '', meta: '' });
+  }
+
+  function renderAiSum() {
+    const el = $('#ai-sum');
+    const c = state.convs.get(state.currentId);
+    const card = c && aiSum.convId === c.id && (aiSum.busy || aiSum.text || aiSum.error);
+    const offer = !card && c && aiSum.offer && aiSum.offer.convId === c.id && aiUsable(c) && !isGated(c);
+    if (!card && !offer) {
+      el.hidden = true;
+      el.replaceChildren();
+      return;
+    }
+    el.hidden = false;
+    if (offer) {
+      el.className = 'ai-sum is-offer';
+      el.replaceChildren(
+        h('span', { class: 'ai-sum-ic' }, icon('sparkle')),
+        h('span', { class: 'ai-sum-text' }, h('strong', { text: `${aiSum.offer.count} tin chưa đọc` }), ' — để Think AI tóm tắt giúp?'),
+        h('button', { class: 'btn btn-sm btn-primary', type: 'button', text: 'Tóm tắt', onclick: () => runSummary(aiSum.offer) }),
+        h('button', { class: 'icon-btn ai-sum-x', type: 'button', 'aria-label': 'Ẩn gợi ý tóm tắt', onclick: () => { aiSum.offer = null; renderAiSum(); } }, icon('close')));
+      return;
+    }
+    el.className = 'ai-sum is-card';
+    const body = aiSum.busy
+      ? h('p', { class: 'ai-sum-wait' }, h('span', { class: 'ai-dots', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')), `Think AI đang đọc ${aiSum.meta}…`)
+      : aiSum.error
+        ? h('p', { class: 'form-error', role: 'alert', text: aiSum.error })
+        : h('p', { class: 'ai-sum-body', text: aiSum.text });
+    el.replaceChildren(
+      h('div', { class: 'ai-sum-head' },
+        h('span', { class: 'ai-sum-ic' }, icon('sparkle')),
+        h('span', { class: 'ai-sum-title' }, h('strong', { text: 'Tóm tắt của Think AI' }), h('span', { text: aiSum.meta })),
+        h('button', { class: 'icon-btn ai-sum-x', type: 'button', 'aria-label': 'Đóng bản tóm tắt', onclick: () => { Object.assign(aiSum, { convId: null, text: '', error: '', busy: false }); renderAiSum(); } }, icon('close'))),
+      body,
+      aiSum.busy ? null : h('p', { class: 'ai-sum-note', text: aiSum.error ? '' : 'Chỉ bạn thấy bản tóm tắt này. AI có thể nhầm.' }));
+  }
+
+  // offer = gợi ý tin chưa đọc; null = tóm tắt 100 tin gần đây
+  async function runSummary(offer) {
+    const convId = state.currentId;
+    if (convId == null || aiSum.busy) return;
+    aiSum.offer = null;
+    Object.assign(aiSum, { convId, busy: true, text: '', error: '', meta: offer ? `${offer.count} tin chưa đọc` : 'các tin gần đây' });
+    renderAiSum();
+    try {
+      const r = await api('/api/ai/summary', { method: 'POST', body: offer ? { conversationId: convId, afterId: offer.afterId } : { conversationId: convId } });
+      if (aiSum.convId !== convId) return;
+      aiSum.text = r.summary;
+      aiSum.meta = `${r.count} tin ${r.unread ? 'chưa đọc' : 'gần đây'} · từ ${hm(r.from)}${daysAgo(r.from) > 0 ? ` ${shortTime(r.from)}` : ''}`;
+    } catch (err) {
+      if (aiSum.convId !== convId) return;
+      aiSum.error = err.message;
+    } finally {
+      if (aiSum.convId === convId) {
+        aiSum.busy = false;
+        renderAiSum();
+      }
+    }
+  }
+
+  async function translateMsg(m) {
+    if (!m.id) return;
+    translations.set(m.id, { busy: true });
+    renderMessages({ preserve: true });
+    let entry;
+    try {
+      const r = await api('/api/ai/translate', { method: 'POST', body: { messageId: m.id } });
+      entry = { text: r.text, to: r.to };
+    } catch (err) {
+      entry = { error: err.message };
+    }
+    translations.set(m.id, entry);
+    if (state.currentId === m.conversationId) renderMessages({ preserve: true });
+  }
+
+  function translationEl(m) {
+    const t = translations.get(m.id);
+    if (!t || m.deleted) return null;
+    const hide = h('button', { class: 'msg-trans-hide', type: 'button', text: 'Ẩn', onclick: () => { translations.delete(m.id); renderMessages({ preserve: true }); } });
+    if (t.busy) return h('div', { class: 'msg-trans', role: 'status' }, h('span', { class: 'msg-trans-label', text: 'Đang dịch…' }));
+    if (t.error) return h('div', { class: 'msg-trans is-error', role: 'alert' }, h('span', { class: 'msg-trans-label', text: t.error }), hide);
+    return h('div', { class: 'msg-trans' },
+      h('span', { class: 'msg-trans-label' }, icon('sparkle'), `Bản dịch ${LANG_NAMES[t.to] || ''}`, hide),
+      h('span', { class: 'msg-trans-text', text: t.text }));
+  }
+
   function renderGroupCallBar() {
     const bar = $('#gcall-bar');
     const c = state.convs.get(state.currentId);
@@ -916,6 +1018,7 @@
     }
     if (locks.open.has(id) || state.convs.get(id)?.locked) locks.open.set(id, Infinity);
     hideLockGate();
+    offerSummary(state.convs.get(id)); // trước khi đánh dấu đã đọc
     renderChatHeader();
     renderConvList();
     if (changed) {
@@ -1167,6 +1270,8 @@
     if (tags.length) col.append(h('span', { class: 'msg-tags' }, tags));
     if (m.story && !m.deleted && stories) col.append(stories.refEl(m)); // trả lời / thả cảm xúc một tin 24 giờ
     col.append(m.kind === 'poll' && !m.deleted ? pollEl(m) : bubbleEl(m));
+    const trans = m.id && translations.size ? translationEl(m) : null; // bản dịch của Think AI
+    if (trans) col.append(trans);
     const reacts = reactionsEl(m);
     if (reacts) col.append(reacts);
     if (m.failed) col.append(h('span', { class: 'msg-meta', text: 'Chưa gửi được. Chạm để gửi lại.' }));
@@ -1437,6 +1542,9 @@
     const mineMsg = m.senderId === state.me.id;
     if (mineMsg && m.kind !== 'poll' && m.text != null && !chessShareOf(m.text || '')) items.push({ label: 'Sửa', run: () => startEdit(m) });
     if (m.text && m.kind !== 'poll') items.push({ label: 'Sao chép', run: () => copyText(m.text).then(() => toast('Đã sao chép tin nhắn.'), () => toast('Không sao chép được.')) });
+    if (m.id && m.text && m.kind === 'text' && !chessShareOf(m.text) && !(m.story && m.story.reaction) && aiUsable(state.convs.get(m.conversationId))) {
+      items.push({ label: translations.get(m.id)?.text ? 'Ẩn bản dịch' : 'Dịch (Think AI)', run: () => (translations.get(m.id)?.text ? (translations.delete(m.id), renderMessages({ preserve: true })) : translateMsg(m)) });
+    }
     if (m.kind !== 'poll') items.push({ label: 'Chuyển tiếp', run: () => openForward(m) });
     items.push(isPinned(m) ? { label: 'Bỏ ghim', run: () => pinMessage(m, false) } : { label: 'Ghim', run: () => pinMessage(m, true) });
     if (m.kind === 'poll' && mineMsg && m.poll && !m.poll.closed) items.push({ label: 'Kết thúc bình chọn', run: () => closePoll(m) });
@@ -1930,6 +2038,7 @@
           placeMenu(menuButtons(muteMenuItems(c)), r.left + r.width / 2, r.top, null);
         }, isMuted(c)),
         quick(c.pinnedAt ? 'Bỏ ghim' : 'Ghim lên đầu', 'pin', () => setPrefs(c, { pinned: !c.pinnedAt }), Boolean(c.pinnedAt)),
+        aiUsable(c) ? quick('Tóm tắt', 'sparkle', () => { goBack(); setTimeout(() => runSummary(null), 260); }) : null,
         c.type === 'group' ? quick('Thành viên', 'group', () => navigate('#/group', { replace: true })) : null,
         c.type === 'dm' && chess && !IN_BUBBLE && userOf(c.peerId) && !userOf(c.peerId).bot && !userOf(c.peerId).disabled
           ? quick('Thách cờ', 'knight', () => { goBack(); setTimeout(() => chess.openChallenge(c.peerId), 260); })
@@ -3340,6 +3449,10 @@ ${sections}
     if (stories) {
       for (const ev of ['story:new', 'story:deleted', 'story:viewed']) socket.on(ev, (data) => stories.onEvent(ev, data));
     }
+    socket.on('ai:status', (data) => {
+      state.aiReady = Boolean(data && data.ready);
+      if (state.currentId != null) renderAiSum();
+    });
     socket.on('session:ended', (data) => sessionEnded((data && data.reason) || 'Bạn đã bị đăng xuất.'));
     if (chess) {
       socket.on('chess:game', (data) => chess.onEvent('chess:game', data));
@@ -3531,8 +3644,9 @@ ${sections}
   }
 
   async function loadUsers() {
-    const { users } = await api('/api/users');
+    const { users, aiReady } = await api('/api/users');
     state.users = new Map(users.map((u) => [u.id, u]));
+    state.aiReady = Boolean(aiReady);
   }
   async function loadConvs() {
     const { conversations } = await api('/api/conversations');

@@ -747,7 +747,8 @@ app.delete('/api/me/cover', requireAuth, requireReady, (req, res) => {
 
 app.get('/api/users', requireAuth, requireReady, (req, res) => {
   const users = all('SELECT id, username, display_name, avatar, cover, bio, role, disabled, last_seen, created_at FROM users ORDER BY id');
-  res.json({ users: users.map(publicUser) });
+  // aiReady: Think AI đã cài đặt (web / app hiện nút Tóm tắt, Dịch tin nhắn)
+  res.json({ users: users.map(publicUser), aiReady: aiBot.isReady() });
 });
 
 app.get('/api/conversations', requireAuth, requireReady, (req, res) => {

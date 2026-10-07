@@ -237,7 +237,7 @@ export const api = {
 
   /* ---------------- Chat ---------------- */
 
-  users: () => request<{ users: User[] }>("/api/users"),
+  users: () => request<{ users: User[]; aiReady?: boolean }>("/api/users"),
 
   conversations: () => request<{ conversations: Conversation[] }>("/api/conversations"),
 
@@ -530,6 +530,12 @@ export const api = {
   post: (id: number) => request<{ post: Post }>(`/api/posts/${id}`),
 
   createPost: (body: { text: string; image?: string; gameId?: number }) => request<{ post: Post }>("/api/posts", { method: "POST", body }),
+
+  // Think AI giúp đọc chat (2.14.0): tóm tắt, dịch — kết quả chỉ trả cho người hỏi
+  aiSummary: (body: { conversationId: number; afterId?: number }) =>
+    request<{ summary: string; count: number; from: number; to: number; unread: boolean }>("/api/ai/summary", { method: "POST", body }),
+  aiTranslate: (messageId: number, to?: "vi" | "en") =>
+    request<{ text: string; to: "vi" | "en"; cached?: boolean }>("/api/ai/translate", { method: "POST", body: { messageId, to } }),
 
   // Tin 24 giờ (2.13.0, máy chủ src/stories.js)
   stories: () => request<{ stories: Story[]; serverTime: number }>("/api/stories"),

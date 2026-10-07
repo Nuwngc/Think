@@ -29,7 +29,7 @@ let base;
 let srv;
 let hooks;
 
-const io = { to: (room) => ({ emit: (ev, data) => events.push({ room, ev, data }) }) };
+const io = { to: (room) => ({ emit: (ev, data) => events.push({ room, ev, data }) }), emit: (ev, data) => events.push({ room: 'all', ev, data }) };
 const loadMessage = (id) => {
   const m = get('SELECT * FROM messages WHERE id = ?', id);
   const r = m.reply_to ? get('SELECT sender_id FROM messages WHERE id = ?', m.reply_to) : null;
@@ -73,8 +73,8 @@ test.before(async () => {
       const r = { url: req.url, headers: req.headers, body: JSON.parse(body || '{}') };
       requests.push(r);
       const out = reply(r);
-      res.writeHead(out.status, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(out.body));
+      res.writeHead(out.status, { 'content-type': out.html ? 'text/html' : 'application/json' });
+      res.end(out.html || JSON.stringify(out.body));
     });
   });
   await new Promise((resolve) => mock.listen(0, resolve));
@@ -308,4 +308,91 @@ test('Cerebras: model mặc định, nghĩ ít cho nhanh, phần suy nghĩ khôn
   } finally {
     delete process.env.CEREBRAS_API_KEY;
   }
+});
+
+test('địa chỉ API dán nhầm: tự sửa, trang web thay vì API thì báo rõ', async () => {
+  ai.resetRateLimit();
+  // Link trang web của Cerebras dán vào "Kiểu OpenAI": chuyển sang Cerebras, giữ khóa vừa nhập
+  let r = await call('PUT', '/api/admin/ai', { provider: 'openai', baseUrl: 'https://cloud.cerebras.ai/?utm_source=homepage&onboarding=false', model: 'gpt-oss-120b', apiKey: 'csk-abcd1234' });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.ai.provider, 'cerebras');
+  assert.equal(r.data.ai.baseUrl, '');
+  assert.equal(r.data.ai.keyHint, '…1234');
+  assert.equal(r.data.ai.model, 'gpt-oss-120b');
+  assert.equal(events.at(-1).ev, 'ai:status');
+  // Bỏ phần ?… và đuôi /chat/completions; dịch vụ quen thì đổi sang địa chỉ API đúng
+  r = await call('PUT', '/api/admin/ai', { provider: 'openai', baseUrl: `${mockUrl}/v1/chat/completions?x=1` });
+  assert.equal(r.data.ai.baseUrl, `${mockUrl}/v1`);
+  assert.deepEqual(ai.fixBaseUrl('https://console.groq.com/keys'), { url: 'https://api.groq.com/openai/v1' });
+  assert.deepEqual(ai.fixBaseUrl('https://openrouter.ai/settings/keys'), { url: 'https://openrouter.ai/api/v1' });
+  // Máy chủ trả về trang web (HTML): báo địa chỉ API sai, không phải "không trả lời gì"
+  ai.saveSettings({ apiKey: 'sk-abcd', model: 'llama-test' });
+  reply = () => ({ status: 200, html: '<!doctype html><html><body>Cerebras Cloud</body></html>' });
+  const t = await call('POST', '/api/admin/ai/test');
+  assert.equal(t.status, 400);
+  assert.match(t.data.error, /Địa chỉ API không đúng: http:\/\/127\.0\.0\.1:\d+ trả về một trang web/);
+});
+
+test('tóm tắt tin chưa đọc / tin gần đây: chỉ trả cho người hỏi', async () => {
+  ai.resetRateLimit();
+  ai.saveSettings({ enabled: true, perUserDaily: 40 });
+  const first = send(102, 2, 'Tối nay 8h đi ăn lẩu nhé').id;
+  send(102, 1, 'Ok, quán nào?');
+  send(102, 2, 'Quán cũ ở Hai Bà Trưng');
+  send(102, 2, 'An nhớ mang ô');
+  reply = (q) => ({ status: 200, body: { choices: [{ message: { content: `• Tóm tắt ${q.body.messages[1].content.split('\n').length - 1} tin` } }] } });
+  const before = botMessages(102).length;
+  let r = await call('POST', '/api/ai/summary', { conversationId: 102, afterId: first - 1 });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.count, 4);
+  assert.equal(r.data.unread, true);
+  assert.equal(r.data.summary, '• Tóm tắt 4 tin');
+  const req = requests.at(-1);
+  assert.match(req.body.messages[0].content, /Tóm tắt các tin nhắn trong nhóm chat "Hội bạn" cho An/);
+  assert.match(req.body.messages[1].content, /\d\d:\d\d Bình: Tối nay 8h đi ăn lẩu nhé\n\d\d:\d\d An: Ok, quán nào\?/);
+  assert.equal(botMessages(102).length, before); // không gửi vào nhóm
+  // Ít tin quá
+  assert.equal((await call('POST', '/api/ai/summary', { conversationId: 102, afterId: first + 2 })).status, 400);
+  // Tin gần đây (không có afterId)
+  r = await call('POST', '/api/ai/summary', { conversationId: 102 });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.unread, false);
+  // Không ở trong cuộc trò chuyện
+  run("INSERT INTO conversations (id, type, name, created_at) VALUES (999, 'group', 'Nhóm khác', 0)");
+  assert.equal((await call('POST', '/api/ai/summary', { conversationId: 999 })).status, 404);
+  // Think AI tắt
+  ai.saveSettings({ enabled: false });
+  assert.equal((await call('POST', '/api/ai/summary', { conversationId: 102 })).status, 503);
+  ai.saveSettings({ enabled: true });
+});
+
+test('dịch tin nhắn: tiếng Việt → tiếng Anh, tiếng khác → tiếng Việt, nhớ bản đã dịch', async () => {
+  ai.resetRateLimit();
+  reply = (q) => ({ status: 200, body: { choices: [{ message: { content: q.body.messages[0].content.includes('tiếng Anh') ? 'Hot pot at 8 tonight' : 'Hẹn gặp lại' } }] } });
+  const vi = send(102, 2, 'Tối nay 8h đi ăn lẩu').id;
+  const en = send(102, 2, 'See you later').id;
+  let r = await call('POST', '/api/ai/translate', { messageId: vi });
+  assert.deepEqual(r.data, { text: 'Hot pot at 8 tonight', to: 'en' });
+  r = await call('POST', '/api/ai/translate', { messageId: en });
+  assert.deepEqual(r.data, { text: 'Hẹn gặp lại', to: 'vi' });
+  const n = requests.length;
+  r = await call('POST', '/api/ai/translate', { messageId: vi });
+  assert.equal(r.data.cached, true);
+  assert.equal(requests.length, n);
+  r = await call('POST', '/api/ai/translate', { messageId: en, to: 'en' });
+  assert.equal(r.data.to, 'en');
+  // Tin không có chữ, tin của cuộc trò chuyện khác
+  const img = Number(run("INSERT INTO messages (conversation_id, sender_id, kind, image, created_at) VALUES (102, 2, 'text', '/uploads/img/x.png', ?)", Date.now()).lastInsertRowid);
+  assert.equal((await call('POST', '/api/ai/translate', { messageId: img })).status, 400);
+  const other = Number(run("INSERT INTO messages (conversation_id, sender_id, kind, text, created_at) VALUES (999, 2, 'text', 'hi', ?)", Date.now()).lastInsertRowid);
+  assert.equal((await call('POST', '/api/ai/translate', { messageId: other })).status, 404);
+  // Hết lượt trong ngày
+  ai.saveSettings({ perUserDaily: 1 });
+  const t = await call('POST', '/api/ai/translate', { messageId: en, to: 'vi' }); // đã nhớ: không tốn lượt
+  assert.equal(t.status, 200);
+  const extra = send(102, 2, 'Good night').id;
+  const q = await call('POST', '/api/ai/translate', { messageId: extra });
+  assert.equal(q.status, 429);
+  assert.match(q.data.error, /Hôm nay bạn đã hỏi đủ 1 câu/);
+  ai.saveSettings({ perUserDaily: 40 });
 });
