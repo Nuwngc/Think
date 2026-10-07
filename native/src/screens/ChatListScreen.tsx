@@ -3,6 +3,7 @@ import { FlatList, Linking, Pressable, StyleSheet, Text, TextInput, View } from 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShallow } from "zustand/react/shallow";
 
+import { useCall } from "../calls/engine";
 import { byPinnedThenActivity } from "../chatPlus";
 import { isMuted } from "../chatThemes";
 import { convTitle, fold, listPreview, shortTime } from "../format";
@@ -224,6 +225,7 @@ const ConvRow = memo(function ConvRow({
   const typers = typingIds || [];
   const title = convTitle(conv, names.nameOf);
   const lm = conv.lastMessage;
+  const calling = useCall((st) => Boolean(st.groups[conv.id])); // đang có cuộc gọi nhóm
   const preview = typers.length
     ? conv.type === "dm"
       ? "Đang nhập…"
@@ -240,7 +242,7 @@ const ConvRow = memo(function ConvRow({
       delayLongPress={380}
       style={({ pressed }) => [s.row, pressed && { backgroundColor: c.field }]}
       accessibilityRole="button"
-      accessibilityLabel={`${title}${conv.locked ? ", đã khóa" : ""}${conv.pinnedAt ? ", đã ghim" : ""}${muted ? ", đã tắt thông báo" : ""}${unread ? `, ${unread} tin chưa đọc` : ""}. ${preview}`}
+      accessibilityLabel={`${title}${calling ? ", đang có cuộc gọi nhóm" : ""}${conv.locked ? ", đã khóa" : ""}${conv.pinnedAt ? ", đã ghim" : ""}${muted ? ", đã tắt thông báo" : ""}${unread ? `, ${unread} tin chưa đọc` : ""}. ${preview}`}
       accessibilityHint={onLongPress ? "Chạm giữ để ghim hoặc tắt thông báo" : undefined}
     >
       <ConvAvatar conv={conv} users={users} meId={meId} size={52} />
@@ -249,6 +251,7 @@ const ConvRow = memo(function ConvRow({
           <Text style={[s.rowTitle, unread > 0 && s.bold]} numberOfLines={1}>
             {title}
           </Text>
+          {calling ? <Icon name="call" size={15} color={c.accent} /> : null}
           {conv.locked ? <Icon name="lock" size={15} color={c.muted} /> : null}
           {muted ? <Icon name="notifications-off" size={15} color={c.muted} /> : null}
           {conv.pinnedAt ? <Icon name="push-pin" size={15} color={c.muted} /> : null}

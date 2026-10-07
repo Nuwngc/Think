@@ -20,6 +20,14 @@ describe("nhật ký cuộc gọi", () => {
     expect(systemText(call({ video: true, status: "missed", to: 1 }, 2), names)).toBe("📹 Bạn đã lỡ cuộc gọi video từ Bình");
   });
 
+  it("gọi nhóm: thời lượng, số người; không ai tham gia / lỡ cuộc gọi", () => {
+    const g = (data: object, senderId = 1) => ({ ...call({}, senderId), text: JSON.stringify({ event: "gcall", ...data }) }) as Message;
+    expect(systemText(g({ video: false, status: "ended", duration: 754, count: 4 }), names)).toBe("📞 Cuộc gọi nhóm · 12:34 · 4 người");
+    expect(systemText(g({ video: true, status: "missed", count: 1 }), names)).toBe("📹 Cuộc gọi video nhóm không có ai tham gia");
+    expect(systemText(g({ video: false, status: "missed", count: 1 }, 2), names)).toBe("📞 Bạn đã lỡ cuộc gọi nhóm của Bình");
+    expect(callInfoOf(g({ video: true, status: "ended" }))).toEqual({ video: true });
+  });
+
   it("nhận ra tin nhật ký cuộc gọi để hiện nút Gọi lại", () => {
     expect(callInfoOf(call({ video: true, status: "missed" }))).toEqual({ video: true });
     expect(callInfoOf(call({ status: "ended" }))).toEqual({ video: false });

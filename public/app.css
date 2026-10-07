@@ -1565,9 +1565,21 @@ button.chess-row-main:hover { background: var(--field); }
 
 /* Chat riêng trên màn hình hẹp: Tìm tin nhắn và Thách cờ nằm trong "Tùy chỉnh đoạn chat" để có chỗ cho nút gọi */
 @media (max-width: 560px) {
-  .chat-pane.is-dm #chat-search-btn, .chat-pane.is-dm #chess-dm-btn { display: none; }
+  .chat-pane.has-calls #chat-search-btn, .chat-pane.is-dm #chess-dm-btn { display: none; }
   .chat-head { gap: 6px; }
 }
+
+/* Thanh "Đang có cuộc gọi nhóm · Tham gia" (2.11.0) */
+.gcall-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 14px; background: var(--jade-wash); border-bottom: 1px solid var(--line); }
+.gcall-bar[hidden] { display: none; }
+.gcall-ic { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--jade); color: #fff; flex: none; }
+.gcall-ic .ic { width: 18px; height: 18px; }
+.gcall-text { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gcall-text strong { color: var(--jade-ink); }
+.gcall-faces { display: flex; }
+.gcall-faces .avatar { --size: 22px; margin-left: -6px; box-shadow: 0 0 0 2px var(--jade-wash); }
+@media (max-width: 380px) { .gcall-faces { display: none; } }
+.conv-flag.is-call { color: var(--jade-ink); }
 
 /* Tin hệ thống của cuộc gọi: "📞 Cuộc gọi thoại · 2:31" + Gọi lại */
 .sys-msg.sys-call { align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -1626,6 +1638,43 @@ html.in-call, html.in-call body { overflow: hidden; }
 .phase-incoming .call-btn.is-accept .call-btn-ic { animation: call-nudge 1.6s ease-in-out infinite; }
 @keyframes call-nudge { 0%, 70%, 100% { transform: none; } 78% { transform: rotate(-12deg); } 86% { transform: rotate(12deg); } 94% { transform: rotate(-6deg); } }
 .phase-ended .call-status { color: #F2F6F4; font-weight: 600; }
+/* Gọi nhóm: lưới ô, mỗi người một ô */
+.call-grid { display: none; }
+.call-layer.is-group .call-peer { flex: 0 0 auto; padding: calc(var(--safe-top) + 14px) 20px 10px; gap: 2px; }
+.call-layer.is-group .call-name { font-size: 19px; }
+.call-ringing { font-size: 12.5px; color: rgba(242, 246, 244, .65); }
+.call-layer.is-group .call-grid {
+  position: relative; z-index: 2; flex: 1; min-height: 0; display: grid; gap: 6px; padding: 0 8px;
+  grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr)); grid-template-rows: repeat(var(--rows, 1), minmax(0, 1fr));
+}
+.call-tile { position: relative; overflow: hidden; border-radius: 16px; background: rgba(255, 255, 255, .07); display: grid; place-items: center; min-height: 0; }
+.call-tile-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; background: #000; }
+.call-tile.has-video .call-tile-video { opacity: 1; }
+.call-tile.has-video .call-tile-face { visibility: hidden; }
+.call-tile.is-self .call-tile-video { transform: scaleX(-1); }
+.call-tile.is-self.is-back .call-tile-video { transform: none; }
+.avatar-tile { --size: clamp(52px, 18vmin, 96px); }
+.call-tile-foot { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.call-tile-name { padding: 3px 8px; border-radius: 999px; background: rgba(0, 0, 0, .45); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.call-tile-mute { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: rgba(0, 0, 0, .45); flex: none; }
+.call-tile-mute .ic { width: 14px; height: 14px; }
+.call-tile-note { margin-left: auto; padding: 3px 8px; border-radius: 999px; background: rgba(0, 0, 0, .45); font-size: 12px; font-weight: 500; color: rgba(242, 246, 244, .8); white-space: nowrap; }
+.call-layer.is-group .call-actions { padding-top: 14px; }
+
 @media (prefers-reduced-motion: reduce) {
   .call-avatar.is-ringing::before, .call-avatar.is-ringing::after, .phase-incoming .call-btn.is-accept .call-btn-ic { animation: none; }
 }
+
+/* Quản trị → AI, gọi: máy chủ TURN, cuộc gọi gần đây (2.11.0) */
+.turn-state { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13.5px; color: var(--ink-2); }
+.turn-err { display: block; width: 100%; }
+.turn-opt { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.turn-opt summary { cursor: pointer; font-weight: 700; font-size: 14px; color: var(--ink); }
+.turn-opt[open] summary { margin-bottom: 8px; }
+.turn-opt .field { margin-top: 8px; }
+.call-reports-title { margin-top: 10px; font-size: 14px; }
+.call-reports { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.call-report { display: grid; gap: 1px; padding: 8px 10px; border-radius: 10px; background: var(--field); font-size: 13px; }
+.call-report-who { font-weight: 700; }
+.call-report.is-fail .call-report-res { color: var(--danger); }
+.call-report-meta { color: var(--muted); font-size: 12px; }

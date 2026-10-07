@@ -431,18 +431,43 @@
             <p class="hint ai-test-result" id="ai-test-result" role="status" hidden></p>
           </form>
           <form id="turn-form" class="panel" novalidate>
-            <h3>Cuộc gọi: máy chủ TURN</h3>
-            <p class="hint">Gọi thoại / video đi thẳng giữa hai máy. Khi hai bên dùng 4G hoặc mạng chặn kết nối thẳng, cuộc gọi cần một máy chủ TURN để chuyển tiếp (vd Metered, Cloudflare). Để trống nếu gọi vẫn được.</p>
-            <label class="field"><span>Địa chỉ TURN</span>
-              <input name="turnUrls" autocapitalize="none" spellcheck="false" placeholder="turn:turn.example.com:3478">
-            </label>
-            <div class="field-row">
-              <label class="field"><span>Tên đăng nhập</span><input name="turnUsername" autocapitalize="none" spellcheck="false" autocomplete="off"></label>
-              <label class="field"><span>Mật khẩu</span><input name="turnCredential" type="password" autocomplete="off" placeholder="Để trống = giữ"></label>
+            <div class="panel-row">
+              <h3>Cuộc gọi: máy chủ chuyển tiếp (TURN)</h3>
             </div>
-            <p class="hint" id="turn-state"></p>
+            <p class="hint">Tiếng và hình đi thẳng giữa các máy. Khi mạng chặn kết nối thẳng (hay gặp khi dùng 4G), cuộc gọi phải đi vòng qua một máy chủ TURN — thiếu TURN là lý do cuộc gọi kẹt ở "Đang kết nối…". Chưa cài gì thì Think tạm dùng TURN miễn phí dùng chung; nên tạo một tài khoản TURN miễn phí riêng cho chắc chắn (chọn một trong ba cách dưới).</p>
+            <p class="turn-state" id="turn-state"></p>
+            <details class="turn-opt">
+              <summary>Metered — 20 GB / tháng miễn phí (dễ nhất)</summary>
+              <p class="hint">Đăng ký miễn phí ở metered.ca (mục STUN / TURN). Trong trang quản lý, phần TURN Server có đường link lấy TURN dạng https://tên.metered.live/api/v1/turn/credentials?apiKey=… — chép cả link dán vào đây.</p>
+              <label class="field"><span>Link lấy TURN</span>
+                <input name="meteredUrl" type="url" autocapitalize="none" spellcheck="false" autocomplete="off" placeholder="https://tên.metered.live/api/v1/turn/credentials?apiKey=…">
+              </label>
+              <button class="link-btn" type="button" id="metered-clear" hidden>Bỏ link Metered</button>
+            </details>
+            <details class="turn-opt">
+              <summary>Máy chủ TURN có tên + mật khẩu (vd ExpressTURN — 1000 GB / tháng miễn phí)</summary>
+              <p class="hint">Đăng ký miễn phí ở expressturn.com, trang quản lý có sẵn địa chỉ máy chủ (vd relay1.expressturn.com:3478), tên đăng nhập và mật khẩu.</p>
+              <label class="field"><span>Địa chỉ TURN</span>
+                <input name="turnUrls" autocapitalize="none" spellcheck="false" placeholder="turn:relay1.expressturn.com:3478">
+              </label>
+              <div class="field-row">
+                <label class="field"><span>Tên đăng nhập</span><input name="turnUsername" autocapitalize="none" spellcheck="false" autocomplete="off"></label>
+                <label class="field"><span>Mật khẩu</span><input name="turnCredential" type="password" autocomplete="off" placeholder="Để trống = giữ"></label>
+              </div>
+            </details>
+            <details class="turn-opt">
+              <summary>Cloudflare — 1000 GB / tháng miễn phí</summary>
+              <p class="hint">dash.cloudflare.com → Realtime → TURN Server → Create: chép Turn Token ID và API Token.</p>
+              <div class="field-row">
+                <label class="field"><span>Turn Token ID</span><input name="cfKeyId" autocapitalize="none" spellcheck="false" autocomplete="off"></label>
+                <label class="field"><span>API Token</span><input name="cfToken" type="password" autocomplete="off" placeholder="Để trống = giữ"></label>
+              </div>
+            </details>
+            <label class="switch-row"><span>Dùng TURN miễn phí dùng chung (Open Relay) khi chưa có TURN riêng</span><input type="checkbox" name="openRelay" class="switch"></label>
             <p class="form-error" role="alert" hidden></p>
             <div><button class="btn btn-primary" type="submit">Lưu</button></div>
+            <h4 class="call-reports-title">Cuộc gọi gần đây</h4>
+            <ul id="call-reports" class="call-reports"></ul>
           </form>
         </div>
         <div class="page-body" id="admin-storage" role="tabpanel" aria-labelledby="seg-storage" hidden>
@@ -544,6 +569,7 @@
           <button class="icon-btn bubble-only" type="button" data-action="open-app" aria-label="Mở trong app Think"><svg class="ic"><use href="#i-expand"/></svg></button>
         </header>
         <div id="chat-lock" class="chat-lock" hidden></div>
+        <div id="gcall-bar" class="gcall-bar" role="status" hidden></div>
         <div id="pin-bar" class="pin-bar" hidden></div>
         <div id="chat-search" class="chat-search" hidden>
           <div class="chat-search-bar">

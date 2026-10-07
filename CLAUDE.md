@@ -37,6 +37,15 @@ Dữ liệu ở `public/puzzles/<game>.json` và bản giống hệt `native/src
 - App: `native/src/calls/rtc.tsx` dùng `react-native-webrtc` (giữ đúng bản tương thích Expo 54: `react-native-webrtc` 124.0.x + `@config-plugins/react-native-webrtc` 13.0.0); `rtc.web.tsx` là bản cho trình duyệt (chạy thử app bằng `expo export --platform web`). Loa, chế độ gọi, dịch vụ chạy nền ở `CallAudio.kt`, `CallService.kt` (dịch vụ loại microphone để nói được khi app ở nền).
 - Tin hệ thống cuộc gọi `{ event: 'call', video, status, duration, to }`: chữ hiển thị ở `callText` (web) và `native/src/format.ts` phải giống nhau.
 
+## Gọi nhóm, máy chủ TURN (2.11.0)
+
+- Gọi nhóm kiểu mesh (mỗi máy nối thẳng với từng người, tối đa `MAX_GROUP` = 8). Luật: **người mới vào gửi offer** cho từng người đang trong cuộc gọi (danh sách trong kết quả `gcall:join` / `gcall:start`), người cũ chỉ trả answer. Offer đến khi đang dở (signalingState khác `stable`, hai bên cùng gửi) thì đóng kết nối cũ, tạo lại rồi trả answer. Web (`public/calls-ui.js`) và app (`native/src/calls/engine.ts`) phải làm giống nhau.
+- Sự kiện nhóm: `gcall:start` (nhóm đang có cuộc gọi thì vào luôn, trả `joined: true`), `gcall:join`, `gcall:decline`, `gcall:leave`, `gcall:signal { callId, to, data }` (máy chủ gửi đi `{ callId, from, data }`), `gcall:media`, `gcall:rejoin`; máy chủ phát `gcall:ring`, `gcall:ring-stop`, `gcall:joined`, `gcall:left`, `gcall:update`, `gcall:state` (thanh "Tham gia" và biểu tượng 📞 trong danh sách), `gcall:ended`. Tin hệ thống `{ event: 'gcall', video, status: 'ended' | 'missed', duration, count }` (người gửi = người bắt đầu gọi): chữ ở `groupCallText` (web) và `native/src/format.ts` phải giống nhau.
+- Máy chủ TURN ở `src/turn.js`: TURN riêng / link Metered / Cloudflare (Quản trị hoặc biến môi trường); chưa có gì thì dùng Open Relay dùng chung (mật khẩu tạm HMAC). Mật khẩu, token, link có apiKey không bao giờ trả về máy người dùng qua API admin (chỉ `hasCredential`, `meteredHost`…); máy người dùng chỉ nhận danh sách `iceServers` khi gọi. Thiếu TURN là lý do cuộc gọi kẹt ở "Đang kết nối…" khi dùng 4G.
+- Mỗi lần nối, máy gửi `call:report` (nối được chưa, đi thẳng / qua TURN, loại đường đã thử). Máy chủ giữ 40 lần gần nhất trong bộ nhớ, hiện ở Quản trị → AI, gọi → "Cuộc gọi gần đây" (web và app, `native/src/screens/TurnSettings.tsx`).
+- App giữ kết nối Socket.IO khi chạy nền **nếu đang trong cuộc gọi** (`inCall()` trong `native/src/store.ts`); đừng bỏ điều kiện này (bản 0.11 ngắt kết nối khi chạy nền làm cuộc gọi mất tín hiệu).
+- Kiểm tra APK: bước "Gọi nhóm: tham gia, rời" trong `scripts/apk-check/run.py` (Bạn Bè gọi nhóm qua python-socketio, app bấm Tham gia phải gửi offer có `m=audio`).
+
 ## Tin nhắn thoại, thành tựu
 
 - Tin nhắn thoại: phần dùng chung `public/voice-core.js` và bản app `native/src/voice/core.ts` phải giống hệt (kiểm thử so khớp). Mỗi lúc một trình phát dùng chung (`native/src/voice/player.ts`) — đừng tạo trình phát riêng cho từng tin (Android hết luồng âm thanh).

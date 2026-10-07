@@ -9,6 +9,7 @@ const path = require('node:path');
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'think-calls-'));
 delete process.env.TURN_URLS;
 delete process.env.CF_TURN_KEY_ID;
+delete process.env.CF_TURN_API_TOKEN;
 const express = require('express');
 const { run, get, all } = require('../src/db');
 const { setupCalls } = require('../src/calls');
@@ -52,15 +53,19 @@ let base;
 let srv;
 const activeUsers = new Set();
 test.before(async () => {
-  for (const [id, u, n] of [[1, 'an', 'An'], [2, 'binh', 'Bình'], [3, 'chi', 'Chi']]) {
+  for (const [id, u, n] of [[1, 'an', 'An'], [2, 'binh', 'Bình'], [3, 'chi', 'Chi'], [4, 'dung', 'Dũng'], [5, 'em', 'Em']]) {
     run('INSERT INTO users (id, username, display_name, password_hash, created_at) VALUES (?, ?, ?, ?, 0)', id, u, n, 'x');
   }
+  run('UPDATE users SET disabled = 1 WHERE id = 5');
   run("INSERT INTO users (id, username, display_name, password_hash, role, created_at) VALUES (9, 'think.ai', 'Think AI', '!', 'bot', 0)");
   run("INSERT INTO conversations (id, type, dm_key, created_at) VALUES (201, 'dm', '1:2', 0)");
   run("INSERT INTO conversations (id, type, dm_key, created_at) VALUES (202, 'dm', '1:3', 0)");
   run("INSERT INTO conversations (id, type, dm_key, created_at) VALUES (203, 'dm', '1:9', 0)");
   run("INSERT INTO conversations (id, type, name, created_at) VALUES (204, 'group', 'Nhóm', 0)");
-  for (const [c, u] of [[201, 1], [201, 2], [202, 1], [202, 3], [203, 1], [203, 9], [204, 1], [204, 2]]) run('INSERT INTO members (conversation_id, user_id) VALUES (?, ?)', c, u);
+  run("INSERT INTO conversations (id, type, name, created_at) VALUES (205, 'group', 'Hội bạn', 0)");
+  for (const [c, u] of [[201, 1], [201, 2], [202, 1], [202, 3], [203, 1], [203, 9], [204, 1], [204, 2], [205, 1], [205, 2], [205, 3], [205, 4], [205, 5], [205, 9]]) {
+    run('INSERT INTO members (conversation_id, user_id) VALUES (?, ?)', c, u);
+  }
   const app = express();
   app.use(express.json());
   const pass = (req, res, next) => {
@@ -83,6 +88,7 @@ test.before(async () => {
     notify: async (uid, p) => pushes.push({ uid, ...p }),
     ringMs: 300,
     resumeMs: 200,
+    aloneMs: 300,
   });
   await new Promise((resolve) => {
     srv = app.listen(0, resolve);
@@ -157,7 +163,7 @@ test('không ai trả lời: cuộc gọi nhỡ + thông báo; từ chối; khô
   await an.call('call:end', { callId: r3.call.id });
   assert.equal(last('call:ended', 'user:3').data.reason, 'canceled');
   assert.equal(sysMessages(202).at(-1).status, 'missed');
-  assert.match((await an.call('call:start', { conversationId: 204 })).error, /cuộc trò chuyện riêng/);
+  assert.match((await an.call('call:start', { conversationId: 204 })).error, /Gọi nhóm/);
   assert.match((await an.call('call:start', { conversationId: 203 })).error, /Think AI/);
   assert.match((await chi.call('call:start', { conversationId: 201 })).error, /Không tìm thấy/);
 });
@@ -203,5 +209,117 @@ test('admin đặt máy chủ TURN (mật khẩu không gửi lại)', async () 
   assert.deepEqual(turn.urls, ['turn:turn.example.com:3478', 'turns:turn.example.com:443?transport=tcp']);
   assert.equal(turn.credential, 'secret-pass');
   await put({ turnUrls: '' });
-  assert.equal((await (await fetch(`${base}/api/calls/ice`)).json()).iceServers.length, 1);
+  // Chưa có TURN riêng: dùng Open Relay dùng chung (mật khẩu tạm tính bằng HMAC), tắt được
+  let list = (await (await fetch(`${base}/api/calls/ice`)).json()).iceServers;
+  const relay = list.find((s) => String(s.urls).includes('openrelay'));
+  assert.match(relay.username, /^\d+:think$/);
+  assert.equal(relay.credential, require('node:crypto').createHmac('sha1', 'openrelayprojectsecret').update(relay.username).digest('base64'));
+  const view = (await put({ openRelay: false })).data.calls;
+  assert.equal(view.openRelay, false);
+  assert.deepEqual(view.sources, []);
+  list = (await (await fetch(`${base}/api/calls/ice`)).json()).iceServers;
+  assert.equal(list.length, 1); // chỉ còn STUN
+  assert.equal((await put({ meteredUrl: 'http://x' })).status, 400);
+  await put({ openRelay: true });
+});
+
+test('gọi nhóm: đổ chuông cả nhóm (trừ người bị khóa, Think AI), vào sau gửi offer cho từng người, rời, kết thúc', async () => {
+  sent.length = 0;
+  pushes.length = 0;
+  const an = connect(1);
+  const binh = connect(2);
+  const chi = connect(3);
+  const dung = connect(4);
+  const r = await an.call('gcall:start', { conversationId: 205, video: true });
+  assert.ok(r.call, r.error);
+  assert.equal(r.call.kind, 'group');
+  assert.equal(r.call.title, 'Hội bạn');
+  assert.deepEqual(r.call.participants, [1]);
+  for (const u of [2, 3, 4]) assert.equal(last('gcall:ring', `user:${u}`).data.id, r.call.id, `đổ chuông ${u}`);
+  assert.equal(last('gcall:ring', 'user:5'), undefined); // bị khóa
+  assert.equal(last('gcall:ring', 'user:9'), undefined); // Think AI
+  assert.ok(pushes.some((p) => p.uid === 2 && p.type === 'call' && /đang gọi nhóm video/.test(p.body)));
+  assert.equal(last('gcall:state', 'user:3').data.call.id, r.call.id); // thanh "Tham gia"
+  // Bấm gọi lần nữa trong nhóm đang gọi = vào luôn
+  const again = await binh.call('gcall:start', { conversationId: 205, video: false });
+  assert.equal(again.joined, true);
+  assert.equal(again.call.id, r.call.id);
+  assert.deepEqual(again.call.participants, [1, 2]);
+  assert.equal(last('gcall:joined', an.id).data.user.id, 2);
+  assert.equal(last('gcall:ring-stop', 'user:2').except, binh.id); // máy khác của Bình thôi đổ chuông
+  // Bình (vào sau) gửi offer cho An; An trả lời
+  await binh.call('gcall:signal', { callId: r.call.id, to: 1, data: { sdp: { type: 'offer', sdp: 'v=0' } } });
+  const offer = last('gcall:signal', an.id);
+  assert.equal(offer.data.from, 2);
+  assert.equal(offer.data.data.sdp.type, 'offer');
+  await an.call('gcall:signal', { callId: r.call.id, to: 2, data: { sdp: { type: 'answer', sdp: 'v=0' } } });
+  assert.equal(last('gcall:signal', binh.id).data.from, 1);
+  assert.match((await chi.call('gcall:signal', { callId: r.call.id, to: 1, data: {} })).error, /không ở trong/);
+  // Chi từ chối, Dũng vào
+  await chi.call('gcall:decline', { callId: r.call.id });
+  assert.equal(last('gcall:ring-stop', 'user:3').data.reason, 'declined');
+  assert.deepEqual(last('gcall:update', an.id).data.ringing, [4]);
+  const j = await dung.call('gcall:join', { callId: r.call.id, camera: false });
+  assert.deepEqual(j.call.participants, [1, 2, 4]);
+  assert.equal(j.call.people.find((p) => p.id === 2).camera, false);
+  await dung.call('gcall:media', { callId: r.call.id, muted: true, camera: false });
+  assert.deepEqual(last('gcall:media', binh.id).data, { callId: r.call.id, userId: 4, muted: true, camera: false });
+  // Đang gọi nhóm thì không gọi 1-1 được
+  assert.match((await chi.call('call:start', { conversationId: 202 })).error, /bận/);
+  const cur = await (await fetch(`${base}/api/calls/current`, { headers: { 'x-user': '4' } })).json();
+  assert.equal(cur.group.id, r.call.id);
+  const list = await (await fetch(`${base}/api/calls/groups`, { headers: { 'x-user': '3' } })).json();
+  assert.equal(list.calls[0].participants.length, 3);
+  // Báo cáo kết nối
+  await binh.call('call:report', { callId: r.call.id, peerId: 1, ok: true, path: 'relay', local: ['host', 'relay', 'xx'], remote: ['srflx'] });
+  const admin = (await (await fetch(`${base}/api/admin/calls`)).json()).calls;
+  assert.deepEqual({ ...admin.recent[0], at: 0 }, { ...admin.recent[0], at: 0, kind: 'group', from: 2, to: 1, ok: true, path: 'relay', local: ['host', 'relay'], remote: ['srflx'], fromName: 'Bình', toName: 'An' });
+  await sleep(1100);
+  // Rời dần: còn một người thì 1 phút (kiểm thử: 300 ms) sau tự kết thúc
+  await dung.call('gcall:leave', { callId: r.call.id });
+  assert.equal(last('gcall:left', an.id).data.userId, 4);
+  await binh.call('gcall:leave', { callId: r.call.id });
+  assert.equal(calls.groups(), 1);
+  await sleep(450);
+  assert.equal(calls.groups(), 0);
+  assert.equal(last('gcall:ended', 'user:1').data.reason, 'ended');
+  assert.equal(last('gcall:state', 'user:3').data.call, null);
+  const sys = sysMessages(205).at(-1);
+  assert.equal(sys.event, 'gcall');
+  assert.equal(sys.status, 'ended');
+  assert.equal(sys.count, 3);
+  assert.ok(sys.duration >= 1);
+});
+
+test('gọi nhóm không ai tham gia: cuộc gọi nhỡ; mở app khi đang đổ chuông; rớt mạng thì bị đưa ra', async () => {
+  activeUsers.add(3);
+  pushes.length = 0;
+  const an = connect(1);
+  const r = await an.call('gcall:start', { conversationId: 205, video: false });
+  assert.equal(pushes.some((p) => p.uid === 3), false); // Chi đang mở app: không cần thông báo đẩy
+  const late = connect(3);
+  assert.equal(last('gcall:ring', late.id).data.id, r.call.id);
+  assert.equal(last('gcall:state', late.id).data.call.id, r.call.id);
+  await sleep(1900); // hết giờ đổ chuông + 1,5 giây
+  assert.equal(calls.groups(), 0);
+  const sys = sysMessages(205).at(-1);
+  assert.deepEqual({ ...sys }, { event: 'gcall', video: false, status: 'missed', duration: 0, count: 1 });
+  activeUsers.delete(3);
+  // Rớt mạng giữa cuộc gọi
+  const r2 = await an.call('gcall:start', { conversationId: 205 });
+  const binh = connect(2);
+  await binh.call('gcall:join', { callId: r2.call.id });
+  const chi = connect(3);
+  await chi.call('gcall:join', { callId: r2.call.id });
+  binh.drop();
+  const binh2 = connect(2);
+  assert.equal((await binh2.call('gcall:rejoin', { callId: r2.call.id })).call.participants.length, 3); // nối lại kịp
+  chi.drop();
+  await sleep(300);
+  assert.deepEqual([...calls._groups.get(r2.call.id).participants.keys()], [1, 2]);
+  assert.equal(last('gcall:left', an.id).data.userId, 3);
+  assert.equal(last('gcall:ended', 'user:3').data.reason, 'dropped');
+  await an.call('gcall:leave', { callId: r2.call.id });
+  await binh2.call('gcall:leave', { callId: r2.call.id });
+  assert.equal(calls.groups(), 0);
 });

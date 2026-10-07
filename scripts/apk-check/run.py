@@ -455,7 +455,7 @@ def s_chat_lock():
 class Callee:
     """Bạn Bè nghe máy qua Socket.IO (python-socketio, workflow cài sẵn). Không có thư viện thì bỏ qua phần nghe máy."""
 
-    def __init__(self):
+    def __init__(self, events=("call:incoming", "call:signal", "call:ended")):
         self.events = []
         self.sio = None
         try:
@@ -464,7 +464,7 @@ class Callee:
             return
         token, _ = login_token("ban", "ban12345")
         sio = socketio.Client(reconnection=False)
-        for ev in ("call:incoming", "call:signal", "call:ended"):
+        for ev in events:
             sio.on(ev, (lambda name: lambda data: self.events.append((name, data)))(ev))
         sio.connect(args.server, auth={"token": token}, transports=["websocket"], wait_timeout=15)
         self.sio = sio
@@ -550,6 +550,68 @@ def s_call():
         back()
         if wait_for(r"^Trò chơi", 10) is None:
             raise RuntimeError("Không về được danh sách tin nhắn")
+    finally:
+        callee.close()
+    return ", ".join(notes)
+
+
+def s_gcall():
+    """Gọi nhóm (2.11.0): Bạn Bè gọi nhóm qua Socket.IO → app hiện "Cuộc gọi nhóm đến" → bấm Tham gia → app (người mới vào)
+    gửi lời mời kết nối WebRTC có tiếng (SDP m=audio) cho Bạn Bè → bấm Rời → máy chủ thấy app đã rời, cuộc gọi kết thúc"""
+    callee = Callee(("gcall:ring", "gcall:signal", "gcall:ended", "gcall:update"))
+    if not callee.sio:
+        return "bỏ qua (máy chạy thử thiếu python-socketio)"
+    notes = []
+    try:
+        token, tester_id = login_token(args.user, args.password)
+        ban_token, _ = login_token("ban", "ban12345")
+        _, hai_id = login_token("hai", "hai12345")
+        g = api_call("/api/groups", {"name": "Nhóm gọi thử", "memberIds": [tester_id, hai_id]}, token=ban_token)
+        conv = (g.get("conversation") or g)["id"]
+        time.sleep(2)
+        r = callee.call("gcall:start", {"conversationId": conv, "video": False})
+        if not r or not r.get("call"):
+            raise RuntimeError(f"Bạn Bè không gọi nhóm được: {r}")
+        call_id = r["call"]["id"]
+        if wait_for(r"^Cuộc gọi nhóm đến$", 15) is None:
+            raise RuntimeError("App không hiện cuộc gọi nhóm đến")
+        notes.append("có cuộc gọi nhóm đến" + (" (Bạn Bè đang gọi nhóm)" if find(r"Bạn Bè đang gọi nhóm") is not None else ""))
+        tap(r"^Tham gia$")
+        offer = callee.wait(
+            "gcall:signal",
+            lambda d: d.get("from") == tester_id and ((d.get("data") or {}).get("sdp") or {}).get("type") == "offer",
+            25,
+        )
+        if offer is None:
+            raise RuntimeError("Bấm Tham gia rồi nhưng app không gửi lời mời kết nối WebRTC cho Bạn Bè")
+        sdp = offer["data"]["sdp"].get("sdp", "")
+        if "m=audio" not in sdp:
+            raise RuntimeError("Lời mời kết nối không có tiếng (m=audio)")
+        notes.append(f"app gửi SDP {len(sdp)} ký tự (có m=audio)")
+        if callee.wait("gcall:signal", lambda d: d.get("from") == tester_id and "candidate" in (d.get("data") or {}), 10):
+            notes.append("có ICE candidate")
+        calls = api_call("/api/calls/groups", token=token).get("calls", [])
+        if not any(c.get("id") == call_id and tester_id in (c.get("participants") or []) for c in calls):
+            raise RuntimeError(f"Máy chủ không thấy app trong cuộc gọi nhóm: {calls}")
+        tap(r"^Rời$")
+        end = time.time() + 15
+        left = False
+        while time.time() < end and not left:
+            calls = api_call("/api/calls/groups", token=token).get("calls", [])
+            left = not any(tester_id in (c.get("participants") or []) for c in calls)
+            time.sleep(1)
+        if not left:
+            raise RuntimeError("Bấm Rời nhưng máy chủ vẫn thấy app trong cuộc gọi nhóm")
+        notes.append("rời được")
+        callee.call("gcall:leave", {"callId": call_id})
+        end = time.time() + 10
+        while time.time() < end and api_call("/api/calls/groups", token=token).get("calls"):
+            time.sleep(1)
+        if api_call("/api/calls/groups", token=token).get("calls"):
+            raise RuntimeError("Mọi người đã rời nhưng cuộc gọi nhóm chưa kết thúc")
+        time.sleep(3)
+        if wait_for(r"^Trò chơi", 10) is None:
+            raise RuntimeError("Màn hình cuộc gọi chưa đóng")
     finally:
         callee.close()
     return ", ".join(notes)
@@ -1173,6 +1235,7 @@ def main():
         step("Rời cuộc trò chuyện", s_chat_back)
         step("Khóa cuộc trò chuyện bằng mật khẩu", s_chat_lock)
         step("Gọi thoại: đổ chuông, nghe máy, gác máy", s_call)
+        step("Gọi nhóm: tham gia, rời", s_gcall)
         step("Think AI: hỏi trợ lý", s_ai)
         step("Mục Trò chơi", s_games_hub)
         step("Nông trại: thu hoạch, gieo hạt (có âm thanh)", s_farm)

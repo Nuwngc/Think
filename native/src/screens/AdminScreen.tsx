@@ -4,13 +4,14 @@ import { Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text,
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShallow } from "zustand/react/shallow";
 
-import { api, type AiSettings, type TurnSettings } from "../api";
+import { api, type AiSettings } from "../api";
 import { fmtBytes, fmtNum, hm, lastSeenText, shortTime } from "../format";
 import { namesOf, showToast, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import type { AdminUser, ErrorReport, StoragePayload } from "../types";
 import { API_URL } from "../config";
 import { Avatar, Button, Card, confirm, Field, FormError, Icon, KeyboardAware, Loading, SectionLabel, Sheet, SheetItem, useStyles } from "../ui";
+import { TurnSettingsCard } from "./TurnSettings";
 
 type Seg = "users" | "storage" | "errors" | "ai";
 const SEGS: { key: Seg; label: string }[] = [
@@ -450,11 +451,8 @@ function AiPanel() {
   const c = useColors();
   const s = useStyles(makeStyles);
   const [ai, setAi] = useState<AiSettings | null>(null);
-  const [turn, setTurn] = useState<TurnSettings | null>(null);
   const [form, setForm] = useState({ provider: "gemini" as "gemini" | "openai", apiKey: "", model: "", baseUrl: "", perUserDaily: "", totalDaily: "" });
-  const [turnForm, setTurnForm] = useState({ turnUrls: "", turnUsername: "", turnCredential: "" });
   const [error, setError] = useState<string | null>(null);
-  const [turnError, setTurnError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -462,15 +460,10 @@ function AiPanel() {
     setAi(a);
     setForm({ provider: a.provider, apiKey: "", model: a.model, baseUrl: a.baseUrl || "", perUserDaily: String(a.perUserDaily), totalDaily: String(a.totalDaily) });
   };
-  const fillTurn = (t: TurnSettings) => {
-    setTurn(t);
-    setTurnForm({ turnUrls: t.turnUrls, turnUsername: t.turnUsername, turnCredential: "" });
-  };
   const load = useCallback(async () => {
     try {
-      const [a, t] = await Promise.all([api.aiSettings(), api.turnSettings()]);
+      const a = await api.aiSettings();
       fill(a.ai);
-      fillTurn(t.calls);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không tải được cài đặt.");
@@ -480,7 +473,7 @@ function AiPanel() {
     load();
   }, [load]);
 
-  if (!ai || !turn) {
+  if (!ai) {
     return error ? (
       <View style={s.content}>
         <FormError text={error} />
@@ -521,23 +514,6 @@ function AiPanel() {
       setTestResult({ ok: true, text: `Khóa dùng được (${r.model}). Think AI trả lời: “${r.reply}”` });
     } catch (err) {
       setTestResult({ ok: false, text: err instanceof Error ? err.message : "Chưa thử được." });
-    } finally {
-      setBusy(null);
-    }
-  };
-  const saveTurn = async () => {
-    setBusy("turn");
-    setTurnError(null);
-    try {
-      const res = await api.saveTurnSettings({
-        turnUrls: turnForm.turnUrls.trim(),
-        turnUsername: turnForm.turnUsername.trim(),
-        ...(turnForm.turnCredential ? { turnCredential: turnForm.turnCredential } : {}),
-      });
-      fillTurn(res.calls);
-      showToast("Đã lưu máy chủ TURN.");
-    } catch (err) {
-      setTurnError(err instanceof Error ? err.message : "Chưa lưu được.");
     } finally {
       setBusy(null);
     }
@@ -649,49 +625,8 @@ function AiPanel() {
         {testResult ? <Text style={[s.muted, { color: testResult.ok ? c.text2 : c.danger }]}>{testResult.ok ? `✅ ${testResult.text}` : `❌ ${testResult.text}`}</Text> : null}
       </Card>
 
-      <SectionLabel>CUỘC GỌI: MÁY CHỦ TURN</SectionLabel>
-      <Card style={s.pad}>
-        <Text style={s.muted}>
-          Gọi thoại / video đi thẳng giữa hai máy. Khi hai bên dùng 4G hoặc mạng chặn kết nối thẳng, cuộc gọi cần một máy chủ TURN để chuyển tiếp (vd Metered, Cloudflare). Để
-          trống nếu gọi vẫn được.
-        </Text>
-        <Field
-          label="Địa chỉ TURN"
-          value={turnForm.turnUrls}
-          onChangeText={(v) => setTurnForm((f) => ({ ...f, turnUrls: v }))}
-          placeholder="turn:turn.example.com:3478"
-          autoCapitalize="none"
-          autoCorrect={false}
-          accessibilityLabel="Địa chỉ TURN"
-        />
-        <Field
-          label="Tên đăng nhập"
-          value={turnForm.turnUsername}
-          onChangeText={(v) => setTurnForm((f) => ({ ...f, turnUsername: v }))}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <Field
-          label="Mật khẩu"
-          value={turnForm.turnCredential}
-          onChangeText={(v) => setTurnForm((f) => ({ ...f, turnCredential: v }))}
-          placeholder={turn.hasCredential ? "Đã lưu (để trống = giữ)" : ""}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <Text style={s.muted}>
-          {turn.turnUrls
-            ? "Cuộc gọi đang dùng máy chủ TURN này khi cần."
-            : turn.cloudflare
-              ? "Đang dùng TURN của Cloudflare (biến môi trường)."
-              : turn.envTurn
-                ? "Đang dùng TURN đặt trong biến môi trường."
-                : "Chưa có máy chủ TURN: gọi qua wifi thường vẫn được, một số mạng 4G có thể không nối được."}
-        </Text>
-        <FormError text={turnError} />
-        <Button title="Lưu" small onPress={saveTurn} busy={busy === "turn"} style={{ alignSelf: "flex-start" }} />
-      </Card>
+      <SectionLabel>CUỘC GỌI: MÁY CHỦ CHUYỂN TIẾP (TURN)</SectionLabel>
+      <TurnSettingsCard />
     </ScrollView>
   );
 }

@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShallow } from "zustand/react/shallow";
 
 import { emojiOf, themeOf } from "../chatThemes";
-import { startCall } from "../calls/engine";
+import { joinGroupCall, startCall, useCall } from "../calls/engine";
 import { callInfoOf, convTitle, dayKey, dayLabel, lastSeenText, REACTIONS, systemText } from "../format";
 import { forgetPick, pickImages, prepareImage, rememberPick } from "../images";
 import { isPending } from "../messages";
@@ -275,16 +275,20 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
             </View>
           );
         case "system": {
-          // Nhật ký cuộc gọi trong chat riêng: thêm nút "Gọi lại"
+          // Nhật ký cuộc gọi (1-1 hoặc gọi nhóm): thêm nút "Gọi lại"
           const call = callInfoOf(row.item);
           const peerUser = conv?.type === "dm" && conv.peerId != null ? users[conv.peerId] : undefined;
-          const canCall = Boolean(call && peerUser && !peerUser.disabled && !peerUser.bot && !bubble);
+          const canCall = Boolean(call && !bubble && conv && (conv.type !== "dm" || (peerUser && !peerUser.disabled && !peerUser.bot)));
           return (
             <View style={[s.center, canCall && s.callRow]}>
               <Text style={s.system}>{systemText(row.item, names)}</Text>
-              {canCall && conv && peerUser ? (
+              {canCall && conv ? (
                 <Pressable
-                  onPress={() => startCall(conv.id, peerUser, Boolean(call?.video))}
+                  onPress={() =>
+                    conv.type === "dm"
+                      ? peerUser && startCall(conv.id, peerUser, Boolean(call?.video))
+                      : startCall(conv.id, { id: conv.id, displayName: convTitle(conv, names.nameOf), avatar: conv.avatar || null }, Boolean(call?.video), "group")
+                  }
                   style={({ pressed }) => [s.callBack, { opacity: pressed ? 0.7 : 1 }]}
                   accessibilityRole="button"
                   accessibilityLabel="Gọi lại"
@@ -349,9 +353,10 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
           : `${typers[0]} và ${typers.length - 1} người khác đang nhập…`;
 
   const loading = !box || (!box.loaded && box.loading) || (!box.loaded && !box.error);
-  // Chat riêng với người thật: nút gọi thoại / gọi video. Thách cờ và Tìm tin nhắn chuyển vào "Tùy chỉnh đoạn chat" cho đỡ chật.
+  // Nút gọi thoại / gọi video: chat riêng với người thật, và gọi nhóm. Thách cờ và Tìm tin nhắn chuyển vào "Tùy chỉnh đoạn chat" cho đỡ chật.
   const human = conv.type === "dm" && peer && !peer.disabled && !peer.bot ? peer : null;
-  const callable = Boolean(human && !bubble);
+  const callable = Boolean((human || conv.type !== "dm") && !bubble);
+  const groupTarget = { id: conv.id, displayName: title, avatar: conv.avatar || null };
 
   return (
     <KeyboardAware bottomInset={false} style={{ backgroundColor: c.bg }}>
@@ -382,6 +387,11 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
             <IconButton name="call" label="Gọi thoại" onPress={() => startCall(conv.id, human, false)} />
             <IconButton name="videocam" label="Gọi video" onPress={() => startCall(conv.id, human, true)} />
           </>
+        ) : callable ? (
+          <>
+            <IconButton name="call" label="Gọi nhóm" onPress={() => startCall(conv.id, groupTarget, false, "group")} />
+            <IconButton name="videocam" label="Gọi video nhóm" onPress={() => startCall(conv.id, groupTarget, true, "group")} />
+          </>
         ) : null}
         {conv.locked ? <IconButton name="lock" label="Khóa lại cuộc trò chuyện" onPress={() => lockConversationNow(convId)} /> : null}
         {callable ? null : <IconButton name="search" label="Tìm tin nhắn" onPress={() => setSearchOpen(true)} />}
@@ -391,6 +401,7 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
           <IconButton name="info-outline" label="Tùy chỉnh đoạn chat" onPress={() => setSettingsOpen(true)} />
         )}
       </View>
+      {conv.type !== "dm" && !bubble ? <GroupCallBar convId={conv.id} title={title} avatar={conv.avatar || null} /> : null}
       <PinBar conv={conv} onJump={jumpTo} onShowAll={() => setPinsOpen(true)} />
 
       <View style={{ flex: 1 }}>
@@ -778,6 +789,33 @@ function ListTop({
   );
 }
 
+/** Thanh "Đang có cuộc gọi nhóm · Tham gia" (2.11.0, giống bản web) */
+function GroupCallBar({ convId, title, avatar }: { convId: number; title: string; avatar: string | null }) {
+  const c = useColors();
+  const s = useStyles(makeStyles);
+  const { g, mine } = useCall(useShallow((st) => ({ g: st.groups[convId], mine: Boolean(st.view && st.view.convId === convId && st.view.phase !== "incoming") })));
+  const users = useStore((st) => st.users);
+  if (!g || mine) return null;
+  return (
+    <View style={[s.gcallBar, { backgroundColor: c.jadeWash, borderBottomColor: c.line }]} accessibilityLiveRegion="polite">
+      <View style={[s.gcallIc, { backgroundColor: c.accent }]}>
+        <Icon name={g.video ? "videocam" : "call"} size={18} color="#fff" />
+      </View>
+      <Text style={[s.gcallText, { color: c.accent }]} numberOfLines={1}>
+        {g.participants.length} người đang gọi{g.video ? " video" : ""}
+      </Text>
+      <View style={s.gcallFaces}>
+        {g.participants.slice(0, 3).map((uid) => (
+          <View key={uid} style={{ marginLeft: -6 }}>
+            <Avatar user={users[uid]} size={22} dot={false} />
+          </View>
+        ))}
+      </View>
+      <Button title="Tham gia" small onPress={() => joinGroupCall(convId, { title, avatar })} />
+    </View>
+  );
+}
+
 // Think AI (2.10.0): lời chào và vài câu hỏi gợi ý khi chưa nhắn gì (giống bản web)
 const AI_SUGGESTIONS = ["Gợi ý món ăn tối nay 🍜", "Viết lời chúc sinh nhật cho bạn thân 🎂", "Dịch sang tiếng Anh: Hẹn gặp lại cuối tuần nhé!", "Giải thích ngắn gọn: lãi kép là gì?"];
 
@@ -813,6 +851,10 @@ function AiIntro({ conv, users, empty }: { conv: Conversation; users: ReturnType
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     callRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", alignItems: "center", gap: 10 },
+    gcallBar: { flexDirection: "row", alignItems: "center", gap: 10, paddingLeft: 14, paddingRight: 10, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth },
+    gcallIc: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+    gcallText: { flex: 1, fontSize: 14, fontWeight: "800" },
+    gcallFaces: { flexDirection: "row", paddingLeft: 6 },
     callBack: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: c.jadeWash },
     callBackText: { color: c.accent, fontSize: 12.5, fontWeight: "700" },
     chips: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8, marginTop: 10, maxWidth: 420 },
