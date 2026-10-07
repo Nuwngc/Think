@@ -629,7 +629,7 @@ def s_story():
     if wait_for(r"^Nội dung tin$", 10) is None:
         raise RuntimeError("Không mở được màn tạo tin")
     tap(r"^Nội dung tin$")
-    type_text("Tin thu tu app")
+    type_text("12345 67890")  # chỉ số: bàn phím không tự sửa chữ (Android 10 sửa "thu" thành "Thursday")
     hide_keyboard()
     tap(r"^Đăng tin$")
     mine = []
@@ -637,7 +637,7 @@ def s_story():
     while time.time() < end and not mine:
         mine = [x for x in api_call("/api/stories", token=token).get("stories", []) if x.get("userId") == tester_id]
         time.sleep(1)
-    if not mine or mine[0].get("text") != "Tin thu tu app":
+    if not mine or "12345" not in (mine[0].get("text") or ""):
         raise RuntimeError(f"Máy chủ chưa nhận tin vừa đăng: {mine}")
     notes.append("đăng tin chữ được")
     if wait_for(r"^Xem tin của bạn, 1 tin", 15) is None:
