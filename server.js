@@ -37,6 +37,7 @@ const chatPlus = require('./src/chat-plus');
 const chatLock = require('./src/chat-lock');
 const ai = require('./src/ai');
 const { setupCalls } = require('./src/calls');
+const { setupStories, storyAlive } = require('./src/stories');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -216,6 +217,15 @@ function serializeMessage(m, reactions) {
     if (m.forwarded) out.forwarded = true; // chuyển tiếp từ cuộc trò chuyện khác
     if (m.mentions) out.mentions = String(m.mentions).split(',').filter(Boolean).map(Number); // @nhắc tên
     if (m.kind === 'poll') out.poll = chatPlus.pollData(m.id); // bình chọn
+    if (m.story) {
+      // Trả lời / thả cảm xúc một tin 24 giờ (src/stories.js): ảnh nhỏ của tin, tin còn xem được không
+      try {
+        const st = JSON.parse(m.story);
+        out.story = { ...st, alive: storyAlive(st.id) };
+      } catch {
+        /* bỏ qua */
+      }
+    }
     if (m.kind === 'voice') {
       // Tin nhắn thoại: file ghi âm, độ dài, dạng sóng; file đã bị dọn khỏi máy chủ thì audio = null
       out.audio = m.audio ? { url: m.audio, ms: m.audio_ms || 0, wave: m.audio_wave || '' } : null;
@@ -289,6 +299,7 @@ const CONV_SELECT = `
          (mem.lock_hash IS NOT NULL) AS locked,
          lm.id AS lm_id, lm.sender_id AS lm_sender_id, lm.text AS lm_text, lm.image AS lm_image,
          lm.deleted AS lm_deleted, lm.created_at AS lm_created_at, lm.kind AS lm_kind, lm.audio AS lm_audio, lm.audio_ms AS lm_audio_ms,
+         lm.story AS lm_story,
          (SELECT COUNT(*) FROM messages m
            WHERE m.conversation_id = c.id AND m.id > mem.last_read_id AND m.sender_id <> :uid
              AND m.kind <> 'system') AS unread,
@@ -335,6 +346,7 @@ function serializeConv(r) {
           kind: r.lm_kind,
           audio: r.lm_audio,
           audio_ms: r.lm_audio_ms,
+          story: r.lm_story,
         })
       : null,
   };
@@ -754,18 +766,21 @@ app.post('/api/conversations/dm', requireAuth, requireReady, (req, res) => {
   const other = get('SELECT id, disabled FROM users WHERE id = ?', otherId);
   if (!other || other.disabled) return res.status(404).json({ error: 'Không tìm thấy người này.' });
 
-  const key = [req.user.id, otherId].sort((a, b) => a - b).join(':');
-  let row = get('SELECT id FROM conversations WHERE dm_key = ?', key);
-  if (!row) {
-    row = transaction(() => {
-      const id = Number(run("INSERT INTO conversations (type, dm_key, created_at) VALUES ('dm', ?, ?)", key, Date.now()).lastInsertRowid);
-      run('INSERT INTO members (conversation_id, user_id) VALUES (?, ?)', id, req.user.id);
-      run('INSERT INTO members (conversation_id, user_id) VALUES (?, ?)', id, otherId);
-      return { id };
-    });
-  }
-  res.json({ conversation: getConv(row.id, req.user.id) });
+  res.json({ conversation: getConv(ensureDm(req.user.id, otherId), req.user.id) });
 });
+
+/** Mã cuộc trò chuyện riêng giữa hai người (tạo nếu chưa có) */
+function ensureDm(a, b) {
+  const key = [a, b].sort((x, y) => x - y).join(':');
+  const row = get('SELECT id FROM conversations WHERE dm_key = ?', key);
+  if (row) return row.id;
+  return transaction(() => {
+    const id = Number(run("INSERT INTO conversations (type, dm_key, created_at) VALUES ('dm', ?, ?)", key, Date.now()).lastInsertRowid);
+    run('INSERT INTO members (conversation_id, user_id) VALUES (?, ?)', id, a);
+    run('INSERT INTO members (conversation_id, user_id) VALUES (?, ?)', id, b);
+    return id;
+  });
+}
 
 app.get('/api/conversations/:id/messages', requireAuth, requireReady, (req, res) => {
   const convId = Number(req.params.id);
@@ -938,7 +953,11 @@ async function notifyMembers(conv, message, members) {
       ? `🎤 Tin nhắn thoại${message.audio && message.audio.ms ? ` (${VoiceCore.clock(message.audio.ms)})` : ''}`
       : chessShare
         ? `♟ Chia sẻ ván cờ: ${chessShare[1]}`
-        : message.text ? (message.image ? `📷 ${message.text}` : message.text) : '📷 Đã gửi một ảnh';
+        : message.story
+          ? message.story.reaction
+            ? `Đã bày tỏ cảm xúc ${message.text} về tin của bạn`
+            : `Trả lời tin của bạn: ${message.text}`
+          : message.text ? (message.image ? `📷 ${message.text}` : message.text) : '📷 Đã gửi một ảnh';
   const base = {
     type: 'message',
     conversationId: conv.id,
@@ -992,7 +1011,7 @@ app.delete('/api/messages/:id', requireAuth, requireReady, (req, res) => {
   const msg = get('SELECT * FROM messages WHERE id = ?', Number(req.params.id));
   if (!msg || msg.sender_id !== req.user.id || msg.kind === 'system') return res.status(404).json({ error: 'Không tìm thấy tin nhắn.' });
   if (!msg.deleted) {
-    run('UPDATE messages SET deleted = 1, text = NULL, image = NULL, audio = NULL, search_text = NULL, mentions = NULL, updated_at = ? WHERE id = ?', Date.now(), msg.id);
+    run('UPDATE messages SET deleted = 1, text = NULL, image = NULL, audio = NULL, search_text = NULL, mentions = NULL, story = NULL, updated_at = ? WHERE id = ?', Date.now(), msg.id);
     run('DELETE FROM reactions WHERE message_id = ?', msg.id);
     const wasPinned = run('DELETE FROM message_pins WHERE message_id = ?', msg.id).changes > 0;
     if (wasPinned) {
@@ -1404,6 +1423,44 @@ setupSocial({
     return push.sendToUser(uid, { icon: actor?.avatar || '/icons/icon-192.png', ...payload });
   },
   nameOf: (uid) => get('SELECT display_name FROM users WHERE id = ?', uid)?.display_name || 'Ai đó',
+});
+
+/* ---------------- API: tin 24 giờ (story, 2.13.0) — src/stories.js ---------------- */
+
+// Tin nhắn trả lời / thả cảm xúc một tin 24 giờ: lưu, phát realtime, thông báo đẩy như tin nhắn thường
+function postStoryMessage(convId, senderId, text, story) {
+  const conv = get('SELECT * FROM conversations WHERE id = ?', convId);
+  const id = transaction(() => {
+    const newId = Number(
+      run("INSERT INTO messages (conversation_id, sender_id, kind, text, story, search_text, created_at) VALUES (?, ?, 'text', ?, ?, ?, ?)",
+        convId, senderId, text, JSON.stringify(story), searchKey(text), Date.now()).lastInsertRowid
+    );
+    run('UPDATE conversations SET last_message_id = ? WHERE id = ?', newId, convId);
+    run('UPDATE members SET last_read_id = ? WHERE conversation_id = ? AND user_id = ?', newId, convId, senderId);
+    return newId;
+  });
+  const message = loadMessage(id);
+  const members = memberIds(convId);
+  for (const uid of members) io.to(`user:${uid}`).emit('message:new', message);
+  notifyMembers(conv, message, members).catch((err) => console.warn('[push]', err.message));
+  return message;
+}
+
+setupStories({
+  app,
+  io,
+  requireAuth,
+  requireReady,
+  // Ảnh của tin tải lên qua /api/upload giống ảnh tin nhắn
+  takeUpload: (url, userId) => {
+    const upload = pendingUploads.get(url);
+    if (!upload || upload.userId !== userId || upload.kind === 'audio') return false;
+    pendingUploads.delete(url);
+    return true;
+  },
+  removeUpload,
+  ensureDm,
+  postMessage: postStoryMessage,
 });
 
 /* ---------------- API: trò chơi trên máy (Xếp Khối) — chỉ giữ điểm cho bảng xếp hạng (src/games.js) ---------------- */

@@ -9,7 +9,8 @@ import { isPending } from "../messages";
 import { currentToken } from "../session";
 import { mentionParts, pollPercents } from "../chatPlus";
 import type { ChatTheme } from "../chatThemes";
-import { closePoll, openChess, useStore, votePoll } from "../store";
+import { closePoll, openChess, showToast, useStore, votePoll } from "../store";
+import { StoryRefCard } from "../stories/StoryRefCard";
 import { useColors, type Colors } from "../theme";
 import type { ChatItem, Conversation, Message, User } from "../types";
 import { Avatar, Icon, useStyles } from "../ui";
@@ -60,6 +61,9 @@ export const MessageRow = memo(function MessageRow(p: MessageRowProps) {
       <View style={[s.col, mine ? { alignItems: "flex-end" } : { alignItems: "flex-start" }]}>
         {showName ? <Text style={s.sender}>{p.sender?.displayName || "Người dùng"}</Text> : null}
         <Tags item={m} pinned={Boolean(p.pinned)} />
+        {"story" in m && m.story && !m.deleted ? (
+          <StoryRefCard story={m.story} mine={mine} meId={meId} nameOf={p.names.nameOf} onGone={() => showToast("Tin không còn xem được.")} />
+        ) : null}
         <Pressable
           onLongPress={() => !pending && !m.deleted && p.onLongPress(m)}
           onPress={() => (failed ? p.onPressFailed(m) : undefined)}

@@ -13,6 +13,7 @@ import type { Conversation } from "../types";
 import { Badge, ConvAvatar, Icon, IconButton, Sheet, SheetItem, useStyles } from "../ui";
 import { MuteSheet, muteText } from "./ConvSettingsSheet";
 import { NewChatSheet } from "./NewChatSheet";
+import { StoryBar } from "../stories/StoryBar";
 
 type Filter = "all" | "unread" | "group" | "dm";
 const FILTERS: { key: Filter; label: string }[] = [
@@ -104,6 +105,7 @@ export function ChatListScreen() {
         )}
         contentContainerStyle={{ paddingBottom: 96 }}
         keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={query ? null : <StoryBar />}
         ListEmptyComponent={
           <Text style={s.empty}>
             {query ? "Không có cuộc trò chuyện nào khớp." : filter === "unread" ? "Bạn đã đọc hết tin nhắn." : "Chưa có cuộc trò chuyện nào."}

@@ -233,6 +233,8 @@ ensureColumn('chess_games', 'chat', 'chat TEXT');
 // 2.9.0: ảnh đại diện nhóm; khóa cuộc trò chuyện bằng mật khẩu riêng của từng người (mã băm scrypt, NULL = không khóa)
 ensureColumn('conversations', 'avatar', 'avatar TEXT');
 ensureColumn('members', 'lock_hash', 'lock_hash TEXT');
+// 2.13.0: tin nhắn trả lời / thả cảm xúc một tin 24 giờ: ảnh nhỏ của tin (JSON, src/stories.js)
+ensureColumn('messages', 'story', 'story TEXT');
 // 2.8.0: ván thuộc giải đấu nào; xin đi lại trong ván với bạn (bên xin, số nước lúc xin)
 ensureColumn('chess_games', 'tournament_id', 'tournament_id INTEGER');
 ensureColumn('chess_games', 'takeback_offer', 'takeback_offer TEXT');

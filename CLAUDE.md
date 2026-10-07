@@ -47,6 +47,13 @@ Dữ liệu ở `public/puzzles/<game>.json` và bản giống hệt `native/src
 - App giữ kết nối Socket.IO khi chạy nền **nếu đang trong cuộc gọi** (`inCall()` trong `native/src/store.ts`); đừng bỏ điều kiện này (bản 0.11 ngắt kết nối khi chạy nền làm cuộc gọi mất tín hiệu).
 - Kiểm tra APK: bước "Gọi nhóm: tham gia, rời" trong `scripts/apk-check/run.py` (Bạn Bè gọi nhóm qua python-socketio, app bấm Tham gia phải gửi offer có `m=audio`).
 
+## Tin 24 giờ (2.13.0)
+
+- Máy chủ `src/stories.js`; web `public/stories-ui.js`; app `native/src/stories/`. Màu nền tin chữ có ba bản phải giống nhau: `STORY_BGS` (máy chủ, chỉ mã), `BGS` trong `public/stories-ui.js`, `STORY_BGS` trong `native/src/stories/bgs.ts` (kiểm thử app so thứ tự mã).
+- Thả cảm xúc / trả lời tin = tin nhắn riêng có cột `messages.story` (JSON ảnh nhỏ của tin); `serializeMessage` thêm `alive`. Chữ khung "Đã trả lời tin của bạn" và chữ xem trước khi thả cảm xúc ở `refEl` / `previewOf` (web) và `StoryRefCard.tsx` / `previewText` trong `native/src/format.ts` phải giống nhau.
+- Màn xem tin có thanh tiến độ chạy liên tục: kiểm tra APK qua API (bước "Tin 24 giờ"), và xóa tin ở cuối bước để các bước sau bấm "Bạn Bè" trong danh sách chat không trúng vòng tròn tin.
+- `replaceChildren` của trình duyệt biến `null` thành chữ "null": lọc `filter(Boolean)` trước khi truyền.
+
 ## Tin nhắn thoại, thành tựu
 
 - Tin nhắn thoại: phần dùng chung `public/voice-core.js` và bản app `native/src/voice/core.ts` phải giống hệt (kiểm thử so khớp). Mỗi lúc một trình phát dùng chung (`native/src/voice/player.ts`) — đừng tạo trình phát riêng cho từng tin (Android hết luồng âm thanh).

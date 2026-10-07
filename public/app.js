@@ -424,6 +424,20 @@
       })
     : null;
 
+  // Tin 24 giờ (2.13.0, public/stories-ui.js, máy chủ src/stories.js). Khung chat nổi (bong bóng) không hiện hàng vòng tròn.
+  const stories = window.ThinkStories
+    ? window.ThinkStories.create({
+        api, h, icon, avatarEl, userOf, nameOf, state, toast, withBusy,
+        prepareImage: (file, opts) => prepareImage(file, opts),
+        bar: !IN_BUBBLE,
+        // Tin bị xóa / hết hạn: khung "Đã trả lời tin" trong khung chat đang mở đổi thành "Tin không còn xem được"
+        onGone: (storyId) => {
+          const list = state.currentId != null ? state.msgs.get(state.currentId)?.list : null;
+          if (list && list.some((m) => m.story && m.story.id === storyId)) renderMessages({ preserve: true });
+        },
+      })
+    : null;
+
   function showLogin(message) {
     teardown();
     showScreen('view-login');
@@ -446,6 +460,7 @@
   }
   function teardown() {
     if (calls) calls.reset();
+    if (stories) stories.reset();
     if (state.socket) {
       state.socket.removeAllListeners();
       state.socket.disconnect();
@@ -699,6 +714,8 @@
   }
   function previewText(m, c) {
     if (m.kind === 'system') return systemText(m);
+    const storyPreview = stories && stories.previewOf(m); // thả cảm xúc một tin 24 giờ
+    if (storyPreview) return storyPreview;
     const who = m.senderId === state.me.id ? 'Bạn' : c.type !== 'dm' ? nameOf(m.senderId) : '';
     return who ? `${who}: ${messageSummary(m)}` : messageSummary(m);
   }
@@ -1148,6 +1165,7 @@
     if (m.editedAt && !m.deleted) tags.push(h('span', { title: `Sửa lúc ${hm(m.editedAt)}` }, icon('edit'), 'Đã chỉnh sửa'));
     if (isPinned(m)) tags.push(h('span', null, icon('pin'), 'Đã ghim'));
     if (tags.length) col.append(h('span', { class: 'msg-tags' }, tags));
+    if (m.story && !m.deleted && stories) col.append(stories.refEl(m)); // trả lời / thả cảm xúc một tin 24 giờ
     col.append(m.kind === 'poll' && !m.deleted ? pollEl(m) : bubbleEl(m));
     const reacts = reactionsEl(m);
     if (reacts) col.append(reacts);
@@ -3290,6 +3308,7 @@ ${sections}
         if (caro) caro.reload();
         if (streaks) streaks.load();
         if (puzzles) puzzles.load(); // gửi kết quả câu đố giải lúc mất mạng
+        if (stories) stories.load();
         if (calls) calls.onReconnect(); // đang gọi thì báo máy chủ mình đã nối lại
       }
       state.everConnected = true;
@@ -3317,6 +3336,9 @@ ${sections}
       for (const ev of ['post:new', 'post:likes', 'post:comment', 'post:comment-deleted', 'post:deleted']) {
         socket.on(ev, (data) => social.onEvent(ev, data));
       }
+    }
+    if (stories) {
+      for (const ev of ['story:new', 'story:deleted', 'story:viewed']) socket.on(ev, (data) => stories.onEvent(ev, data));
     }
     socket.on('session:ended', (data) => sessionEnded((data && data.reason) || 'Bạn đã bị đăng xuất.'));
     if (chess) {
@@ -5141,6 +5163,7 @@ ${sections}
     if (games) games.sync(); // gửi điểm Xếp Khối chơi lúc offline
     if (streaks) streaks.load(); // chuỗi hằng ngày (gửi luôn ngày chơi lúc mất mạng)
     if (puzzles) puzzles.load(); // câu đố: tiến độ trên máy chủ (gửi luôn kết quả giải lúc mất mạng)
+    if (stories) stories.load(); // tin 24 giờ
     syncPush();
     if (LocalDB.ready()) {
       cacheMe(state.me);

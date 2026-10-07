@@ -22,6 +22,8 @@ import type {
   Reaction,
   StoragePayload,
   StorageSettings,
+  Story,
+  StoryViewer,
   User,
 } from "./types";
 
@@ -528,6 +530,15 @@ export const api = {
   post: (id: number) => request<{ post: Post }>(`/api/posts/${id}`),
 
   createPost: (body: { text: string; image?: string; gameId?: number }) => request<{ post: Post }>("/api/posts", { method: "POST", body }),
+
+  // Tin 24 giờ (2.13.0, máy chủ src/stories.js)
+  stories: () => request<{ stories: Story[]; serverTime: number }>("/api/stories"),
+  createStory: (body: { text?: string; image?: string; bg?: string }) => request<{ story: Story }>("/api/stories", { method: "POST", body }),
+  deleteStory: (id: number) => request<{ ok: true }>(`/api/stories/${id}`, { method: "DELETE" }),
+  viewStory: (id: number) => request<{ ok: true }>(`/api/stories/${id}/view`, { method: "POST", body: {} }),
+  storyViewers: (id: number) => request<{ viewers: StoryViewer[] }>(`/api/stories/${id}/viewers`),
+  replyStory: (id: number, body: { text?: string; emoji?: string }) =>
+    request<{ message: Message; conversationId: number }>(`/api/stories/${id}/reply`, { method: "POST", body }),
 
   deletePost: (id: number) => request<{ ok: true }>(`/api/posts/${id}`, { method: "DELETE" }),
 

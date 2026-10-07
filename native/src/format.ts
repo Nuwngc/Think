@@ -234,6 +234,11 @@ export function listPreview(m: ChatItem, c: Pick<Conversation, "type"> & { locke
 
 export function previewText(m: ChatItem, c: Pick<Conversation, "type">, names: Names) {
   if (m.kind === "system") return systemText(m, names);
+  // Thả cảm xúc một tin 24 giờ (giống previewOf trong public/stories-ui.js)
+  if ("story" in m && m.story?.reaction && !m.deleted) {
+    const owner = m.story.ownerId === names.meId ? "bạn" : names.nameOf(m.story.ownerId);
+    return `${m.senderId === names.meId ? "Bạn đã bày tỏ" : "Đã bày tỏ"} cảm xúc ${m.text} về tin của ${owner}`;
+  }
   const who = m.senderId === names.meId ? "Bạn" : c.type !== "dm" ? names.nameOf(m.senderId) : "";
   return who ? `${who}: ${messageSummary(m, names)}` : messageSummary(m, names);
 }
