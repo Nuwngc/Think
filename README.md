@@ -10,6 +10,7 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - Phòng chung cho cả nhóm, nhắn riêng 1-1, và **nhóm chat riêng** tự tạo (đặt tên, **đổi tên, đổi ảnh nhóm**, thêm/xóa người, rời nhóm, có trưởng nhóm).
 - **Think AI** (mục 25, mới ở 2.10.0): trợ lý AI ngay trong chat như Meta AI — **nhắn riêng cho Think AI** hoặc gõ **@Think AI** trong nhóm / phòng chung để hỏi đáp, dịch, viết hộ, gợi ý, gửi ảnh nhờ xem giúp. Dùng **Google Gemini (có gói miễn phí)** hoặc dịch vụ kiểu OpenAI; admin dán khóa API trong **Quản trị → AI, gọi**. Có trên web và App Think Beta.
 - **Gọi thoại, gọi video** (mục 26, mới ở 2.10.0): gọi 1-1 trong cuộc trò chuyện riêng, giữa web và app đều được: chuông, rung, tắt micro, tắt / đổi máy ảnh, loa ngoài (app), nhật ký cuộc gọi và nút **Gọi lại** trong chat, thông báo cuộc gọi đến và **cuộc gọi nhỡ**. Tiếng và hình đi thẳng giữa hai máy (WebRTC).
+- **Gọi nhóm** (mục 26, mới ở 2.11.0): gọi thoại / gọi video cả nhóm (tối đa 8 người), ai đến sau thì bấm **Tham gia** trên thanh "… người đang gọi" trong khung chat. Sửa lỗi cuộc gọi kẹt ở **"Đang kết nối…"** khi dùng 4G: Think tự dùng máy chủ chuyển tiếp (TURN) miễn phí, admin cài TURN riêng miễn phí trong vài bước.
 - **Khóa cuộc trò chuyện bằng mật khẩu** (mục 18, mới ở 2.9.0): đặt mật khẩu riêng cho một cuộc trò chuyện (nhóm hay riêng) trên tài khoản của mình; thông báo và bong bóng chat vẫn đầy đủ, nhưng bấm vào (hay mở từ danh sách) thì phải nhập mật khẩu mới xem được; danh sách không hiện nội dung tin. Có trên web và App Think Beta.
 - Gửi ảnh (tự nén trên máy trước khi gửi), dán ảnh bằng Ctrl+V trên máy tính.
 - Thanh điều hướng dưới cùng: **Tin nhắn**, **Trò chơi** (Nông trại, Xếp Khối, Cờ vua, Cờ caro), **Cá nhân** (trang cá nhân + bảng tin; nút ⚙ **Cài đặt**: tên, giới thiệu, ảnh bìa, giao diện sáng/tối, thông báo, lưu trên máy, đổi mật khẩu) và **Quản trị** (chỉ admin thấy).
@@ -338,7 +339,7 @@ git pull && npm install --omit=dev && pm2 restart think-chat
 | `CORS_ORIGINS` | Chỉ dùng khi chạy thử App Think Beta trên trình duyệt ở địa chỉ khác, vd `http://localhost:8081` | trống |
 | `GEMINI_API_KEY` | Khóa Google Gemini cho Think AI (thay cho dán khóa trong Quản trị → AI, gọi) | trống |
 | `AI_PROVIDER`, `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL` | Think AI dùng dịch vụ kiểu OpenAI (`AI_PROVIDER=openai`), hoặc đổi model | Gemini, `gemini-flash-latest` |
-| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | Máy chủ TURN cho cuộc gọi (cũng đặt được trong Quản trị → AI, gọi) | trống |
+| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | Máy chủ TURN cho cuộc gọi (dễ hơn: nhập trong Quản trị → AI, gọi, mục 26) | trống (dùng Open Relay dùng chung) |
 | `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | Dùng TURN của Cloudflare (máy chủ tự lấy mật khẩu tạm) | trống |
 
 Màu sắc nằm ở đầu file `public/app.css` (biến `--jade`, `--turmeric`). Icon app nằm trong `public/icons/`.
@@ -352,6 +353,7 @@ Màu sắc nằm ở đầu file `public/app.css` (biến `--jade`, `--turmeric`
 - **cloudflared báo `failed to dial to edge with quic` hoặc link chết**: dùng `npm run share` / `npm run tunnel` thay cho lệnh cloudflared tự gõ (mục 2). Muốn xem log đầy đủ: `TUNNEL_DEBUG=1 npm run tunnel`.
 - **Cổng đã có người dùng (EADDRINUSE)**: đổi `PORT` trong `.env`.
 - **Mở app thấy tin nhắn nhưng không gửi được, có dòng "đang xem bản lưu trên máy"**: máy chủ đang thức dậy hoặc mất mạng. App tự kết nối lại sau vài giây, không cần làm gì.
+- **Cuộc gọi kẹt ở "Đang kết nối…" hoặc báo "Không nối được"**: mạng (hay gặp nhất là 4G) chặn kết nối thẳng giữa hai máy, cần máy chủ TURN. Xem mục 26, phần **Máy chủ TURN** và **Cuộc gọi gần đây**.
 - **App APK có thanh địa chỉ ở trên**: `assetlinks.json` thiếu hoặc sai (mục 7, bước 5). Sửa xong thì xóa dữ liệu Chrome của trang web đó trên điện thoại rồi mở lại app.
 
 ## 12. Bộ nhớ máy chủ và lưu trên máy
@@ -607,16 +609,35 @@ Trợ lý AI trong chat, có trên web và App Think Beta (giống Meta AI trong
 - Khóa API chỉ lưu trên máy chủ (trong database), **không bao giờ gửi về máy người dùng**, trang Quản trị chỉ hiện 4 ký tự cuối. Không gửi khóa qua tin nhắn. Có thể đặt bằng biến môi trường `GEMINI_API_KEY` trên Render thay vì dán trong app.
 - Máy chủ: `src/ai.js` (tài khoản Think AI có `role = 'bot'`, không đăng nhập được; `GET /api/ai`, `GET` / `PUT /api/admin/ai`, `POST /api/admin/ai/test`). Người dùng trong `/api/users` có thêm `bot: true` cho Think AI.
 
-## 26. Gọi thoại, gọi video
+## 26. Gọi thoại, gọi video, gọi nhóm
 
-Có trên web và App Think Beta (gọi chéo được: web gọi app, app gọi web). Chỉ trong **cuộc trò chuyện riêng** (1-1).
+Có trên web và App Think Beta (gọi chéo được: web gọi app, app gọi web).
+
+**Gọi 1-1** (cuộc trò chuyện riêng):
 
 - **Gọi**: nút 📞 (**Gọi thoại**) và 🎥 (**Gọi video**) trên đầu khung chat riêng. Trên điện thoại, nút **Tìm tin nhắn** và **Thách cờ** chuyển vào ⓘ **Tùy chỉnh đoạn chat** cho đỡ chật. Lần đầu máy hỏi quyền micro (và máy ảnh khi gọi video).
 - **Nghe máy**: màn hình cuộc gọi đến có chuông, rung, nút **Trả lời** / **Từ chối**. App đang đóng thì có thông báo "Đang gọi cho bạn… Bấm để trả lời" (kênh **Cuộc gọi đến** có chuông riêng); bấm vào là mở app và hiện màn hình cuộc gọi. Đổ chuông tối đa 45 giây.
-- **Trong cuộc gọi**: đồng hồ thời lượng, **tắt micro**, **tắt máy ảnh**, **đổi máy ảnh trước / sau**, **loa ngoài** (app: gọi thoại mặc định áp tai, màn hình tự tắt khi áp tai; gọi video mặc định loa ngoài), **kết thúc**. Bên kia tắt micro / máy ảnh thì có dòng báo. Trong app, chuyển sang app khác vẫn nói chuyện được (thông báo "Đang gọi…" có nút **Kết thúc**).
+- **Trong cuộc gọi**: đồng hồ thời lượng, **tắt micro**, **tắt máy ảnh**, **đổi máy ảnh trước / sau**, **loa ngoài** (app: gọi thoại mặc định áp tai, màn hình tự tắt khi áp tai; gọi video mặc định loa ngoài), **kết thúc**. Bên kia tắt micro / máy ảnh thì có dòng báo. Trong app, chuyển sang app khác vẫn nói chuyện được (thông báo "Đang gọi…" có nút **Kết thúc**; từ 0.12 app giữ kết nối với máy chủ suốt cuộc gọi kể cả khi chạy nền).
 - **Nhật ký**: cuộc trò chuyện có dòng "📞 Cuộc gọi thoại · 2:31", "📹 Bạn đã lỡ cuộc gọi video từ An", "… đã từ chối cuộc gọi" kèm nút **Gọi lại**; cuộc gọi nhỡ có thông báo đẩy.
-- **Máy chủ TURN** (nếu cần): tiếng và hình đi thẳng giữa hai máy. Hai bên cùng wifi / mạng thường thì gọi được ngay; nếu cả hai dùng 4G hoặc mạng công ty chặn kết nối thẳng, cuộc gọi báo "Không nối được tiếng" — lúc đó admin vào **Quản trị → AI, gọi → Cuộc gọi: máy chủ TURN** nhập địa chỉ `turn:…`, tên đăng nhập, mật khẩu của một dịch vụ TURN (vd Metered.ca, Cloudflare Calls có gói miễn phí), hoặc đặt biến `TURN_URLS` / `CF_TURN_KEY_ID`. Máy chủ Think không chuyển tiếp tiếng / hình (không tốn băng thông Render).
-- Máy chủ: `src/calls.js` (chuyển lời mời và thông tin kết nối qua Socket.IO: `call:start`, `call:accept`, `call:decline`, `call:end`, `call:signal`, `call:media`, `call:rejoin`; `GET /api/calls/current`, `GET /api/calls/ice`, `GET` / `PUT /api/admin/calls`). Web: `public/calls-ui.js`. App: `native/src/calls/` (thư viện `react-native-webrtc`; âm thanh, loa, dịch vụ chạy nền trong `native/modules/think-native`: `CallAudio.kt`, `CallService.kt`).
+
+**Gọi nhóm** (2.11.0, nhóm chat và phòng chung, tối đa 8 người cùng lúc):
+
+- **Gọi**: nút **Gọi nhóm** (📞) và **Gọi video nhóm** (🎥) trên đầu khung chat nhóm. Mọi người trong nhóm (đang không bận cuộc gọi khác) đổ chuông "Cuộc gọi nhóm đến — An đang gọi nhóm", bấm **Tham gia** hoặc **Từ chối**.
+- **Vào sau**: khi nhóm đang có cuộc gọi, khung chat có thanh **"3 người đang gọi video"** kèm ảnh người đang gọi và nút **Tham gia**; danh sách cuộc trò chuyện có biểu tượng 📞 ở nhóm đó. Bấm nút gọi khi nhóm đang có cuộc gọi cũng là vào cuộc gọi đó.
+- **Trong cuộc gọi**: lưới ô từng người (ảnh đại diện khi tắt máy ảnh, biểu tượng micro tắt, "Đang kết nối…" trên ô người chưa nối xong), đồng hồ và số người, dòng "Đang gọi: …" những người chưa trả lời. **Rời** thì cuộc gọi vẫn tiếp tục cho người còn lại; còn một mình thì cuộc gọi tự kết thúc sau 1 phút.
+- **Nhật ký**: "📹 Cuộc gọi video nhóm · 12:05 · 4 người" kèm **Gọi lại**; không ai tham gia thì "… không có ai tham gia" (người gọi) và "Bạn đã lỡ cuộc gọi nhóm của An" (người khác).
+- Mỗi máy nối thẳng với từng người khác (kiểu "mesh"), nên càng đông người thì máy càng tốn mạng và pin, gọi video 8 người nên dùng wifi.
+
+**Máy chủ TURN — sửa lỗi kẹt "Đang kết nối…"**:
+
+- Tiếng và hình đi thẳng giữa các máy. Khi mạng chặn kết nối thẳng (hay gặp nhất khi dùng 4G, wifi công ty / trường học), cuộc gọi phải đi vòng qua một **máy chủ chuyển tiếp (TURN)**. Bản 2.10 chưa có TURN nên gọi qua 4G hay kẹt ở "Đang kết nối…". Máy chủ Think trên Render không làm TURN được (Render chỉ mở cổng web).
+- Từ 2.11.0, chưa cài gì thì Think **tự dùng Open Relay** (TURN miễn phí dùng chung của Metered). Tiếng và hình vẫn được mã hóa đầu cuối, máy chủ TURN chỉ chuyển gói tin, không nghe / xem được. Đây là máy chủ dùng chung nên có lúc chậm hoặc đầy: nên tạo một tài khoản TURN miễn phí riêng (chọn **một** trong ba cách), nhập trong **Quản trị → AI, gọi → Cuộc gọi: máy chủ chuyển tiếp (TURN)** (web hoặc app), bấm **Lưu**:
+  - **Metered** (20 GB / tháng miễn phí, dễ nhất): đăng ký ở metered.ca → mục STUN / TURN, trang quản lý có đường link lấy TURN dạng `https://tên.metered.live/api/v1/turn/credentials?apiKey=…` — chép cả link dán vào ô **Link lấy TURN**.
+  - **ExpressTURN** hoặc dịch vụ TURN có tên + mật khẩu (ExpressTURN 1000 GB / tháng miễn phí): đăng ký ở expressturn.com, chép địa chỉ (vd `turn:relay1.expressturn.com:3478`), tên đăng nhập, mật khẩu.
+  - **Cloudflare** (1000 GB / tháng miễn phí): dash.cloudflare.com → Realtime → TURN Server → Create, chép **Turn Token ID** và **API Token**.
+- Có TURN riêng thì Think thôi dùng Open Relay (tắt hẳn Open Relay bằng công tắc **Dùng TURN miễn phí dùng chung**). Mật khẩu, token, link có apiKey chỉ lưu trên máy chủ, không hiện lại, không gửi qua tin nhắn. Cũng đặt được bằng biến môi trường `TURN_URLS` / `TURN_USERNAME` / `TURN_CREDENTIAL` hoặc `CF_TURN_KEY_ID` / `CF_TURN_API_TOKEN` (mục 10).
+- **Cuộc gọi gần đây** (cùng trang Quản trị): mỗi lần nối, máy báo về "✅ nối được (qua TURN / đi thẳng)" hoặc "❌ không nối được: TURN không dùng được", kèm loại đường đã thử (`host` = cùng mạng, `srflx` = qua internet, `relay` = qua TURN). Thấy "❌" mà đường thử không có `relay` nghĩa là TURN đang dùng hỏng hoặc hết dung lượng: đổi sang cách khác ở trên.
+- Máy chủ: `src/calls.js` (chuyển lời mời và thông tin kết nối qua Socket.IO — 1-1: `call:start`, `call:accept`, `call:decline`, `call:end`, `call:signal`, `call:media`, `call:rejoin`; nhóm: `gcall:start`, `gcall:join`, `gcall:decline`, `gcall:leave`, `gcall:signal`, `gcall:media`, `gcall:rejoin`; báo kết quả nối: `call:report`; `GET /api/calls/current`, `GET /api/calls/groups`, `GET /api/calls/ice`, `GET` / `PUT /api/admin/calls`), `src/turn.js` (nguồn TURN). Web: `public/calls-ui.js`. App: `native/src/calls/` (thư viện `react-native-webrtc`; âm thanh, loa, dịch vụ chạy nền trong `native/modules/think-native`: `CallAudio.kt`, `CallService.kt`), cài TURN trong app: `native/src/screens/TurnSettings.tsx`.
 
 ## Cấu trúc thư mục
 
@@ -631,7 +652,8 @@ src/push.js          Thông báo đẩy (Web Push / VAPID)
 src/fcm.js           Thông báo đẩy cho App Think Beta (Firebase Cloud Messaging)
 src/chat-lock.js     Khóa cuộc trò chuyện bằng mật khẩu riêng của từng người (đặt, mở, bỏ khóa)
 src/ai.js            Think AI: tài khoản trợ lý, gọi Gemini / dịch vụ kiểu OpenAI, giới hạn lượt hỏi, cài đặt admin
-src/calls.js         Gọi thoại / gọi video: mời gọi, đổ chuông, chuyển thông tin kết nối WebRTC, nhật ký, máy chủ TURN
+src/calls.js         Gọi thoại / gọi video 1-1 và gọi nhóm: mời gọi, đổ chuông, chuyển thông tin kết nối WebRTC, nhật ký
+src/turn.js          Máy chủ STUN / TURN cho cuộc gọi: TURN riêng, Metered, Cloudflare, Open Relay dùng chung
 src/chess.js         Cờ vua: thách đấu, đồng hồ, ELO, bảng xếp hạng, API /api/chess
 src/chess-engine.js  Hàng đợi gửi việc cho máy cờ; src/chess-worker.js chạy máy cờ trong luồng riêng
 src/chess-analysis.js Đánh giá ván đã xong bằng Stockfish (xếp loại thiên tài … sai lầm nghiêm trọng, độ chính xác)
@@ -665,7 +687,7 @@ public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu 
                      caro-core.js + caro-ui.js + caro.css (Cờ caro), farm-ui.js + farm.css (Nông trại),
                      streaks.js + streaks.css (chuỗi hằng ngày), chess-anim.js (quân cờ trượt),
                      puzzles-core.js (luật câu đố) + puzzles-ui.js + puzzles.css (quiz, thử thách), puzzles/ (dữ liệu câu đố),
-                     voice-core.js + voice-ui.js (tin nhắn thoại: ghi âm, nghe), calls-ui.js (gọi thoại / gọi video),
+                     voice-core.js + voice-ui.js (tin nhắn thoại: ghi âm, nghe), calls-ui.js (gọi thoại / gọi video / gọi nhóm),
                      theme.js (nền sáng/tối), chess/pieces/ (hình quân cờ), chess/sounds/, blocks/sounds/ (âm thanh),
                      farm/emoji/ (hình Twemoji), farm/sounds/
 public/download/     File cài app Android (think.apk) và version.json

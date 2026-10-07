@@ -169,7 +169,37 @@ export type AiSettings = {
   botId: number | null;
 };
 
-export type TurnSettings = { turnUrls: string; turnUsername: string; hasCredential: boolean; envTurn: boolean; cloudflare: boolean };
+/** Một lần nối cuộc gọi (máy báo về máy chủ): nối được chưa, đi thẳng hay qua TURN, các loại đường đã thử */
+export type CallReport = {
+  at: number;
+  kind: "direct" | "group";
+  video: boolean;
+  from: number;
+  to: number | null;
+  fromName: string;
+  toName: string;
+  ok: boolean;
+  path: "direct" | "relay" | null;
+  local: string[];
+  remote: string[];
+  platform: "app" | "web";
+};
+
+export type TurnSettings = {
+  turnUrls: string;
+  turnUsername: string;
+  hasCredential: boolean;
+  meteredHost: string;
+  cfKeyId: string;
+  hasCfToken: boolean;
+  openRelay: boolean;
+  envTurn: boolean;
+  cloudflare: boolean;
+  errors: string[];
+  /** Nguồn TURN đang dùng: "máy chủ TURN riêng", "Metered", "Cloudflare", "Open Relay (dùng chung)"… */
+  sources: string[];
+  recent: CallReport[];
+};
 
 export const api = {
   config: () => request<{ appName: string; appPush?: boolean }>("/api/config", { auth: false, timeout: 75000 }),
@@ -522,7 +552,15 @@ export const api = {
     request<{ ai: AiSettings }>("/api/admin/ai", { method: "PUT", body }),
   testAi: () => request<{ ok: true; reply: string; model: string }>("/api/admin/ai/test", { method: "POST", body: {} }),
   turnSettings: () => request<{ calls: TurnSettings }>("/api/admin/calls"),
-  saveTurnSettings: (body: { turnUrls: string; turnUsername: string; turnCredential?: string }) =>
+  saveTurnSettings: (body: {
+    turnUrls?: string;
+    turnUsername?: string;
+    turnCredential?: string;
+    meteredUrl?: string;
+    cfKeyId?: string;
+    cfToken?: string;
+    openRelay?: boolean;
+  }) =>
     request<{ calls: TurnSettings }>("/api/admin/calls", { method: "PUT", body }),
 
   createUser: (body: { username: string; displayName: string; password?: string; role: "admin" | "member" }) =>

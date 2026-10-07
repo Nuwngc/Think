@@ -59,7 +59,7 @@ import { clearToken, currentToken, getToken, setToken } from "./session";
 import { mentionIds } from "./chatPlus";
 import { emojiOf, isMuted } from "./chatThemes";
 import { afterBackground, isGated as gatedNow, leaveUnlocked as leaveUntil } from "./chatLock";
-import { bindCallSocket, callHooks, callReconnected, resetCalls } from "./calls/engine";
+import { bindCallSocket, callHooks, callReconnected, inCall, resetCalls } from "./calls/engine";
 import type { ChatItem, Conversation, Me, Message, PendingMessage, Pin, Reaction, User } from "./types";
 
 /* =========================================================
@@ -201,8 +201,13 @@ export function showToast(text: string, extra: Omit<Toast, "id" | "text"> = {}, 
   toastTimer = setTimeout(() => set({ toast: null }), ms);
 }
 
-// Màn hình cuộc gọi báo lỗi bằng thông báo nhỏ
+// Màn hình cuộc gọi báo lỗi bằng thông báo nhỏ; cần biết mình là ai và tên / ảnh của người trong cuộc gọi nhóm
 callHooks.toast = (text) => showToast(text);
+callHooks.meId = () => get().me?.id ?? null;
+callHooks.userOf = (id) => {
+  const u = get().users[id];
+  return u ? { id: u.id, displayName: u.displayName, avatar: u.avatar } : null;
+};
 
 export function hideToast() {
   if (toastTimer) clearTimeout(toastTimer);
@@ -1534,7 +1539,8 @@ function onAppState(st: string) {
     // Đang bật bong bóng chat thì giữ kết nối để tin mới hiện bong bóng ngay.
     backgroundTimer = setTimeout(() => {
       backgroundTimer = null;
-      if (!get().appActive && socket?.connected && !hooks.keepAlive()) socket.disconnect();
+      // Đang gọi thì giữ kết nối (chuyển sang app khác vẫn nói chuyện được)
+      if (!get().appActive && socket?.connected && !hooks.keepAlive() && !inCall()) socket.disconnect();
     }, BACKGROUND_DISCONNECT);
     return;
   }

@@ -23,9 +23,13 @@ export type PeerEvent = {
   streams?: Stream[];
 };
 
+export type StatsReport = { forEach(cb: (r: Record<string, unknown>) => void): void };
+
 export type Peer = {
   connectionState: string;
   iceConnectionState?: string;
+  signalingState?: string;
+  getStats?(): Promise<StatsReport>;
   remoteDescription: unknown;
   localDescription: SessionDesc | null;
   addTrack(track: Track, stream: Stream): unknown;
@@ -54,5 +58,35 @@ export type CallInfo = {
 };
 
 export type CallPeer = { id: number; displayName: string; avatar: string | null };
+
+/** Cuộc gọi nhóm máy chủ gửi (src/calls.js → gPayload) */
+export type GroupCallInfo = {
+  id: string;
+  kind: "group";
+  conversationId: number;
+  video: boolean;
+  startedBy: number;
+  participants: number[];
+  ringing: number[];
+  createdAt: number;
+  startedAt: number | null;
+  title: string;
+  avatar: string | null;
+  starter: CallPeer;
+  people: (CallPeer & { muted: boolean; camera: boolean; joinedAt: number })[];
+  iceServers: IceServer[];
+};
+
+/** Tóm tắt cuộc gọi nhóm đang diễn ra (sự kiện gcall:state, cho thanh "Tham gia") */
+export type GroupCallSummary = {
+  id: string;
+  conversationId: number;
+  video: boolean;
+  startedBy: number;
+  participants: number[];
+  ringing: number[];
+  createdAt: number;
+  startedAt: number | null;
+};
 
 export type CallPhase = "preparing" | "ringing" | "incoming" | "connecting" | "active" | "ended";

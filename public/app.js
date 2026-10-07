@@ -286,6 +286,7 @@
       case 'emoji': return `${actor} đã đổi biểu tượng cảm xúc nhanh thành ${d.emoji}`;
       case 'avatar': return d.removed ? `${actor} đã xóa ảnh nhóm` : `${actor} đã đổi ảnh nhóm`;
       case 'call': return callText(d, m);
+      case 'gcall': return groupCallText(d, m);
       default: return 'Cuộc trò chuyện vừa được cập nhật';
     }
   }
@@ -299,6 +300,14 @@
     if (d.status === 'ended') return `${ic} Cuộc gọi ${kind} · ${window.ThinkCalls ? window.ThinkCalls.clock(d.duration || 0) : `${d.duration || 0} giây`}`;
     if (d.status === 'declined') return mine ? `${ic} ${peer} đã từ chối cuộc gọi ${kind}` : `${ic} Bạn đã từ chối cuộc gọi ${kind}`;
     return mine ? `${ic} Cuộc gọi ${kind} không được trả lời` : `${ic} Bạn đã lỡ cuộc gọi ${kind} từ ${nameOf(m.senderId)}`;
+  }
+
+  // Gọi nhóm (2.11.0): "📞 Cuộc gọi nhóm · 12:31 · 4 người", "📹 Bạn đã lỡ cuộc gọi video nhóm của An"
+  function groupCallText(d, m) {
+    const ic = d.video ? '📹' : '📞';
+    const kind = d.video ? 'Cuộc gọi video nhóm' : 'Cuộc gọi nhóm';
+    if (d.status === 'ended') return `${ic} ${kind} · ${window.ThinkCalls ? window.ThinkCalls.clock(d.duration || 0) : `${d.duration || 0} giây`} · ${d.count || 2} người`;
+    return m.senderId === state.me?.id ? `${ic} ${kind} không có ai tham gia` : `${ic} Bạn đã lỡ ${kind.toLowerCase()} của ${nameOf(m.senderId)}`;
   }
 
   /* =========================================================
@@ -386,7 +395,16 @@
   // Tin nhắn thoại: ghi âm và nghe (public/voice-ui.js, public/voice-core.js)
   const voice = window.ThinkVoice && window.VoiceCore ? window.ThinkVoice.create({ h, icon, toast }) : null;
   // Gọi thoại / gọi video (public/calls-ui.js, máy chủ src/calls.js). Khung chat nổi (bong bóng) không nhận cuộc gọi.
-  const calls = window.ThinkCalls && !IN_BUBBLE ? window.ThinkCalls.create({ h, icon, toast, state, avatarEl, userOf }) : null;
+  const calls = window.ThinkCalls && !IN_BUBBLE
+    ? window.ThinkCalls.create({
+        h, icon, toast, state, avatarEl, userOf, convAvatarEl,
+        // Có / hết cuộc gọi nhóm: thanh "Tham gia" trên đầu khung chat và biểu tượng trong danh sách
+        onGroupsChanged: (convId) => {
+          if (state.currentId === convId) renderGroupCallBar();
+          renderConvList();
+        },
+      })
+    : null;
   const voiceLabel = (m) => `🎤 Tin nhắn thoại${m.audio && m.audio.ms && window.VoiceCore ? ` (${window.VoiceCore.clock(m.audio.ms)})` : ''}`;
 
   const social = window.ThinkSocial
@@ -737,6 +755,7 @@
         h('span', { class: 'conv-row' },
           h('span', { class: 'conv-name', text: convTitle(c) }),
           c.locked ? h('span', { class: 'conv-flag', title: 'Đã khóa bằng mật khẩu', 'aria-label': 'Đã khóa bằng mật khẩu' }, icon('lock')) : null,
+          calls && c.type !== 'dm' && calls.groupIn(c.id) ? h('span', { class: 'conv-flag is-call', title: 'Đang có cuộc gọi nhóm', 'aria-label': 'Đang có cuộc gọi nhóm' }, icon('phone')) : null,
           muted ? h('span', { class: 'conv-flag', title: 'Đã tắt thông báo', 'aria-label': 'Đã tắt thông báo' }, icon('bell-off')) : null,
           c.pinnedAt ? h('span', { class: 'conv-flag', title: 'Đã ghim', 'aria-label': 'Đã ghim' }, icon('pin')) : null,
           h('time', { class: 'conv-time', text: lm ? shortTime(lm.createdAt) : '' })),
@@ -779,11 +798,16 @@
       return;
     }
     applyTheme(c);
-    // Chat riêng: nút gọi thoại / gọi video, thách đấu cờ vua (không có với Think AI)
+    // Nút gọi thoại / gọi video: chat riêng (không có với Think AI) và gọi nhóm; thách đấu cờ vua trong chat riêng
     const human = isDm && peer && !peer.disabled && !peer.bot;
+    const callable = Boolean(calls) && (human || !isDm);
     $('#chat-pane').classList.toggle('is-dm', isDm);
-    $('#call-voice-btn').hidden = !calls || !human;
-    $('#call-video-btn').hidden = !calls || !human;
+    $('#chat-pane').classList.toggle('has-calls', callable);
+    $('#call-voice-btn').hidden = !callable;
+    $('#call-video-btn').hidden = !callable;
+    $('#call-voice-btn').setAttribute('aria-label', isDm ? 'Gọi thoại' : 'Gọi nhóm');
+    $('#call-video-btn').setAttribute('aria-label', isDm ? 'Gọi video' : 'Gọi video nhóm');
+    renderGroupCallBar();
     const chessBtn = $('#chess-dm-btn');
     chessBtn.hidden = !chess || !human || IN_BUBBLE;
     chessBtn.setAttribute('aria-label', `Thách ${peer?.displayName || 'người này'} một ván cờ`);
@@ -804,6 +828,26 @@
       status.textContent = `${ids.length} thành viên${active ? `, ${active} người đang hoạt động` : ''}`;
       status.classList.remove('is-online');
     }
+  }
+
+  // Thanh "Đang có cuộc gọi nhóm · Tham gia" trên đầu khung chat nhóm
+  function renderGroupCallBar() {
+    const bar = $('#gcall-bar');
+    const c = state.convs.get(state.currentId);
+    const g = calls && c && c.type !== 'dm' && !isGated(c) ? calls.groupIn(c.id) : null;
+    if (!g || calls.inCallOf(c.id)) {
+      bar.hidden = true;
+      bar.replaceChildren();
+      return;
+    }
+    const n = g.participants.length;
+    const faces = g.participants.slice(0, 4).map((uid) => avatarEl(userOf(uid), 'avatar-xs', { dot: false }));
+    bar.replaceChildren(
+      h('span', { class: 'gcall-ic' }, icon(g.video ? 'video' : 'phone')),
+      h('span', { class: 'gcall-text' }, h('strong', { text: `${n} người đang gọi${g.video ? ' video' : ''}` })),
+      h('span', { class: 'gcall-faces' }, faces),
+      h('button', { class: 'btn btn-sm btn-primary', type: 'button', text: 'Tham gia', onclick: () => calls.joinGroup(c.id) }));
+    bar.hidden = false;
   }
 
   // Giữ lại thông tin "ai đã xem" khi cập nhật cuộc trò chuyện từ máy chủ
@@ -1011,7 +1055,7 @@
           lastDay = day;
         }
         if (m.kind === 'system') {
-          const call = c.type === 'dm' && calls && !userOf(c.peerId)?.disabled ? callInfo(m) : null;
+          const call = calls && (c.type !== 'dm' || (!userOf(c.peerId)?.disabled && !userOf(c.peerId)?.bot)) ? callInfo(m) : null;
           frag.append(h('div', { class: `sys-msg${call ? ' sys-call' : ''}` }, h('span', { text: systemText(m) }),
             call ? h('button', { class: 'sys-call-btn', type: 'button', text: 'Gọi lại', onclick: () => calls.start(c.id, Boolean(call.video)) }) : null));
           return;
@@ -1049,10 +1093,10 @@
   }
 
   function callInfo(m) {
-    if (!m.text || !m.text.includes('"call"')) return null;
+    if (!m.text || !m.text.includes('call"')) return null;
     try {
       const d = JSON.parse(m.text);
-      return d.event === 'call' ? d : null;
+      return d.event === 'call' || d.event === 'gcall' ? d : null;
     } catch {
       return null;
     }
@@ -4495,32 +4539,63 @@ ${sections}
       toast(err.message);
     }
   });
+  // TURN (2.11.0): máy chủ chuyển tiếp cho cuộc gọi, và các cuộc gọi gần đây đã nối được chưa
   function fillTurnForm(t) {
     const f = $('#turn-form');
     f.turnUrls.value = t.turnUrls;
     f.turnUsername.value = t.turnUsername;
     f.turnCredential.value = '';
     f.turnCredential.placeholder = t.hasCredential ? 'Đã lưu (để trống = giữ)' : '';
-    $('#turn-state').textContent = t.turnUrls
-      ? 'Cuộc gọi đang dùng máy chủ TURN này khi cần.'
-      : t.cloudflare ? 'Đang dùng TURN của Cloudflare (biến môi trường).' : t.envTurn ? 'Đang dùng TURN đặt trong biến môi trường.' : 'Chưa có máy chủ TURN: gọi qua wifi thường vẫn được, một số mạng 4G có thể không nối được.';
+    f.meteredUrl.value = '';
+    f.meteredUrl.placeholder = t.meteredHost ? `Đang dùng link của ${t.meteredHost} (để trống = giữ)` : 'https://tên.metered.live/api/v1/turn/credentials?apiKey=…';
+    $('#metered-clear').hidden = !t.meteredHost;
+    f.cfKeyId.value = t.cfKeyId;
+    f.cfToken.value = '';
+    f.cfToken.placeholder = t.hasCfToken ? 'Đã lưu (để trống = giữ)' : '';
+    f.openRelay.checked = t.openRelay;
+    const using = t.sources.length ? `Đang dùng: ${t.sources.join(', ')}.` : 'Chưa có máy chủ TURN nào: gọi qua 4G có thể không nối được.';
+    $('#turn-state').replaceChildren(
+      h('span', { class: `ai-state${t.sources.length ? ' is-on' : ''}`, text: t.sources.length ? 'Có TURN' : 'Chưa có TURN' }),
+      h('span', { text: ` ${using}` }),
+      ...(t.errors || []).map((e) => h('span', { class: 'form-error turn-err', text: ` Lỗi ${e}` })));
+    const ul = $('#call-reports');
+    if (!t.recent || !t.recent.length) {
+      ul.replaceChildren(h('li', { class: 'hint', text: 'Chưa có cuộc gọi nào từ lúc máy chủ khởi động lại.' }));
+    } else {
+      ul.replaceChildren(...t.recent.slice(0, 12).map((r) => {
+        const result = r.ok
+          ? `✅ nối được (${r.path === 'relay' ? 'qua TURN' : r.path === 'direct' ? 'đi thẳng' : 'không rõ đường'})`
+          : r.local.includes('relay') ? '❌ không nối được dù có TURN' : '❌ không nối được: TURN không dùng được';
+        return h('li', { class: `call-report${r.ok ? '' : ' is-fail'}` },
+          h('span', { class: 'call-report-who', text: `${r.fromName} → ${r.toName}${r.kind === 'group' ? ' (nhóm)' : ''}` }),
+          h('span', { class: 'call-report-res', text: result }),
+          h('span', { class: 'call-report-meta', text: `${hm(r.at)} · ${r.platform === 'app' ? 'app' : 'web'} · đường thử: ${r.local.join(', ') || 'không có'}` }));
+      }));
+    }
     setFormError(f, '');
+  }
+  async function saveTurn(body) {
+    const f = $('#turn-form');
+    try {
+      const { calls: t } = await api('/api/admin/calls', { method: 'PUT', body });
+      fillTurnForm(t);
+      toast(t.sources.length ? `Đã lưu. Cuộc gọi đang dùng: ${t.sources.join(', ')}.` : 'Đã lưu máy chủ TURN.');
+    } catch (err) {
+      setFormError(f, err.message);
+    }
   }
   $('#turn-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const f = e.currentTarget;
     withBusy($('button[type="submit"]', f), async () => {
-      const body = { turnUrls: f.turnUrls.value.trim(), turnUsername: f.turnUsername.value.trim() };
+      const body = { turnUrls: f.turnUrls.value.trim(), turnUsername: f.turnUsername.value.trim(), cfKeyId: f.cfKeyId.value.trim(), openRelay: f.openRelay.checked };
       if (f.turnCredential.value) body.turnCredential = f.turnCredential.value;
-      try {
-        const { calls: t } = await api('/api/admin/calls', { method: 'PUT', body });
-        fillTurnForm(t);
-        toast('Đã lưu máy chủ TURN.');
-      } catch (err) {
-        setFormError(f, err.message);
-      }
+      if (f.meteredUrl.value.trim()) body.meteredUrl = f.meteredUrl.value.trim();
+      if (f.cfToken.value) body.cfToken = f.cfToken.value;
+      await saveTurn(body);
     });
   });
+  $('#metered-clear').addEventListener('click', () => saveTurn({ meteredUrl: '' }));
 
   /* ----- Quản trị: báo lỗi app (crash, lỗi JavaScript) ----- */
   const ERROR_KINDS = { crash: 'App bị tắt (crash)', native: 'Lỗi Android', js: 'Lỗi màn hình', promise: 'Lỗi chạy ngầm', anr: 'App bị treo', web: 'Lỗi trang web', other: 'Lỗi khác' };
@@ -4964,7 +5039,7 @@ ${sections}
       case 'call-voice':
       case 'call-video': {
         const c = state.convs.get(state.currentId);
-        if (calls && c && c.type === 'dm') calls.start(c.id, el.dataset.action === 'call-video');
+        if (calls && c) calls.start(c.id, el.dataset.action === 'call-video');
         break;
       }
       case 'chess-challenge': {

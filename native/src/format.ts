@@ -100,12 +100,28 @@ function callText(d: { video?: boolean; status?: string; duration?: number; to?:
   return mine ? `${ic} Cuộc gọi ${kind} không được trả lời` : `${ic} Bạn đã lỡ cuộc gọi ${kind} từ ${names.nameOf(callerId)}`;
 }
 
-/** Tin hệ thống là nhật ký cuộc gọi: trả về { video } để hiện nút "Gọi lại" */
+const clockText = (sec?: number) => {
+  const s = Math.max(0, Math.floor(sec || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+};
+
+/** Gọi nhóm (2.11.0): "📞 Cuộc gọi nhóm · 12:31 · 4 người", "📹 Bạn đã lỡ cuộc gọi video nhóm của An" (giống bản web) */
+function groupCallText(d: { video?: boolean; status?: string; duration?: number; count?: number }, starterId: number, names: Names) {
+  const ic = d.video ? "📹" : "📞";
+  const kind = d.video ? "Cuộc gọi video nhóm" : "Cuộc gọi nhóm";
+  if (d.status === "ended") return `${ic} ${kind} · ${clockText(d.duration)} · ${d.count || 2} người`;
+  return starterId === names.meId ? `${ic} ${kind} không có ai tham gia` : `${ic} Bạn đã lỡ ${kind.toLowerCase()} của ${names.nameOf(starterId)}`;
+}
+
+/** Tin hệ thống là nhật ký cuộc gọi (1-1 hoặc nhóm): trả về { video } để hiện nút "Gọi lại" */
 export function callInfoOf(m: Pick<Message, "text" | "kind">): { video: boolean } | null {
-  if (m.kind !== "system" || !m.text || !m.text.includes('"call"')) return null;
+  if (m.kind !== "system" || !m.text || !m.text.includes('call"')) return null;
   try {
     const d = JSON.parse(m.text);
-    return d?.event === "call" ? { video: Boolean(d.video) } : null;
+    return d?.event === "call" || d?.event === "gcall" ? { video: Boolean(d.video) } : null;
   } catch {
     return null;
   }
@@ -124,6 +140,7 @@ export function systemText(m: Pick<Message, "text" | "senderId">, names: Names) 
     status?: string;
     duration?: number;
     to?: number;
+    count?: number;
   } = {};
   try {
     d = JSON.parse(m.text || "{}");
@@ -152,6 +169,8 @@ export function systemText(m: Pick<Message, "text" | "senderId">, names: Names) 
       return d.removed ? `${actor} đã xóa ảnh nhóm` : `${actor} đã đổi ảnh nhóm`;
     case "call":
       return callText(d, m.senderId, names);
+    case "gcall":
+      return groupCallText(d, m.senderId, names);
     default:
       return "Cuộc trò chuyện vừa được cập nhật";
   }
