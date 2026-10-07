@@ -399,20 +399,25 @@
               <h3>Think AI</h3>
               <span class="ai-state" id="ai-state"></span>
             </div>
-            <p class="hint">Trợ lý AI trong chat: mọi người nhắn riêng cho Think AI, hoặc gõ @Think AI trong nhóm. Lấy khóa miễn phí ở Google AI Studio (aistudio.google.com → Get API key) rồi dán vào đây. Khóa chỉ lưu trên máy chủ, không hiện lại.</p>
+            <p class="hint">Trợ lý AI trong chat: mọi người nhắn riêng cho Think AI, hoặc gõ @Think AI trong nhóm. Chọn dịch vụ AI, dán khóa API vào đây. Khóa chỉ lưu trên máy chủ, không hiện lại.</p>
             <label class="switch-row"><span>Bật Think AI</span><input type="checkbox" name="enabled" class="switch"></label>
             <label class="field"><span>Dịch vụ AI</span>
               <select name="provider">
                 <option value="gemini">Google Gemini (có gói miễn phí)</option>
+                <option value="cerebras">Cerebras (trả lời rất nhanh)</option>
                 <option value="openai">Kiểu OpenAI (OpenAI, Groq, OpenRouter…)</option>
               </select>
             </label>
+            <p class="hint ai-help" data-provider="gemini">Lấy khóa miễn phí ở Google AI Studio: aistudio.google.com → Get API key → Create API key.</p>
+            <p class="hint ai-help" data-provider="cerebras">Lấy khóa ở cloud.cerebras.ai → API Keys → Create API key. Cerebras cần thêm thẻ thanh toán để mở khóa, được tặng 5 USD dùng thử trong 30 ngày (không tự trừ tiền); hết thì phải nạp thêm. Gói dùng thử chỉ 5 câu hỏi / phút cho cả nhóm. Model: qwen-3.8-27b (mặc định, xem được ảnh) hoặc gpt-oss-120b (nhanh hơn, chỉ đọc chữ).</p>
+            <p class="hint ai-help" data-provider="openai">Dịch vụ dùng chuẩn OpenAI (OpenAI, Groq, OpenRouter…): nhập địa chỉ API, model và khóa của dịch vụ đó.</p>
             <label class="field"><span>Khóa API</span>
               <input name="apiKey" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Dán khóa API mới (để trống = giữ khóa cũ)">
             </label>
             <label class="field"><span>Model</span>
-              <input name="model" autocapitalize="none" spellcheck="false" placeholder="gemini-flash-latest">
+              <input name="model" autocapitalize="none" spellcheck="false" placeholder="gemini-flash-latest" list="ai-models">
             </label>
+            <datalist id="ai-models"></datalist>
             <label class="field ai-openai"><span>Địa chỉ API</span>
               <input name="baseUrl" type="url" autocapitalize="none" spellcheck="false" placeholder="vd https://api.groq.com/openai/v1">
             </label>

@@ -263,3 +263,49 @@ test('bỏ Markdown, cắt câu trả lời quá dài', () => {
   assert.equal(long.length, 3900);
   assert.ok(long.endsWith('…'));
 });
+
+test('Cerebras: model mặc định, nghĩ ít cho nhanh, phần suy nghĩ không lẫn vào câu trả lời', async () => {
+  ai.resetRateLimit();
+  // Đổi dịch vụ mà không ghi model / khóa / địa chỉ: về mặc định của Cerebras, khóa cũ bị bỏ
+  const r = await call('PUT', '/api/admin/ai', { enabled: true, provider: 'cerebras' });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.ai.provider, 'cerebras');
+  assert.equal(r.data.ai.model, 'qwen-3.8-27b');
+  assert.equal(r.data.ai.hasKey, false);
+  assert.equal(r.data.ai.baseUrl, '');
+  assert.equal(ai.config().baseUrl, 'https://api.cerebras.ai/v1');
+  // Thử với máy giả (địa chỉ API chỉ đặt được qua cài đặt, giao diện không hiện cho Cerebras)
+  ai.saveSettings({ apiKey: 'csk-test-9876', baseUrl: `${mockUrl}/v1` });
+  reply = () => ({ status: 200, body: { choices: [{ message: { content: '<think>nháp</think>**Xin chào** từ Cerebras', reasoning: 'nghĩ…' } }] } });
+  send(dmId, 1, 'chào Cerebras');
+  assert.equal((await waitBot(dmId, 11)).at(-1).text, 'Xin chào từ Cerebras');
+  let req = requests.at(-1);
+  assert.equal(req.url, '/v1/chat/completions');
+  assert.equal(req.headers.authorization, 'Bearer csk-test-9876');
+  assert.equal(req.body.model, 'qwen-3.8-27b');
+  assert.equal(req.body.reasoning_effort, 'low');
+  assert.equal(req.body.reasoning_format, 'parsed');
+  // Dịch vụ không nhận tham số suy nghĩ (400) thì hỏi lại không kèm
+  reply = (q) => (q.body.reasoning_effort ? { status: 400, body: { message: 'unsupported parameter' } } : { status: 200, body: { choices: [{ message: { content: 'lần hai' } }] } });
+  send(dmId, 1, 'hỏi lại');
+  assert.equal((await waitBot(dmId, 12)).at(-1).text, 'lần hai');
+  // Model khác (không phải gpt-oss / qwen): không gửi tham số suy nghĩ
+  await call('PUT', '/api/admin/ai', { model: 'llama-test' });
+  reply = () => ({ status: 200, body: { choices: [{ message: { content: 'ok' } }] } });
+  send(dmId, 1, 'câu ba');
+  await waitBot(dmId, 13);
+  req = requests.at(-1);
+  assert.equal(req.body.model, 'llama-test');
+  assert.equal('reasoning_effort' in req.body, false);
+  // Khóa từ biến môi trường CEREBRAS_API_KEY
+  ai.saveSettings({ apiKey: '' });
+  process.env.CEREBRAS_API_KEY = 'csk-env-5555';
+  try {
+    const view = (await call('GET', '/api/admin/ai')).data.ai;
+    assert.equal(view.keySource, 'env');
+    assert.equal(view.keyHint, '…5555');
+    assert.equal('apiKey' in view, false);
+  } finally {
+    delete process.env.CEREBRAS_API_KEY;
+  }
+});
