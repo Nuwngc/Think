@@ -41,6 +41,7 @@
   <script src="/voice-core.js" defer></script>
   <script src="/voice-ui.js" defer></script>
   <script src="/calls-ui.js" defer></script>
+  <script src="/stories-ui.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -187,6 +188,8 @@
         <div class="search">
           <input id="conv-search" type="search" placeholder="Tìm cuộc trò chuyện" aria-label="Tìm cuộc trò chuyện" autocomplete="off">
         </div>
+        <!-- Tin 24 giờ (public/stories-ui.js) -->
+        <div id="story-bar" class="story-bar" aria-label="Tin 24 giờ" role="region" hidden></div>
         <ul id="conv-list" class="conv-list"></ul>
         <p id="conn-status" class="conn-status" role="status" hidden>Đang kết nối lại… Nếu app vừa ngủ, máy chủ cần khoảng 1 phút để thức dậy.</p>
       </section>

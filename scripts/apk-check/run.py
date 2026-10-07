@@ -617,6 +617,63 @@ def s_gcall():
     return ", ".join(notes)
 
 
+def s_story():
+    """Tin 24 giờ (2.13.0): đăng tin chữ trên app (máy chủ nhận đúng); Bạn Bè đăng một tin → hàng vòng tròn hiện
+    "có tin chưa xem" → chạm để xem → máy chủ ghi nhận đã xem → nút Back đóng màn xem tin.
+    Màn xem tin có thanh tiến độ chạy liên tục nên kiểm tra qua API thay vì đọc màn hình."""
+    token, tester_id = login_token(args.user, args.password)
+    ban_token, _ = login_token("ban", "ban12345")
+    notes = []
+    # Đăng tin chữ trên app
+    tap(r"^Thêm tin 24 giờ$")
+    if wait_for(r"^Nội dung tin$", 10) is None:
+        raise RuntimeError("Không mở được màn tạo tin")
+    tap(r"^Nội dung tin$")
+    type_text("Tin thu tu app")
+    hide_keyboard()
+    tap(r"^Đăng tin$")
+    mine = []
+    end = time.time() + 20
+    while time.time() < end and not mine:
+        mine = [x for x in api_call("/api/stories", token=token).get("stories", []) if x.get("userId") == tester_id]
+        time.sleep(1)
+    if not mine or mine[0].get("text") != "Tin thu tu app":
+        raise RuntimeError(f"Máy chủ chưa nhận tin vừa đăng: {mine}")
+    notes.append("đăng tin chữ được")
+    if wait_for(r"^Xem tin của bạn, 1 tin", 15) is None:
+        raise RuntimeError("Không thấy vòng tròn tin của mình")
+    # Bạn Bè đăng tin: app nhận ngay (realtime)
+    story = api_call("/api/stories", {"text": "Tin cua Ban Be", "bg": "ocean"}, token=ban_token).get("story") or {}
+    if not story.get("id"):
+        raise RuntimeError(f"Bạn Bè không đăng được tin: {story}")
+    if wait_for(r"^Xem tin của Bạn Bè, 1 tin, có tin chưa xem", 15) is None:
+        raise RuntimeError("Không thấy tin mới của Bạn Bè trên hàng vòng tròn")
+    notes.append("thấy tin mới của Bạn Bè")
+    tap(r"^Xem tin của Bạn Bè")
+    seen = False
+    end = time.time() + 15
+    while time.time() < end and not seen:
+        viewers = api_call(f"/api/stories/{story['id']}/viewers", token=ban_token).get("viewers", [])
+        seen = any(v.get("userId") == tester_id for v in viewers)
+        time.sleep(1)
+    if not seen:
+        raise RuntimeError("Mở tin rồi nhưng máy chủ chưa ghi nhận đã xem")
+    notes.append("máy chủ ghi nhận đã xem")
+    back()
+    time.sleep(1.5)
+    if wait_for(r"^Trò chơi", 10) is None:
+        raise RuntimeError("Nút Back không đóng màn xem tin")
+    if wait_for(r"^Xem tin của Bạn Bè, 1 tin$", 10) is None:
+        raise RuntimeError("Vòng tròn chưa đổi sang đã xem")
+    notes.append("đóng bằng nút Back")
+    # Dọn tin để các bước sau (bấm "Bạn Bè" trong danh sách chat) không bấm nhầm vòng tròn tin
+    api_call(f"/api/stories/{story['id']}", token=ban_token, method="DELETE")
+    api_call(f"/api/stories/{mine[0]['id']}", token=token, method="DELETE")
+    if wait_for(r"^Xem tin của Bạn Bè", 3) is not None:
+        time.sleep(2)
+    return ", ".join(notes)
+
+
 def s_ai():
     """Think AI: mở "Hỏi Think AI" từ nút Tin nhắn mới, gửi một câu → Think AI trả lời (máy chủ thử chưa có khóa API nên trả lời cách cài)"""
     tap(r"^Tin nhắn mới$")
@@ -1236,6 +1293,7 @@ def main():
         step("Khóa cuộc trò chuyện bằng mật khẩu", s_chat_lock)
         step("Gọi thoại: đổ chuông, nghe máy, gác máy", s_call)
         step("Gọi nhóm: tham gia, rời", s_gcall)
+        step("Tin 24 giờ: đăng, xem tin của bạn", s_story)
         step("Think AI: hỏi trợ lý", s_ai)
         step("Mục Trò chơi", s_games_hub)
         step("Nông trại: thu hoạch, gieo hạt (có âm thanh)", s_farm)

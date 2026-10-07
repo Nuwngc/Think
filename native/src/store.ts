@@ -35,6 +35,7 @@ import { API_URL } from "./config";
 import { convTitle, previewText, type Names } from "./format";
 import type { PreparedImage } from "./images";
 import { bindSocial, closeUser, onSocialEvent, refreshSocial, resetSocial } from "./social/store";
+import { bindStories, loadStories, onStoryEvent, resetStories } from "./stories/store";
 import {
   isPending,
   lastServerId,
@@ -347,6 +348,7 @@ async function enterApp() {
   syncBlocks(); // gửi điểm Xếp Khối chơi lúc mất mạng
   loadStreaks(); // chuỗi hằng ngày (gửi luôn ngày chơi lúc mất mạng)
   loadPuzzles(); // câu đố: sao, quiz hôm nay (gửi luôn kết quả giải lúc mất mạng)
+  loadStories(); // tin 24 giờ
   setupPush().catch(() => undefined);
 }
 
@@ -392,6 +394,7 @@ function resetAll(notice: string | null) {
   resetStreaks();
   resetPuzzles();
   resetSocial();
+  resetStories();
   resetBlocksBoard();
   set({ ...initial, phase: "login", notice, appActive: get().appActive, update: get().update });
   lastBadge = 0;
@@ -460,6 +463,7 @@ async function resync() {
     loadStreaks();
     loadPuzzles();
     refreshSocial();
+    loadStories();
     syncBlocks();
     const current = get().currentId;
     if (current != null) {
@@ -1405,6 +1409,9 @@ function connectSocket() {
   for (const name of ["post:new", "post:likes", "post:comment", "post:comment-deleted", "post:deleted"]) {
     s.on(name, (data) => onSocialEvent(name, data));
   }
+  for (const name of ["story:new", "story:deleted", "story:viewed"]) {
+    s.on(name, (data) => onStoryEvent(name, data));
+  }
 }
 
 export function reportVisibility() {
@@ -1648,6 +1655,10 @@ bindPuzzles({
   online: () => !get().offline,
   toast: (text) => showToast(text),
   played: (game) => markPlayed(game),
+});
+
+bindStories({
+  meId: () => get().me?.id ?? 0,
 });
 
 bindSocial({

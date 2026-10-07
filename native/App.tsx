@@ -12,6 +12,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BlocksScreen } from "./src/blocks/BlocksScreen";
 import { initBubbles, setBubbles } from "./src/bubbles";
 import { CallScreen } from "./src/calls/CallScreen";
+import { StoryComposer } from "./src/stories/StoryComposer";
+import { StoryViewer } from "./src/stories/StoryViewer";
 import { openStandalone, useBlocks } from "./src/blocks/store";
 import { loadPrefs } from "./src/chess/prefs";
 import { TEST_BUILD } from "./src/config";
@@ -209,7 +211,14 @@ export default function App() {
               <BootScreen />
             )}
           </ErrorBoundary>
-          {phase === "ready" ? <CallScreen /> : null}
+          {phase === "ready" ? (
+            <>
+              {/* Tin 24 giờ: xem / tạo tin phủ toàn màn hình; cuộc gọi luôn nằm trên cùng */}
+              <StoryViewer />
+              <StoryComposer />
+              <CallScreen />
+            </>
+          ) : null}
           <ToastHost />
         </View>
       </KeyboardProvider>

@@ -69,7 +69,41 @@ export type Message = {
   /** Những người được @nhắc tên */
   mentions?: number[];
   poll?: Poll | null;
+  /** Trả lời / thả cảm xúc một tin 24 giờ (2.13.0): ảnh nhỏ của tin */
+  story?: StoryRef;
 };
+
+/** Tin 24 giờ được trả lời trong tin nhắn (bản rút gọn lúc gửi; alive = tin còn xem được) */
+export type StoryRef = {
+  id: number;
+  ownerId: number;
+  kind: "image" | "text";
+  image: string | null;
+  text: string;
+  bg: string | null;
+  reaction: boolean;
+  alive: boolean;
+};
+
+/** Tin 24 giờ (story) */
+export type Story = {
+  id: number;
+  userId: number;
+  kind: "image" | "text";
+  image: string | null;
+  text: string;
+  bg: string | null;
+  createdAt: number;
+  expiresAt: number;
+  seen: boolean;
+  /** Chỉ tin của mình: số người đã xem, số cảm xúc */
+  views?: number;
+  reactions?: number;
+  /** Cảm xúc mình đã thả (tin của người khác) */
+  myReaction?: string;
+};
+
+export type StoryViewer = { userId: number; viewedAt: number; reaction: string | null };
 
 /** Tin nhắn được ghim trong cuộc trò chuyện */
 export type Pin = { message: Message; pinnedBy: number | null; pinnedAt: number };

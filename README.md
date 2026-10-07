@@ -11,6 +11,7 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - **Think AI** (mục 25, mới ở 2.10.0): trợ lý AI ngay trong chat như Meta AI — **nhắn riêng cho Think AI** hoặc gõ **@Think AI** trong nhóm / phòng chung để hỏi đáp, dịch, viết hộ, gợi ý, gửi ảnh nhờ xem giúp. Dùng **Google Gemini (có gói miễn phí)**, **Cerebras** (trả lời rất nhanh, mới ở 2.12.0) hoặc dịch vụ kiểu OpenAI; admin dán khóa API trong **Quản trị → AI, gọi**. Có trên web và App Think Beta.
 - **Gọi thoại, gọi video** (mục 26, mới ở 2.10.0): gọi 1-1 trong cuộc trò chuyện riêng, giữa web và app đều được: chuông, rung, tắt micro, tắt / đổi máy ảnh, loa ngoài (app), nhật ký cuộc gọi và nút **Gọi lại** trong chat, thông báo cuộc gọi đến và **cuộc gọi nhỡ**. Tiếng và hình đi thẳng giữa hai máy (WebRTC).
 - **Gọi nhóm** (mục 26, mới ở 2.11.0): gọi thoại / gọi video cả nhóm (tối đa 8 người), ai đến sau thì bấm **Tham gia** trên thanh "… người đang gọi" trong khung chat. Sửa lỗi cuộc gọi kẹt ở **"Đang kết nối…"** khi dùng 4G: Think tự dùng máy chủ chuyển tiếp (TURN) miễn phí, admin cài TURN riêng miễn phí trong vài bước.
+- **Tin 24 giờ** (mục 27, mới ở 2.13.0): đăng ảnh hoặc dòng chữ trên nền màu, tự mất sau 24 giờ; hàng vòng tròn trên đầu danh sách chat, xem kiểu chạm trái / phải, thả cảm xúc hoặc trả lời thành tin nhắn riêng, người đăng xem được ai đã xem. Có trên web và App Think Beta.
 - **Khóa cuộc trò chuyện bằng mật khẩu** (mục 18, mới ở 2.9.0): đặt mật khẩu riêng cho một cuộc trò chuyện (nhóm hay riêng) trên tài khoản của mình; thông báo và bong bóng chat vẫn đầy đủ, nhưng bấm vào (hay mở từ danh sách) thì phải nhập mật khẩu mới xem được; danh sách không hiện nội dung tin. Có trên web và App Think Beta.
 - Gửi ảnh (tự nén trên máy trước khi gửi), dán ảnh bằng Ctrl+V trên máy tính.
 - Thanh điều hướng dưới cùng: **Tin nhắn**, **Trò chơi** (Nông trại, Xếp Khối, Cờ vua, Cờ caro), **Cá nhân** (trang cá nhân + bảng tin; nút ⚙ **Cài đặt**: tên, giới thiệu, ảnh bìa, giao diện sáng/tối, thông báo, lưu trên máy, đổi mật khẩu) và **Quản trị** (chỉ admin thấy).
@@ -641,6 +642,18 @@ Có trên web và App Think Beta (gọi chéo được: web gọi app, app gọi
 - **Cuộc gọi gần đây** (cùng trang Quản trị): mỗi lần nối, máy báo về "✅ nối được (qua TURN / đi thẳng)" hoặc "❌ không nối được: TURN không dùng được", kèm loại đường đã thử (`host` = cùng mạng, `srflx` = qua internet, `relay` = qua TURN). Thấy "❌" mà đường thử không có `relay` nghĩa là TURN đang dùng hỏng hoặc hết dung lượng: đổi sang cách khác ở trên.
 - Máy chủ: `src/calls.js` (chuyển lời mời và thông tin kết nối qua Socket.IO — 1-1: `call:start`, `call:accept`, `call:decline`, `call:end`, `call:signal`, `call:media`, `call:rejoin`; nhóm: `gcall:start`, `gcall:join`, `gcall:decline`, `gcall:leave`, `gcall:signal`, `gcall:media`, `gcall:rejoin`; báo kết quả nối: `call:report`; `GET /api/calls/current`, `GET /api/calls/groups`, `GET /api/calls/ice`, `GET` / `PUT /api/admin/calls`), `src/turn.js` (nguồn TURN). Web: `public/calls-ui.js`. App: `native/src/calls/` (thư viện `react-native-webrtc`; âm thanh, loa, dịch vụ chạy nền trong `native/modules/think-native`: `CallAudio.kt`, `CallService.kt`), cài TURN trong app: `native/src/screens/TurnSettings.tsx`.
 
+## 27. Tin 24 giờ
+
+Có trên web và App Think Beta, giống "tin" của Messenger / Zalo. Cả nhóm xem được tin của nhau.
+
+- **Hàng vòng tròn** trên đầu danh sách chat: **Thêm tin**, **Tin của bạn**, rồi tin của mọi người — người có tin chưa xem đứng trước (viền xanh ngọc → vàng nghệ), đã xem hết thì viền xám.
+- **Đăng tin**: bấm **Thêm tin** → viết chữ (tối đa 250 ký tự) và chọn màu nền (6 màu), hoặc bấm **Ảnh** chọn một ảnh (thêm chú thích nếu muốn) → **Đăng tin**. Tin tự mất sau **24 giờ**; mỗi người tối đa 30 tin cùng lúc.
+- **Xem tin**: thanh trên cùng tự chạy (ảnh 5 giây, chữ 5–10 giây tùy độ dài) rồi sang tin sau, hết tin của một người thì sang người tiếp theo. **Chạm bên phải** = tin sau, **bên trái** = tin trước, **giữ** = dừng lại. Máy tính dùng phím ← →, Esc để đóng; app dùng nút Back.
+- **Thả cảm xúc** (❤️ 😂 😮 😢 😡 👍) hoặc **trả lời** dưới tin: gửi thành tin nhắn riêng cho người đăng, có ảnh nhỏ của tin ("Đã bày tỏ cảm xúc về tin của bạn", "Đã trả lời tin của bạn"); bấm ảnh nhỏ để xem lại tin. Tin hết hạn / bị xóa thì ghi "Tin không còn xem được". Người đăng có thông báo như tin nhắn thường.
+- **Tin của mình**: dòng **"3 người đã xem · 1 cảm xúc"** dưới tin, bấm để xem ai đã xem và thả gì; nút 🗑 để **xóa tin**. Admin cũng xóa được tin của người khác.
+- Ảnh của tin dùng chung chỗ lưu ảnh với tin nhắn; hết 24 giờ máy chủ tự xóa tin và ảnh (dọn mỗi 5 phút). Tài khoản bị khóa thì tin bị ẩn.
+- Máy chủ: `src/stories.js` (bảng `stories`, `story_views`; `GET` / `POST /api/stories`, `DELETE /api/stories/:id`, `POST /api/stories/:id/view`, `GET /api/stories/:id/viewers`, `POST /api/stories/:id/reply` `{ emoji }` hoặc `{ text }`; realtime `story:new`, `story:deleted`, `story:viewed`). Tin nhắn trả lời tin có thêm `story` (ảnh nhỏ của tin, `alive`). Web: `public/stories-ui.js`. App: `native/src/stories/`.
+
 ## Cấu trúc thư mục
 
 ```
@@ -656,6 +669,7 @@ src/chat-lock.js     Khóa cuộc trò chuyện bằng mật khẩu riêng của
 src/ai.js            Think AI: tài khoản trợ lý, gọi Gemini / dịch vụ kiểu OpenAI, giới hạn lượt hỏi, cài đặt admin
 src/calls.js         Gọi thoại / gọi video 1-1 và gọi nhóm: mời gọi, đổ chuông, chuyển thông tin kết nối WebRTC, nhật ký
 src/turn.js          Máy chủ STUN / TURN cho cuộc gọi: TURN riêng, Metered, Cloudflare, Open Relay dùng chung
+src/stories.js       Tin 24 giờ: đăng, xem, ai đã xem, thả cảm xúc / trả lời thành tin nhắn riêng, tự xóa sau 24 giờ
 src/chess.js         Cờ vua: thách đấu, đồng hồ, ELO, bảng xếp hạng, API /api/chess
 src/chess-engine.js  Hàng đợi gửi việc cho máy cờ; src/chess-worker.js chạy máy cờ trong luồng riêng
 src/chess-analysis.js Đánh giá ván đã xong bằng Stockfish (xếp loại thiên tài … sai lầm nghiêm trọng, độ chính xác)
@@ -689,7 +703,7 @@ public/              Giao diện: index.html, app.css, app.js, localdb.js (lưu 
                      caro-core.js + caro-ui.js + caro.css (Cờ caro), farm-ui.js + farm.css (Nông trại),
                      streaks.js + streaks.css (chuỗi hằng ngày), chess-anim.js (quân cờ trượt),
                      puzzles-core.js (luật câu đố) + puzzles-ui.js + puzzles.css (quiz, thử thách), puzzles/ (dữ liệu câu đố),
-                     voice-core.js + voice-ui.js (tin nhắn thoại: ghi âm, nghe), calls-ui.js (gọi thoại / gọi video / gọi nhóm),
+                     voice-core.js + voice-ui.js (tin nhắn thoại: ghi âm, nghe), calls-ui.js (gọi thoại / gọi video / gọi nhóm), stories-ui.js (tin 24 giờ),
                      theme.js (nền sáng/tối), chess/pieces/ (hình quân cờ), chess/sounds/, blocks/sounds/ (âm thanh),
                      farm/emoji/ (hình Twemoji), farm/sounds/
 public/download/     File cài app Android (think.apk) và version.json
