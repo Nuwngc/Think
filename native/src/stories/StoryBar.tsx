@@ -96,7 +96,7 @@ export function StoryBar() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     row: { paddingHorizontal: 10, paddingTop: 2, paddingBottom: 8, gap: 2 },
-    item: { width: 74, alignItems: "center", gap: 5, paddingVertical: 4, borderRadius: 14 },
+    item: { width: 80, alignItems: "center", gap: 5, paddingVertical: 4, borderRadius: 14 },
     ringBox: { width: OUTER, height: OUTER, alignItems: "center", justifyContent: "center" },
     plus: {
       position: "absolute",
@@ -109,5 +109,5 @@ const makeStyles = (c: Colors) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    name: { maxWidth: 70, fontSize: 12, color: c.text2 },
+    name: { maxWidth: 78, fontSize: 12, color: c.text2 },
   });

@@ -16,7 +16,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { emojiOf, themeOf } from "../chatThemes";
 import { joinGroupCall, startCall, useCall } from "../calls/engine";
-import { callInfoOf, convTitle, dayKey, dayLabel, lastSeenText, REACTIONS, systemText } from "../format";
+import { callInfoOf, chessShareOf, convTitle, dayKey, dayLabel, lastSeenText, REACTIONS, systemText } from "../format";
 import { forgetPick, pickImages, prepareImage, rememberPick } from "../images";
 import { isPending } from "../messages";
 import {
@@ -47,6 +47,8 @@ import { useColors, type Colors } from "../theme";
 import type { ChatItem, Conversation, Message } from "../types";
 import { Avatar, Button, confirm, ConvAvatar, Icon, IconButton, KeyboardAware, Sheet, SheetItem, useKeyboardOpen, useStyles } from "../ui";
 import { ChallengeSheet } from "../chess/Sheets";
+import { AiSummaryBar } from "../ai/AiSummaryBar";
+import { hideTranslation, runSummary, translate, useAiHelp } from "../ai/help";
 import { ChatSearch, ForwardSheet, MentionList, PinBar, PinsSheet, PollSheet } from "./ChatExtras";
 import { ChatLockGate } from "./ChatLock";
 import { ConvSettingsSheet } from "./ConvSettingsSheet";
@@ -127,6 +129,8 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
   );
   // Khóa bằng mật khẩu: mở khóa tới lúc nào (store.unlocked)
   const unlockedUntil = useStore((st) => st.unlocked[convId] || 0);
+  const aiReady = useStore((st) => st.aiReady);
+  const translated = useAiHelp((st) => st.trans);
   const theme = themeOf(conv);
   const quickEmoji = emojiOf(conv);
   const names = useMemo(() => namesOf({ me, users }), [me, users]);
@@ -357,6 +361,8 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
   const human = conv.type === "dm" && peer && !peer.disabled && !peer.bot ? peer : null;
   const callable = Boolean((human || conv.type !== "dm") && !bubble);
   const groupTarget = { id: conv.id, displayName: title, avatar: conv.avatar || null };
+  // Think AI giúp đọc chat (2.14.0): không có trong bong bóng chat và trong chat riêng với Think AI
+  const aiUsable = aiReady && !bubble && !(conv.type === "dm" && peer?.bot);
 
   return (
     <KeyboardAware bottomInset={false} style={{ backgroundColor: c.bg }}>
@@ -402,6 +408,7 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
         )}
       </View>
       {conv.type !== "dm" && !bubble ? <GroupCallBar convId={conv.id} title={title} avatar={conv.avatar || null} /> : null}
+      {!bubble ? <AiSummaryBar convId={conv.id} enabled={aiUsable} /> : null}
       <PinBar conv={conv} onJump={jumpTo} onShowAll={() => setPinsOpen(true)} />
 
       <View style={{ flex: 1 }}>
@@ -620,6 +627,18 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
                 }}
               />
             ) : null}
+            {aiUsable && menuFor.kind === "text" && menuFor.text && !chessShareOf(menuFor.text) && !menuFor.story?.reaction ? (
+              <SheetItem
+                icon="translate"
+                label={translated[menuFor.id]?.text ? "Ẩn bản dịch" : "Dịch (Think AI)"}
+                onPress={() => {
+                  const id = menuFor.id;
+                  setMenuFor(null);
+                  if (translated[id]?.text) hideTranslation(id);
+                  else translate(id);
+                }}
+              />
+            ) : null}
             {menuFor.text && menuFor.kind !== "poll" ? (
               <SheetItem
                 icon="content-copy"
@@ -732,6 +751,7 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
         onMembers={() => setInfoOpen(true)}
         onPins={() => setPinsOpen(true)}
         onChess={human && !bubble ? () => setChessOpen(true) : undefined}
+        onSummary={aiUsable ? () => runSummary(conv.id, null) : undefined}
         onOpenImage={(image) => setViewer({ ...(list.find((m) => m.image === image) || { id: 0, conversationId: convId, senderId: 0, kind: "text", text: null, deleted: false, createdAt: 0, replyTo: null, reactions: [] }), image } as Message)}
       />
       <PinsSheet conv={conv} visible={pinsOpen} onClose={() => setPinsOpen(false)} onJump={jumpTo} />

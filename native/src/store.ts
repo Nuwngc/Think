@@ -36,6 +36,7 @@ import { convTitle, previewText, type Names } from "./format";
 import type { PreparedImage } from "./images";
 import { bindSocial, closeUser, onSocialEvent, refreshSocial, resetSocial } from "./social/store";
 import { bindStories, loadStories, onStoryEvent, resetStories } from "./stories/store";
+import { offerSummary, resetAiHelp } from "./ai/help";
 import {
   isPending,
   lastServerId,
@@ -124,6 +125,8 @@ type State = {
   errorsVersion: number;
   /** Cuộc trò chuyện đã khóa mà mình vừa mở khóa: mã -> mở tới lúc nào (Infinity: đang xem) */
   unlocked: Record<number, number>;
+  /** Think AI đã cài đặt: hiện nút Tóm tắt, Dịch (2.14.0) */
+  aiReady: boolean;
 };
 
 const initial: State = {
@@ -154,6 +157,7 @@ const initial: State = {
   storageVersion: 0,
   errorsVersion: 0,
   unlocked: {},
+  aiReady: false,
 };
 
 export const useStore = create<State>(() => ({ ...initial }));
@@ -395,6 +399,7 @@ function resetAll(notice: string | null) {
   resetPuzzles();
   resetSocial();
   resetStories();
+  resetAiHelp();
   resetBlocksBoard();
   set({ ...initial, phase: "login", notice, appActive: get().appActive, update: get().update });
   lastBadge = 0;
@@ -425,8 +430,8 @@ export async function sessionEnded(reason: string) {
    ========================================================= */
 
 async function loadUsers() {
-  const { users } = await api.users();
-  set({ users: Object.fromEntries(users.map((u) => [u.id, u])) });
+  const { users, aiReady } = await api.users();
+  set({ users: Object.fromEntries(users.map((u) => [u.id, u])), aiReady: Boolean(aiReady) });
 }
 
 async function loadConvs() {
@@ -549,6 +554,7 @@ export async function openConversation(id: number) {
     return;
   }
   if (get().convs[id]?.locked) set((st) => ({ unlocked: { ...st.unlocked, [id]: Infinity } }));
+  offerSummary(get().convs[id]); // nhiều tin chưa đọc: gợi ý Think AI tóm tắt (trước khi đánh dấu đã đọc)
   dismissConversation(id);
   loadPins(id);
   const box = get().msgs[id];
@@ -588,6 +594,7 @@ export async function unlockConversation(id: number, password: string, forgot = 
   }
   set((st) => ({ unlocked: { ...st.unlocked, [id]: Infinity } }));
   if (get().currentId === id) {
+    offerSummary(get().convs[id]);
     dismissConversation(id);
     loadPins(id);
     const box = get().msgs[id];
@@ -1412,6 +1419,7 @@ function connectSocket() {
   for (const name of ["story:new", "story:deleted", "story:viewed"]) {
     s.on(name, (data) => onStoryEvent(name, data));
   }
+  s.on("ai:status", (data) => set({ aiReady: Boolean(data?.ready) }));
 }
 
 export function reportVisibility() {

@@ -46,7 +46,7 @@ const mentionsBot = (text) => TRIGGER.test(String(text || ''));
 class AiError extends Error {
   constructor(code, message, status = 0) {
     super(message);
-    this.code = code; // not_configured | quota | key | model | blocked | timeout | network | provider
+    this.code = code; // not_configured | quota | key | model | blocked | timeout | network | url | provider
     this.status = status;
   }
 }
@@ -143,6 +143,29 @@ function cleanInt(v, min, max, fallback) {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 }
 
+/**
+ * Sửa địa chỉ API dán nhầm (2.14.0): link trang quản lý / trang chủ của dịch vụ (có ?utm_…, /docs…) thay vì địa chỉ API,
+ * hoặc dán cả đuôi /chat/completions. Dịch vụ quen thì đổi hẳn sang địa chỉ API đúng.
+ */
+function fixBaseUrl(raw) {
+  if (!raw) return { url: '' };
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    return { url: raw };
+  }
+  const host = u.hostname.toLowerCase();
+  if (/(^|\.)cerebras\.ai$/.test(host)) return { url: CEREBRAS_URL, provider: 'cerebras' };
+  if (/(^|\.)groq\.com$/.test(host)) return { url: 'https://api.groq.com/openai/v1' };
+  if (/(^|\.)openrouter\.ai$/.test(host)) return { url: 'https://openrouter.ai/api/v1' };
+  if (/(^|\.)openai\.com$/.test(host) && host !== 'api.openai.com') return { url: OPENAI_URL };
+  u.search = '';
+  u.hash = '';
+  const path = u.pathname.replace(/\/(chat\/completions|completions|models)\/?$/i, '').replace(/\/+$/, '');
+  return { url: `${u.origin}${path}` };
+}
+
 /** Admin lưu cài đặt. apiKey: chuỗi mới / '' để xóa / bỏ trống trường (undefined) để giữ nguyên */
 function saveSettings(body = {}) {
   const s = stored();
@@ -160,7 +183,14 @@ function saveSettings(body = {}) {
   if (body.baseUrl !== undefined) {
     const u = String(body.baseUrl || '').trim().replace(/\/+$/, '');
     if (u && !/^https?:\/\/[^\s]+$/i.test(u)) throw new AiError('input', 'Địa chỉ API phải bắt đầu bằng https://');
-    next.baseUrl = u;
+    const fixed = fixBaseUrl(u);
+    next.baseUrl = fixed.url;
+    // Dán link trang web của Cerebras vào "Kiểu OpenAI": chuyển sang dịch vụ Cerebras (giữ khóa đã nhập)
+    if (fixed.provider && (body.provider || s.provider) === 'openai') {
+      next.provider = fixed.provider;
+      next.baseUrl = '';
+      if (body.model === undefined && !s.model) next.model = '';
+    }
   }
   if (body.apiKey !== undefined && body.apiKey !== null) {
     const k = String(body.apiKey).trim();
@@ -297,7 +327,28 @@ async function postJson(url, headers, body) {
     if (err?.name === 'TimeoutError' || err?.name === 'AbortError') throw new AiError('timeout', 'Dịch vụ AI trả lời quá lâu.');
     throw new AiError('network', `Không kết nối được dịch vụ AI: ${err.message}`);
   }
-  const data = await res.json().catch(() => ({}));
+  const type = String(res.headers.get('content-type') || '');
+  const raw = await res.text().catch(() => '');
+  let data = null;
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    data = null;
+  }
+  // Trả về một trang web (HTML) thay vì JSON: địa chỉ API sai (hay gặp khi dán link trang quản lý của dịch vụ)
+  if (data == null || (/text\/html/i.test(type) && !res.ok)) {
+    let where = url;
+    try {
+      where = new URL(url).origin;
+    } catch {
+      /* bỏ qua */
+    }
+    throw new AiError(
+      'url',
+      `Địa chỉ API không đúng: ${where} trả về một trang web chứ không phải API (mã ${res.status}). Địa chỉ API thường có dạng https://api.tên-dịch-vụ.com/v1 — xem trong hướng dẫn API của dịch vụ.`,
+      res.status
+    );
+  }
   if (!res.ok) throw explainHttp(res.status, data);
   return data;
 }
@@ -382,9 +433,46 @@ function friendlyError(err, c) {
   if (err.code === 'quota') return 'Think AI đã dùng hết lượt miễn phí của dịch vụ AI lúc này. Đợi một lát (hoặc mai) rồi hỏi lại nhé.';
   if (err.code === 'key') return `Khóa API của Think AI chưa đúng nên mình chưa trả lời được.${admin}`;
   if (err.code === 'model') return `Không tìm thấy model "${c.model}".${admin}`;
+  if (err.code === 'url') return `Địa chỉ API của Think AI chưa đúng nên mình chưa trả lời được.${admin}`;
+  if (err.code === 'network') return 'Mình chưa kết nối được dịch vụ AI. Bạn thử lại sau ít phút nhé.';
   if (err.code === 'blocked') return 'Mình không trả lời được câu này. Bạn hỏi cách khác nhé.';
   if (err.code === 'timeout') return 'Mình nghĩ lâu quá mà chưa xong. Bạn hỏi lại giúp mình nhé.';
   return 'Think AI đang gặp trục trặc, bạn thử lại sau nhé.';
+}
+
+/* ---------------- Tóm tắt, dịch tin nhắn (2.14.0) ---------------- */
+
+const SUMMARY_MAX = 300; // tóm tắt tối đa 300 tin gần nhất
+const SUMMARY_RECENT = 100; // "Tóm tắt tin gần đây": 100 tin
+const SUMMARY_MIN = 3;
+const TRANSCRIPT_CHARS = 24_000;
+const LANGS = { vi: 'tiếng Việt', en: 'tiếng Anh' };
+// Chữ có dấu chỉ tiếng Việt mới có (ă â đ ê ô ơ ư và các dấu thanh)
+const VI_CHARS = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i;
+const looksVietnamese = (text) => VI_CHARS.test(String(text || ''));
+
+/** Tin nhắn → dòng chữ cho AI đọc: "21:05 An: nội dung" */
+function transcript(rows) {
+  const lines = rows.map((m) => {
+    const d = new Date(m.created_at + 7 * 3600_000);
+    const t = `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+    const body =
+      m.kind === 'voice'
+        ? '[tin nhắn thoại]'
+        : m.kind === 'poll'
+          ? `[bình chọn] ${m.text || ''}`
+          : `${m.image ? '[ảnh] ' : ''}${String(m.text || '').replace(/\s+/g, ' ').trim()}`;
+    return `${t} ${m.name}: ${body}`.trim();
+  });
+  // Quá dài thì bỏ bớt tin cũ nhất
+  let total = 0;
+  const kept = [];
+  for (let i = lines.length - 1; i >= 0; i--) {
+    total += lines[i].length + 1;
+    if (total > TRANSCRIPT_CHARS) break;
+    kept.unshift(lines[i]);
+  }
+  return kept.join('\n');
 }
 
 /* ---------------- Gắn vào chat ---------------- */
@@ -511,7 +599,9 @@ function setupAI(ctx) {
   app.get('/api/admin/ai', ...adminChain, (req, res) => res.json({ ai: adminView() }));
   app.put('/api/admin/ai', ...adminChain, (req, res) => {
     try {
-      res.json({ ai: saveSettings(req.body || {}) });
+      const view = saveSettings(req.body || {});
+      io.emit('ai:status', { ready: view.ready }); // web / app hiện hoặc ẩn nút Tóm tắt, Dịch
+      res.json({ ai: view });
     } catch (err) {
       if (err instanceof AiError) return res.status(400).json({ error: err.message });
       throw err;
@@ -529,7 +619,85 @@ function setupAI(ctx) {
     }
   });
 
-  return { onMessage, shouldAnswer, getBotId, isBot, mentionsBot };
+  /* ----- Tóm tắt, dịch: kết quả chỉ trả cho người hỏi, không lưu thành tin nhắn ----- */
+
+  const auth = [requireAuth, requireReady];
+  const translations = new Map(); // `${messageId}:${to}` -> bản dịch (giữ 500 bản gần nhất)
+
+  // Kiểm tra trước khi hỏi AI: đã bật, có khóa, còn lượt. Trả về câu báo lỗi (null = hỏi được)
+  function gate(req, res) {
+    const c = config();
+    if (!c.enabled) return res.status(503).json({ error: 'Think AI đang tạm nghỉ.' }), null;
+    if (!ready(c)) return res.status(503).json({ error: 'Think AI chưa được cài đặt. Admin vào Quản trị → mục "AI, gọi" để dán khóa API.' }), null;
+    const limited = checkQuota(req.user.id, c);
+    if (limited) return res.status(429).json({ error: limited }), null;
+    return c;
+  }
+  const failed = (res, err, c) => {
+    console.warn('[ai]', err.code || '', err.message);
+    res.status(err instanceof AiError && err.code === 'quota' ? 429 : 502).json({ error: friendlyError(err, c) });
+  };
+
+  // Tóm tắt tin chưa đọc (afterId = tin cuối đã đọc lúc mở cuộc trò chuyện) hoặc 100 tin gần đây
+  app.post('/api/ai/summary', ...auth, async (req, res) => {
+    const convId = Number(req.body?.conversationId);
+    const conv = Number.isInteger(convId) ? get('SELECT id, type, name FROM conversations WHERE id = ?', convId) : null;
+    if (!conv || !memberIds(conv.id).includes(req.user.id)) return res.status(404).json({ error: 'Không tìm thấy cuộc trò chuyện.' });
+    const afterId = Number(req.body?.afterId);
+    const unread = Number.isInteger(afterId) && afterId >= 0;
+    const rows = all(
+      `SELECT m.id, m.sender_id, m.kind, m.text, m.image, m.created_at, u.display_name AS name
+         FROM messages m JOIN users u ON u.id = m.sender_id
+        WHERE m.conversation_id = ? AND m.id > ? AND m.kind IN ('text', 'voice', 'poll') AND m.deleted = 0
+        ORDER BY m.id DESC LIMIT ?`,
+      conv.id,
+      unread ? afterId : 0,
+      unread ? SUMMARY_MAX : SUMMARY_RECENT
+    ).reverse();
+    if (rows.length < SUMMARY_MIN) return res.status(400).json({ error: 'Chưa có đủ tin nhắn để tóm tắt.' });
+    const c = gate(req, res);
+    if (!c) return;
+    countUse(req.user.id);
+    const me = get('SELECT display_name FROM users WHERE id = ?', req.user.id)?.display_name || 'bạn';
+    const where = conv.type === 'dm' ? 'cuộc trò chuyện riêng' : conv.type === 'general' ? 'phòng chat chung' : `nhóm chat "${conv.name || 'Nhóm'}"`;
+    const system = [
+      `Bạn là ${BOT_NAME}. Tóm tắt các tin nhắn trong ${where} cho ${me}, người vừa quay lại và chưa đọc.`,
+      'Viết tiếng Việt, ngắn gọn, chữ thường (không Markdown, không **, không #). Mỗi ý một dòng bắt đầu bằng "• ", tối đa 8 ý, ý quan trọng trước.',
+      `Nêu rõ ai nói gì khi quan trọng; nhấn mạnh hẹn hò, kế hoạch, quyết định, câu hỏi đang chờ ${me} trả lời hoặc nhắc tên ${me}.`,
+      'Chỉ dựa vào tin nhắn được đưa, không bịa. Bỏ qua chào hỏi, emoji, chuyện vặt không quan trọng.',
+    ].join('\n');
+    try {
+      const text = plain(await ask(c, system, [{ role: 'user', parts: [{ text: `Các tin nhắn (cũ đến mới):\n${transcript(rows)}` }] }]));
+      res.json({ summary: text, count: rows.length, from: rows[0].created_at, to: rows[rows.length - 1].created_at, unread });
+    } catch (err) {
+      failed(res, err, c);
+    }
+  });
+
+  // Dịch một tin nhắn: tiếng Việt → tiếng Anh, tiếng khác → tiếng Việt (hoặc chọn "to")
+  app.post('/api/ai/translate', ...auth, async (req, res) => {
+    const m = get('SELECT id, conversation_id, kind, text, deleted FROM messages WHERE id = ?', Number(req.body?.messageId));
+    if (!m || !memberIds(m.conversation_id).includes(req.user.id)) return res.status(404).json({ error: 'Không tìm thấy tin nhắn.' });
+    const text = String(m.text || '').trim();
+    if (m.deleted || !['text', 'poll'].includes(m.kind) || !text) return res.status(400).json({ error: 'Tin nhắn này không có chữ để dịch.' });
+    const to = LANGS[req.body?.to] ? req.body.to : looksVietnamese(text) ? 'en' : 'vi';
+    const key = `${m.id}:${to}`;
+    if (translations.has(key)) return res.json({ text: translations.get(key), to, cached: true });
+    const c = gate(req, res);
+    if (!c) return;
+    countUse(req.user.id);
+    const system = `Bạn là máy dịch. Dịch tin nhắn người dùng gửi sang ${LANGS[to]}, giọng tự nhiên như nhắn tin. Chỉ trả về bản dịch, giữ nguyên emoji, tên người, đường link; không giải thích, không thêm ngoặc kép.`;
+    try {
+      const out = plain(await ask({ ...c, search: false }, system, [{ role: 'user', parts: [{ text }] }]));
+      translations.set(key, out);
+      if (translations.size > 500) translations.delete(translations.keys().next().value);
+      res.json({ text: out, to });
+    } catch (err) {
+      failed(res, err, c);
+    }
+  });
+
+  return { onMessage, shouldAnswer, getBotId, isBot, mentionsBot, isReady: () => ready() };
 }
 
 /** Đọc ảnh tin nhắn trên máy chủ (dùng cho server.js) */
@@ -542,6 +710,9 @@ function readLocalImage(url) {
 
 module.exports = {
   setupAI,
+  fixBaseUrl,
+  looksVietnamese,
+  transcript,
   ensureBot,
   getBotId,
   isBot,

@@ -12,6 +12,8 @@ const light = {
   jadeWash: "#DCEFE9",
   turmeric: "#F2B01E",
   turmericWash: "#FDF1D2",
+  /** Chữ màu nghệ trên nền nghệ nhạt (giống --turmeric-ink của bản web) */
+  turmericInk: "#7A5600",
   bg: "#EEF2EF",
   surface: "#FFFFFF",
   field: "#F1F4F2",
@@ -45,6 +47,7 @@ const dark: Colors = {
   jadeWash: "#16342C",
   turmeric: "#F2C04E",
   turmericWash: "#3A2F12",
+  turmericInk: "#F2C04E",
   bg: "#0F1714",
   surface: "#16211D",
   field: "#1E2B26",
