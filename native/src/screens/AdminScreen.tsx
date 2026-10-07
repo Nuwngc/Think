@@ -447,11 +447,25 @@ function StoragePanel() {
    Think AI + máy chủ TURN cho cuộc gọi (2.10.0). Bản web: mục "AI, gọi" (loadAiAdmin trong public/app.js)
    ========================================================= */
 
+type AiProvider = AiSettings["provider"];
+// Model mặc định (đầu danh sách) và model gợi ý của từng dịch vụ — giống AI_MODELS trong public/app.js
+const AI_MODELS: Record<AiProvider, string[]> = {
+  gemini: ["gemini-flash-latest", "gemini-flash-lite-latest"],
+  cerebras: ["qwen-3.8-27b", "gpt-oss-120b"],
+  openai: [],
+};
+const AI_HELP: Record<AiProvider, string> = {
+  gemini: "Lấy khóa miễn phí ở Google AI Studio: aistudio.google.com → Get API key → Create API key.",
+  cerebras:
+    "Lấy khóa ở cloud.cerebras.ai → API Keys → Create API key. Cerebras cần thêm thẻ thanh toán để mở khóa, được tặng 5 USD dùng thử trong 30 ngày (không tự trừ tiền); hết thì phải nạp thêm. Gói dùng thử chỉ 5 câu hỏi / phút cho cả nhóm. Model: qwen-3.8-27b (mặc định, xem được ảnh) hoặc gpt-oss-120b (nhanh hơn, chỉ đọc chữ).",
+  openai: "Dịch vụ dùng chuẩn OpenAI (OpenAI, Groq, OpenRouter…): nhập địa chỉ API, model và khóa của dịch vụ đó.",
+};
+
 function AiPanel() {
   const c = useColors();
   const s = useStyles(makeStyles);
   const [ai, setAi] = useState<AiSettings | null>(null);
-  const [form, setForm] = useState({ provider: "gemini" as "gemini" | "openai", apiKey: "", model: "", baseUrl: "", perUserDaily: "", totalDaily: "" });
+  const [form, setForm] = useState({ provider: "gemini" as AiProvider, apiKey: "", model: "", baseUrl: "", perUserDaily: "", totalDaily: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
@@ -519,6 +533,8 @@ function AiPanel() {
     }
   };
   const gemini = form.provider === "gemini";
+  // Đổi dịch vụ: model của dịch vụ cũ không dùng được, để trống = model mặc định của dịch vụ mới
+  const pickProvider = (p: AiProvider) => setForm((f) => ({ ...f, provider: p, model: p === ai.provider ? ai.model : "" }));
   const state = ai.ready ? "Đang chạy" : !ai.enabled ? "Đang tắt" : "Chưa có khóa";
 
   return (
@@ -531,8 +547,8 @@ function AiPanel() {
           </View>
         </View>
         <Text style={s.muted}>
-          Trợ lý AI trong chat: mọi người nhắn riêng cho Think AI, hoặc gõ @Think AI trong nhóm. Lấy khóa miễn phí ở Google AI Studio (aistudio.google.com → Get API key)
-          rồi dán vào đây. Khóa chỉ lưu trên máy chủ, không hiện lại.
+          Trợ lý AI trong chat: mọi người nhắn riêng cho Think AI, hoặc gõ @Think AI trong nhóm. Chọn dịch vụ AI, dán khóa API vào đây. Khóa chỉ lưu trên máy chủ, không
+          hiện lại.
         </Text>
         <View style={s.switchRow}>
           <Text style={[s.settingTitle, { flex: 1 }]}>Bật Think AI</Text>
@@ -547,9 +563,11 @@ function AiPanel() {
         </View>
         <Text style={s.muted}>Dịch vụ AI</Text>
         <View style={s.chips}>
-          <Chip active={gemini} label="Google Gemini" onPress={() => setForm((f) => ({ ...f, provider: "gemini" }))} />
-          <Chip active={!gemini} label="Kiểu OpenAI" onPress={() => setForm((f) => ({ ...f, provider: "openai" }))} />
+          <Chip active={gemini} label="Google Gemini" onPress={() => pickProvider("gemini")} />
+          <Chip active={form.provider === "cerebras"} label="Cerebras" onPress={() => pickProvider("cerebras")} />
+          <Chip active={form.provider === "openai"} label="Kiểu OpenAI" onPress={() => pickProvider("openai")} />
         </View>
+        <Text style={s.muted}>{AI_HELP[form.provider]}</Text>
         <Field
           label="Khóa API"
           value={form.apiKey}
@@ -564,11 +582,18 @@ function AiPanel() {
           label="Model"
           value={form.model}
           onChangeText={(v) => setForm((f) => ({ ...f, model: v }))}
-          placeholder={gemini ? "gemini-flash-latest" : "vd llama-3.3-70b-versatile"}
+          placeholder={AI_MODELS[form.provider][0] || "vd llama-3.3-70b-versatile"}
           autoCapitalize="none"
           autoCorrect={false}
           accessibilityLabel="Model"
         />
+        {AI_MODELS[form.provider].length > 1 ? (
+          <View style={s.chips}>
+            {AI_MODELS[form.provider].map((m) => (
+              <Chip key={m} active={(form.model || AI_MODELS[form.provider][0]) === m} label={m} onPress={() => setForm((f) => ({ ...f, model: m }))} />
+            ))}
+          </View>
+        ) : null}
         {gemini ? (
           <View style={s.switchRow}>
             <Text style={[s.settingTitle, { flex: 1, fontSize: 14.5 }]}>Cho tra Google (tin tức, thời tiết…)</Text>
@@ -581,7 +606,7 @@ function AiPanel() {
               accessibilityLabel="Cho tra Google"
             />
           </View>
-        ) : (
+        ) : form.provider === "openai" ? (
           <Field
             label="Địa chỉ API"
             value={form.baseUrl}
@@ -592,7 +617,7 @@ function AiPanel() {
             keyboardType="url"
             accessibilityLabel="Địa chỉ API"
           />
-        )}
+        ) : null}
         <View style={{ flexDirection: "row", gap: 10 }}>
           <View style={{ flex: 1 }}>
             <Field

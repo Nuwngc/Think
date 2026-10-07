@@ -8,7 +8,7 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - Mỗi người tự đổi được: tên hiển thị, lời giới thiệu, ảnh đại diện, **ảnh bìa**, mật khẩu.
 - **Trang cá nhân và bảng tin** (mục 15): đăng bài (chữ + ảnh), thả tim ❤️, bình luận, xem trang của từng người; **chia sẻ ván cờ** lên trang cá nhân hoặc gửi vào cuộc trò chuyện.
 - Phòng chung cho cả nhóm, nhắn riêng 1-1, và **nhóm chat riêng** tự tạo (đặt tên, **đổi tên, đổi ảnh nhóm**, thêm/xóa người, rời nhóm, có trưởng nhóm).
-- **Think AI** (mục 25, mới ở 2.10.0): trợ lý AI ngay trong chat như Meta AI — **nhắn riêng cho Think AI** hoặc gõ **@Think AI** trong nhóm / phòng chung để hỏi đáp, dịch, viết hộ, gợi ý, gửi ảnh nhờ xem giúp. Dùng **Google Gemini (có gói miễn phí)** hoặc dịch vụ kiểu OpenAI; admin dán khóa API trong **Quản trị → AI, gọi**. Có trên web và App Think Beta.
+- **Think AI** (mục 25, mới ở 2.10.0): trợ lý AI ngay trong chat như Meta AI — **nhắn riêng cho Think AI** hoặc gõ **@Think AI** trong nhóm / phòng chung để hỏi đáp, dịch, viết hộ, gợi ý, gửi ảnh nhờ xem giúp. Dùng **Google Gemini (có gói miễn phí)**, **Cerebras** (trả lời rất nhanh, mới ở 2.12.0) hoặc dịch vụ kiểu OpenAI; admin dán khóa API trong **Quản trị → AI, gọi**. Có trên web và App Think Beta.
 - **Gọi thoại, gọi video** (mục 26, mới ở 2.10.0): gọi 1-1 trong cuộc trò chuyện riêng, giữa web và app đều được: chuông, rung, tắt micro, tắt / đổi máy ảnh, loa ngoài (app), nhật ký cuộc gọi và nút **Gọi lại** trong chat, thông báo cuộc gọi đến và **cuộc gọi nhỡ**. Tiếng và hình đi thẳng giữa hai máy (WebRTC).
 - **Gọi nhóm** (mục 26, mới ở 2.11.0): gọi thoại / gọi video cả nhóm (tối đa 8 người), ai đến sau thì bấm **Tham gia** trên thanh "… người đang gọi" trong khung chat. Sửa lỗi cuộc gọi kẹt ở **"Đang kết nối…"** khi dùng 4G: Think tự dùng máy chủ chuyển tiếp (TURN) miễn phí, admin cài TURN riêng miễn phí trong vài bước.
 - **Khóa cuộc trò chuyện bằng mật khẩu** (mục 18, mới ở 2.9.0): đặt mật khẩu riêng cho một cuộc trò chuyện (nhóm hay riêng) trên tài khoản của mình; thông báo và bong bóng chat vẫn đầy đủ, nhưng bấm vào (hay mở từ danh sách) thì phải nhập mật khẩu mới xem được; danh sách không hiện nội dung tin. Có trên web và App Think Beta.
@@ -338,7 +338,8 @@ git pull && npm install --omit=dev && pm2 restart think-chat
 | `FIREBASE_PREFIX` | Tiền tố tên bảng trên Firestore, đổi nếu chạy nhiều app chung một project | `think` |
 | `CORS_ORIGINS` | Chỉ dùng khi chạy thử App Think Beta trên trình duyệt ở địa chỉ khác, vd `http://localhost:8081` | trống |
 | `GEMINI_API_KEY` | Khóa Google Gemini cho Think AI (thay cho dán khóa trong Quản trị → AI, gọi) | trống |
-| `AI_PROVIDER`, `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL` | Think AI dùng dịch vụ kiểu OpenAI (`AI_PROVIDER=openai`), hoặc đổi model | Gemini, `gemini-flash-latest` |
+| `CEREBRAS_API_KEY` | Khóa Cerebras cho Think AI (thay cho dán khóa trong Quản trị → AI, gọi) | trống |
+| `AI_PROVIDER`, `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL` | Think AI dùng Cerebras (`AI_PROVIDER=cerebras`) hoặc dịch vụ kiểu OpenAI (`AI_PROVIDER=openai`), hoặc đổi model | Gemini, `gemini-flash-latest` |
 | `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | Máy chủ TURN cho cuộc gọi (dễ hơn: nhập trong Quản trị → AI, gọi, mục 26) | trống (dùng Open Relay dùng chung) |
 | `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | Dùng TURN của Cloudflare (máy chủ tự lấy mật khẩu tạm) | trống |
 
@@ -604,9 +605,10 @@ Trợ lý AI trong chat, có trên web và App Think Beta (giống Meta AI trong
   2. Dán vào ô **Khóa API** → **Lưu** → **Thử khóa** (thấy "✅ Khóa dùng được" là xong).
   - Model mặc định `gemini-flash-latest` (luôn là bản Gemini Flash mới nhất). Gói miễn phí của Google có hạn mức theo ngày (xem trong AI Studio); hết lượt thì Think AI báo "hết lượt miễn phí", hôm sau dùng tiếp.
   - **Cho tra Google**: Think AI tra Google cho câu hỏi về tin tức, thời tiết… (Gemini; có thể tốn hạn mức hơn).
+  - **Cerebras** (2.12.0, trả lời rất nhanh): chọn "Cerebras" ở **Dịch vụ AI**, lấy khóa ở **cloud.cerebras.ai → API Keys → Create API key**, dán vào ô **Khóa API** → **Lưu** → **Thử khóa**. Model mặc định `qwen-3.8-27b` (xem được ảnh); chọn `gpt-oss-120b` nếu muốn nhanh hơn (chỉ đọc chữ). Lưu ý: Cerebras **cần thêm thẻ thanh toán** mới mở được khóa, tặng 5 USD dùng thử trong 30 ngày (không tự trừ tiền), hết thì phải nạp thêm; gói dùng thử chỉ 5 câu hỏi / phút cho cả máy chủ. Think AI bảo model nghĩ ít (`reasoning_effort: low`) cho nhanh, phần suy nghĩ không hiện trong tin trả lời. Cũng đặt được bằng biến môi trường `CEREBRAS_API_KEY` (và `AI_PROVIDER=cerebras` nếu có cả `GEMINI_API_KEY`).
   - **Kiểu OpenAI**: dùng OpenAI, Groq, OpenRouter, DeepSeek… — chọn "Kiểu OpenAI", nhập **Địa chỉ API** (vd `https://api.groq.com/openai/v1`), **Model** và khóa của dịch vụ đó.
   - **Mỗi người / ngày**, **Cả nhóm / ngày**: giới hạn số câu hỏi (mặc định 40 và 300), mỗi người tối đa 6 câu mỗi phút. Tắt **Bật Think AI** thì Think AI trả lời "đang tạm nghỉ".
-- Khóa API chỉ lưu trên máy chủ (trong database), **không bao giờ gửi về máy người dùng**, trang Quản trị chỉ hiện 4 ký tự cuối. Không gửi khóa qua tin nhắn. Có thể đặt bằng biến môi trường `GEMINI_API_KEY` trên Render thay vì dán trong app.
+- Khóa API chỉ lưu trên máy chủ (trong database), **không bao giờ gửi về máy người dùng**, trang Quản trị chỉ hiện 4 ký tự cuối. Không gửi khóa qua tin nhắn. Có thể đặt bằng biến môi trường `GEMINI_API_KEY` / `CEREBRAS_API_KEY` trên Render thay vì dán trong app.
 - Máy chủ: `src/ai.js` (tài khoản Think AI có `role = 'bot'`, không đăng nhập được; `GET /api/ai`, `GET` / `PUT /api/admin/ai`, `POST /api/admin/ai/test`). Người dùng trong `/api/users` có thêm `bot: true` cho Think AI.
 
 ## 26. Gọi thoại, gọi video, gọi nhóm

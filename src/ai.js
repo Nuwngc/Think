@@ -2,9 +2,10 @@
 // Think AI (2.10.0): trợ lý AI trong chat, giống Meta AI.
 // - Nhắn riêng với "Think AI" (một tài khoản đặc biệt role = 'bot', không đăng nhập được), hoặc gọi "@Think AI" / "@AI"
 //   trong nhóm và phòng chung, hoặc trả lời (reply) một tin của Think AI.
-// - Máy chủ gọi Google Gemini (mặc định, có gói miễn phí) hoặc một dịch vụ kiểu OpenAI (OpenAI, Groq, OpenRouter...).
+// - Máy chủ gọi Google Gemini (mặc định, có gói miễn phí), Cerebras (2.12.0, trả lời rất nhanh) hoặc một dịch vụ
+//   kiểu OpenAI (OpenAI, Groq, OpenRouter...).
 // - Khóa API do admin nhập trong Quản trị → mục "AI, gọi" (lưu trong database, không bao giờ gửi lại cho máy người dùng)
-//   hoặc đặt biến môi trường GEMINI_API_KEY / AI_API_KEY trên Render. Không gửi khóa qua tin nhắn.
+//   hoặc đặt biến môi trường GEMINI_API_KEY / CEREBRAS_API_KEY / AI_API_KEY trên Render. Không gửi khóa qua tin nhắn.
 // - Giới hạn số câu hỏi mỗi người mỗi ngày và cả máy chủ mỗi ngày (gói miễn phí có hạn mức).
 const fs = require('node:fs');
 const path = require('node:path');
@@ -16,7 +17,10 @@ const BOT_AVATAR = '/icons/think-ai.png';
 const BOT_BIO = 'Trợ lý AI của Think. Nhắn riêng cho mình, hoặc gọi @Think AI trong nhóm.';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta';
 const OPENAI_URL = 'https://api.openai.com/v1';
+const CEREBRAS_URL = 'https://api.cerebras.ai/v1'; // kiểu OpenAI (chat/completions), khóa lấy ở cloud.cerebras.ai
 const DEFAULT_GEMINI_MODEL = 'gemini-flash-latest'; // tên gọi tắt luôn trỏ tới bản Gemini Flash mới nhất
+const DEFAULT_CEREBRAS_MODEL = 'qwen-3.8-27b'; // xem được ảnh (PNG / JPEG); gpt-oss-120b nhanh hơn nhưng chỉ đọc chữ
+const PROVIDERS = ['gemini', 'cerebras', 'openai'];
 const MAX_REPLY = 3900; // tin nhắn tối đa 4000 ký tự
 const CONTEXT_MESSAGES = 16;
 const MAX_IMAGES = 2;
@@ -26,7 +30,7 @@ const TIMEOUT_MS = 60_000;
 
 const DEFAULTS = Object.freeze({
   enabled: true,
-  provider: '', // 'gemini' | 'openai' ('' = tự chọn theo biến môi trường)
+  provider: '', // 'gemini' | 'cerebras' | 'openai' ('' = tự chọn theo biến môi trường)
   model: '',
   baseUrl: '',
   apiKey: '',
@@ -91,15 +95,18 @@ function stored() {
 function config() {
   const s = stored();
   const env = process.env;
-  const provider = s.provider || env.AI_PROVIDER || (env.AI_BASE_URL && !env.GEMINI_API_KEY ? 'openai' : 'gemini');
-  const gemini = provider !== 'openai';
-  const envKey = gemini ? env.GEMINI_API_KEY || env.AI_API_KEY || '' : env.AI_API_KEY || '';
+  const wanted = s.provider || env.AI_PROVIDER || (env.CEREBRAS_API_KEY && !env.GEMINI_API_KEY ? 'cerebras' : env.AI_BASE_URL && !env.GEMINI_API_KEY ? 'openai' : 'gemini');
+  const provider = PROVIDERS.includes(wanted) ? wanted : 'gemini';
+  const gemini = provider === 'gemini';
+  const cerebras = provider === 'cerebras';
+  const envKey = gemini ? env.GEMINI_API_KEY || env.AI_API_KEY || '' : cerebras ? env.CEREBRAS_API_KEY || env.AI_API_KEY || '' : env.AI_API_KEY || '';
   const key = s.apiKey || envKey;
+  const envUrl = cerebras ? '' : env.AI_BASE_URL;
   return {
     enabled: s.enabled !== false,
-    provider: gemini ? 'gemini' : 'openai',
-    model: s.model || env.AI_MODEL || (gemini ? DEFAULT_GEMINI_MODEL : ''),
-    baseUrl: String(s.baseUrl || env.AI_BASE_URL || (gemini ? GEMINI_URL : OPENAI_URL)).replace(/\/+$/, ''),
+    provider,
+    model: s.model || env.AI_MODEL || (gemini ? DEFAULT_GEMINI_MODEL : cerebras ? DEFAULT_CEREBRAS_MODEL : ''),
+    baseUrl: String(s.baseUrl || envUrl || (gemini ? GEMINI_URL : cerebras ? CEREBRAS_URL : OPENAI_URL)).replace(/\/+$/, ''),
     apiKey: key,
     keySource: s.apiKey ? 'settings' : envKey ? 'env' : null,
     perUserDaily: s.perUserDaily,
@@ -142,7 +149,7 @@ function saveSettings(body = {}) {
   const next = { ...s };
   if (body.enabled !== undefined) next.enabled = Boolean(body.enabled);
   if (body.provider !== undefined) {
-    if (!['gemini', 'openai'].includes(body.provider)) throw new AiError('input', 'Chọn dịch vụ AI: Gemini hoặc kiểu OpenAI.');
+    if (!PROVIDERS.includes(body.provider)) throw new AiError('input', 'Chọn dịch vụ AI: Gemini, Cerebras hoặc kiểu OpenAI.');
     next.provider = body.provider;
   }
   if (body.model !== undefined) {
@@ -163,8 +170,13 @@ function saveSettings(body = {}) {
   if (body.perUserDaily !== undefined) next.perUserDaily = cleanInt(body.perUserDaily, 1, 1000, DEFAULTS.perUserDaily);
   if (body.totalDaily !== undefined) next.totalDaily = cleanInt(body.totalDaily, 1, 100000, DEFAULTS.totalDaily);
   if (body.search !== undefined) next.search = Boolean(body.search);
-  // Đổi dịch vụ mà không nhập khóa mới: bỏ khóa cũ (khóa Gemini không dùng được cho dịch vụ khác)
-  if (body.provider !== undefined && body.provider !== s.provider && s.provider && body.apiKey === undefined) next.apiKey = '';
+  // Đổi dịch vụ mà không nhập khóa mới: bỏ khóa cũ (khóa Gemini không dùng được cho dịch vụ khác).
+  // Model, địa chỉ API của dịch vụ cũ cũng không dùng được: không ghi mới thì về mặc định của dịch vụ mới.
+  if (body.provider !== undefined && body.provider !== s.provider && s.provider) {
+    if (body.apiKey === undefined) next.apiKey = '';
+    if (body.model === undefined) next.model = '';
+    if (body.baseUrl === undefined) next.baseUrl = '';
+  }
   setSetting('ai', next);
   return adminView();
 }
@@ -271,6 +283,7 @@ async function buildTurns({ conv, triggerId, readImage }) {
 function explainHttp(status, body) {
   const msg = String(body?.error?.message || body?.error || body?.message || '').slice(0, 300);
   if (status === 429) return new AiError('quota', `Hết hạn mức của dịch vụ AI (429). ${msg}`.trim(), status);
+  if (status === 402) return new AiError('quota', `Hết tiền / hết lượt dùng thử của dịch vụ AI (402). ${msg}`.trim(), status);
   if (status === 401 || status === 403 || /api key|apikey|unauthori[sz]ed|permission/i.test(msg)) return new AiError('key', `Khóa API không đúng hoặc chưa được cấp quyền (${status}). ${msg}`.trim(), status);
   if (status === 404 || /not found|does not exist|unknown model|model_not_found/i.test(msg)) return new AiError('model', `Không tìm thấy model (${status}). ${msg}`.trim(), status);
   return new AiError('provider', `Dịch vụ AI báo lỗi ${status}. ${msg}`.trim(), status);
@@ -309,7 +322,17 @@ async function callGemini(c, system, turns, { search, images = true }) {
   return text;
 }
 
-async function callOpenAI(c, system, turns, { images = true }) {
+/** Cerebras: model biết suy nghĩ (gpt-oss, qwen) nghĩ ít thôi cho nhanh, phần suy nghĩ để riêng (không lẫn vào câu trả lời) */
+function reasoningParams(c) {
+  if (c.provider !== 'cerebras') return {};
+  if (/^(gpt-oss|qwen)/i.test(c.model)) return { reasoning_effort: 'low', reasoning_format: 'parsed' };
+  return {};
+}
+
+/** Bỏ phần suy nghĩ <think>…</think> nếu dịch vụ để lẫn vào câu trả lời */
+const stripThinking = (text) => String(text || '').replace(/<think>[\s\S]*?(<\/think>|$)/gi, '').trim();
+
+async function callOpenAI(c, system, turns, { images = true, extras = true }) {
   const messages = [{ role: 'system', content: system }];
   for (const t of turns) {
     const role = t.role === 'model' ? 'assistant' : 'user';
@@ -319,22 +342,24 @@ async function callOpenAI(c, system, turns, { images = true }) {
       messages.push({ role, content: [...(text ? [{ type: 'text', text }] : []), ...imgs.map((p) => ({ type: 'image_url', image_url: { url: `data:${p.image.mime};base64,${p.image.data}` } }))] });
     } else if (text) messages.push({ role, content: text });
   }
-  const data = await postJson(`${c.baseUrl}/chat/completions`, { authorization: `Bearer ${c.apiKey}` }, { model: c.model, messages, temperature: 0.8 });
-  const text = String(data?.choices?.[0]?.message?.content || '').trim();
+  const body = { model: c.model, messages, temperature: 0.8, ...(extras ? reasoningParams(c) : {}) };
+  const data = await postJson(`${c.baseUrl}/chat/completions`, { authorization: `Bearer ${c.apiKey}` }, body);
+  const text = stripThinking(data?.choices?.[0]?.message?.content);
   if (!text) throw new AiError('provider', 'Dịch vụ AI không trả lời gì.');
   return text;
 }
 
-/** Hỏi dịch vụ AI. Lỗi 400 (model không nhận ảnh, không có công cụ tra Google...) thì hỏi lại bản đơn giản. */
+/** Hỏi dịch vụ AI. Lỗi 400 (model không nhận ảnh, không có công cụ tra Google, không biết tham số suy nghĩ...)
+ *  thì hỏi lại bản đơn giản. */
 async function ask(c, system, turns) {
-  const call = (opts) => (c.provider === 'openai' ? callOpenAI(c, system, turns, opts) : callGemini(c, system, turns, opts));
+  const call = (opts) => (c.provider === 'gemini' ? callGemini(c, system, turns, opts) : callOpenAI(c, system, turns, opts));
   try {
-    return await call({ search: c.search, images: true });
+    return await call({ search: c.search, images: true, extras: true });
   } catch (err) {
-    const simpler = err instanceof AiError && err.code === 'provider' && err.status === 400;
-    const hasExtras = c.search || turns.some((t) => t.parts.some((p) => p.image));
+    const simpler = err instanceof AiError && err.code === 'provider' && (err.status === 400 || err.status === 422);
+    const hasExtras = c.search || Object.keys(reasoningParams(c)).length > 0 || turns.some((t) => t.parts.some((p) => p.image));
     if (!simpler || !hasExtras) throw err;
-    return call({ search: false, images: false });
+    return call({ search: false, images: false, extras: false });
   }
 }
 

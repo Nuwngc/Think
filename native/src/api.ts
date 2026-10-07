@@ -155,7 +155,7 @@ async function uploadRaw<T>(path: string, fileUri: string, mime: string): Promis
 
 export type AiSettings = {
   enabled: boolean;
-  provider: "gemini" | "openai";
+  provider: "gemini" | "cerebras" | "openai";
   model: string;
   baseUrl: string;
   hasKey: boolean;

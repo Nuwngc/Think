@@ -4466,14 +4466,21 @@ ${sections}
       setFormError($('#ai-form'), err.message);
     }
   }
+  // Model mặc định và model gợi ý của từng dịch vụ (giống app: AI_MODELS trong native/src/screens/AdminScreen.tsx)
+  const AI_MODELS = {
+    gemini: ['gemini-flash-latest', 'gemini-flash-lite-latest'],
+    cerebras: ['qwen-3.8-27b', 'gpt-oss-120b'],
+    openai: [],
+  };
+  let aiSaved = { provider: 'gemini', model: '' };
   function fillAiForm(ai) {
     const f = $('#ai-form');
+    aiSaved = { provider: ai.provider, model: ai.model };
     f.enabled.checked = ai.enabled;
     f.provider.value = ai.provider;
     f.apiKey.value = '';
     f.apiKey.placeholder = ai.hasKey ? `Đang dùng khóa ${ai.keyHint}${ai.keySource === 'env' ? ' (biến môi trường)' : ''}. Dán khóa mới để đổi` : 'Dán khóa API vào đây';
     f.model.value = ai.model;
-    f.model.placeholder = ai.provider === 'gemini' ? 'gemini-flash-latest' : 'vd llama-3.3-70b-versatile';
     f.baseUrl.value = ai.baseUrl || '';
     f.search.checked = ai.search;
     f.perUserDaily.value = ai.perUserDaily;
@@ -4488,11 +4495,19 @@ ${sections}
   }
   function aiProviderFields() {
     const f = $('#ai-form');
-    const gemini = f.provider.value === 'gemini';
-    $('.ai-openai', f).hidden = gemini;
-    $('.ai-gemini', f).hidden = !gemini;
+    const p = f.provider.value;
+    $('.ai-openai', f).hidden = p !== 'openai';
+    $('.ai-gemini', f).hidden = p !== 'gemini';
+    for (const el of $$('.ai-help', f)) el.hidden = el.dataset.provider !== p;
+    f.model.placeholder = AI_MODELS[p][0] || 'vd llama-3.3-70b-versatile';
+    $('#ai-models').replaceChildren(...AI_MODELS[p].map((m) => h('option', { value: m })));
   }
-  $('#ai-form').provider.addEventListener('change', aiProviderFields);
+  $('#ai-form').provider.addEventListener('change', () => {
+    const f = $('#ai-form');
+    // Model của dịch vụ cũ không dùng được cho dịch vụ mới: để trống = model mặc định
+    f.model.value = f.provider.value === aiSaved.provider ? aiSaved.model : '';
+    aiProviderFields();
+  });
   $('#ai-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const f = e.currentTarget;
