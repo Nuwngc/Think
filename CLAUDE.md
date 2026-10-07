@@ -28,6 +28,7 @@ Dữ liệu ở `public/puzzles/<game>.json` và bản giống hệt `native/src
 
 - Khóa bằng mật khẩu là riêng từng người (`members.lock_hash`, `src/chat-lock.js`). Theo ý chủ dự án: thông báo (đẩy, trong app) và bong bóng chat vẫn **đầy đủ**; chỉ khi mở cuộc trò chuyện mới hỏi mật khẩu, và danh sách cuộc trò chuyện không hiện nội dung tin. Chỗ mở khung chat (web `openConversation` / `isGated` trong `public/app.js`; app `ChatScreen` → `ChatLockGate`, `native/src/chatLock.ts`) phải giữ màn khóa, kể cả khung chat nổi của bong bóng.
 - Ảnh nhóm ở `conversations.avatar` (file trong `uploads/avatars/`, tên bắt đầu bằng `g<mã nhóm>-`); nhóm bị xóa thì xóa luôn ảnh.
+- Đổi tên / ảnh (2.15.0, `editableRoom` trong `server.js`): nhóm riêng thì thành viên nào cũng được, phòng chung (`type = 'general'`) thì chỉ admin. Web `canEditRoom` (`public/app.js`), app `editable` (`ConvSettingsSheet.tsx`, `GroupInfoSheet.tsx`) phải cùng luật. Phòng chung có ảnh thì vẽ như ảnh nhóm (`fillConvAvatar`, `ConvAvatar`), chưa có thì biểu tượng nhóm.
 
 ## Think AI, gọi thoại / gọi video (2.10.0)
 

@@ -1139,6 +1139,17 @@ function groupFor(req, res) {
   return conv;
 }
 
+// Đổi tên / ảnh (2.15.0): nhóm riêng thì thành viên nào cũng đổi được; phòng chung "Cả nhóm" thì chỉ admin
+function editableRoom(req, res) {
+  const conv = get('SELECT * FROM conversations WHERE id = ?', Number(req.params.id));
+  if (conv && conv.type === 'general' && membership(conv.id, req.user.id)) {
+    if (req.user.role === 'admin') return conv;
+    res.status(403).json({ error: 'Chỉ admin đổi được tên và ảnh của phòng chung.' });
+    return null;
+  }
+  return groupFor(req, res);
+}
+
 app.post('/api/groups', requireAuth, requireReady, (req, res) => {
   const others = activeUserIds(req.body?.memberIds, req.user.id);
   if (others.length < 2) return res.status(400).json({ error: 'Chọn ít nhất 2 người để tạo nhóm.' });
@@ -1161,7 +1172,7 @@ app.post('/api/groups', requireAuth, requireReady, (req, res) => {
 });
 
 app.patch('/api/groups/:id', requireAuth, requireReady, (req, res) => {
-  const conv = groupFor(req, res);
+  const conv = editableRoom(req, res);
   if (!conv) return;
   const name = normGroupName(req.body?.name);
   if (!name) return res.status(400).json({ error: 'Tên nhóm cần từ 1 đến 60 ký tự.' });
@@ -1177,9 +1188,9 @@ app.patch('/api/groups/:id', requireAuth, requireReady, (req, res) => {
   res.json({ conversation: getConv(conv.id, req.user.id) });
 });
 
-// Ảnh đại diện nhóm (2.9.0): thành viên nào cũng đổi được, máy người dùng đã thu nhỏ trước khi gửi
+// Ảnh đại diện nhóm (2.9.0): thành viên nào cũng đổi được (phòng chung: admin, 2.15.0), máy người dùng đã thu nhỏ trước khi gửi
 app.post('/api/groups/:id/avatar', requireAuth, requireReady, rawImage, (req, res) => {
-  const conv = groupFor(req, res);
+  const conv = editableRoom(req, res);
   if (!conv) return;
   const kind = sniffImage(req.body);
   if (!kind) return res.status(400).json({ error: 'File này không phải ảnh JPG, PNG, WEBP hoặc GIF.' });
@@ -1200,7 +1211,7 @@ app.post('/api/groups/:id/avatar', requireAuth, requireReady, rawImage, (req, re
 });
 
 app.delete('/api/groups/:id/avatar', requireAuth, requireReady, (req, res) => {
-  const conv = groupFor(req, res);
+  const conv = editableRoom(req, res);
   if (!conv) return;
   if (conv.avatar) {
     const msgId = transaction(() => {

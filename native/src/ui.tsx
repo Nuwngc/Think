@@ -108,7 +108,7 @@ export function ConvAvatar({
 }) {
   const c = useColors();
   if (conv.type === "dm") return <Avatar user={conv.peerId != null ? users[conv.peerId] : null} size={size} dot={dot} meId={meId} />;
-  if (conv.type === "group") return <GroupAvatar conv={conv} size={size} />;
+  if (conv.type === "group" || conv.avatar) return <GroupAvatar conv={conv} size={size} />; // phòng chung có ảnh (2.15.0)
   return (
     <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2, backgroundColor: c.jade }]}>
       <Icon name="forum" size={size * 0.52} color="#fff" />

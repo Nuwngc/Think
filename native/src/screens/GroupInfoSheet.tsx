@@ -36,6 +36,8 @@ export function GroupInfoSheet({ visible, onClose, conv }: { visible: boolean; o
 
   const isGroup = conv.type === "group";
   const isOwner = isGroup && conv.createdBy === meId;
+  // Đổi tên / ảnh: nhóm riêng thì ai cũng được, phòng chung thì chỉ admin (2.15.0)
+  const editable = isGroup || (conv.type === "general" && me?.role === "admin");
   const memberIds = useMemo(() => {
     if (conv.type === "group") return conv.memberIds || [];
     if (conv.type === "general") return Object.values(users).filter((u) => !u.disabled && !u.bot).map((u) => u.id);
@@ -110,7 +112,7 @@ export function GroupInfoSheet({ visible, onClose, conv }: { visible: boolean; o
   return (
     <Sheet visible={visible} onClose={onClose} title={conv.type === "dm" ? "Thông tin" : conv.type === "group" ? "Thông tin nhóm" : "Phòng chung"}>
       <View style={s.hero}>
-        {isGroup ? (
+        {editable ? (
           <Pressable onPress={changePhoto} disabled={busy != null} accessibilityRole="button" accessibilityLabel="Đổi ảnh nhóm">
             <ConvAvatar conv={conv} users={users} size={72} dot={false} />
             <View style={[s.cam, { backgroundColor: c.surface, borderColor: c.line }]}>
@@ -128,14 +130,14 @@ export function GroupInfoSheet({ visible, onClose, conv }: { visible: boolean; o
         </Text>
       </View>
 
-      {isGroup ? (
+      {editable ? (
         <View style={s.photoRow}>
           <Button title="Đổi ảnh nhóm" icon="photo-camera" kind="secondary" small busy={busy === "photo"} onPress={changePhoto} />
           {conv.avatar ? <Button title="Xóa ảnh" icon="delete-outline" kind="secondary" small busy={busy === "photo-rm"} onPress={removePhoto} /> : null}
         </View>
       ) : null}
 
-      {isGroup ? (
+      {editable ? (
         <>
           <View style={s.inline}>
             <View style={{ flex: 1 }}>

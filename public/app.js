@@ -260,7 +260,8 @@
   function fillConvAvatar(el, c, extra = {}) {
     if (c.type === 'dm') return fillAvatar(el, userOf(c.peerId), extra);
     if (c.type === 'group') return fillAvatar(el, null, { ...extra, team: c });
-    return fillAvatar(el, null, { ...extra, group: true });
+    // Phòng chung: ảnh admin đã đặt (2.15.0), chưa có thì biểu tượng nhóm
+    return fillAvatar(el, null, c.avatar ? { ...extra, team: c } : { ...extra, group: true });
   }
   const convAvatarEl = (c, cls = '', extra) => fillConvAvatar(h('span', { class: `avatar ${cls}`.trim() }), c, extra);
 
@@ -681,6 +682,10 @@
     layer.classList.add('open');
     if (name === 'new') renderPeople();
     if (name === 'new-group') renderNewGroup(true);
+    if (name === 'conv' && roomEdit.renaming != null) {
+      roomEdit.renaming = null; // mở lại bảng: không giữ ô đổi tên đang dở
+      renderConvSheet();
+    }
     if (name === 'group') {
       groupAdd.open = false;
       groupAdd.selected.clear();
@@ -2010,6 +2015,47 @@
   }, true);
 
   /* ----- Bảng "Tùy chỉnh đoạn chat" ----- */
+  /* ----- Đổi tên / ảnh nhóm ngay trong "Tùy chỉnh đoạn chat" (2.15.0). Phòng chung: chỉ admin (máy chủ cũng kiểm tra) ----- */
+  const roomEdit = { renaming: null };
+  const canEditRoom = (c) => Boolean(c && !IN_BUBBLE && (c.type === 'group' || (c.type === 'general' && state.me?.role === 'admin')));
+  function roomChanged(conversation, message) {
+    keepConv(conversation);
+    toast(message);
+    if (currentSheet === 'conv') renderConvSheet();
+    if (currentSheet === 'group') renderGroupInfo();
+    renderChatHeader();
+    renderConvList();
+  }
+  function saveRoomName(c, value, btn) {
+    const name = String(value || '').trim();
+    if (!name) return toast('Tên nhóm không được để trống.');
+    if (name === c.name) {
+      roomEdit.renaming = null;
+      renderConvSheet();
+      return;
+    }
+    withBusy(btn, async () => {
+      try {
+        const { conversation } = await api(`/api/groups/${c.id}`, { method: 'PATCH', body: { name } });
+        roomEdit.renaming = null;
+        roomChanged(conversation, 'Đã đổi tên nhóm.');
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+  }
+  function removeRoomPhoto(c, btn) {
+    if (!c.avatar || !window.confirm('Xóa ảnh nhóm? Nhóm sẽ dùng lại ảnh mặc định.')) return;
+    withBusy(btn, async () => {
+      try {
+        const { conversation } = await api(`/api/groups/${c.id}/avatar`, { method: 'DELETE' });
+        roomChanged(conversation, 'Đã xóa ảnh nhóm.');
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+  }
+
   function renderConvSheet() {
     const c = state.convs.get(state.currentId);
     const body = $('#conv-body');
@@ -2026,11 +2072,33 @@
     const quick = (label, ic, run, on) => h('button', { class: `conv-quick${on ? ' is-on' : ''}`, type: 'button', onclick: run },
       h('span', { class: 'conv-quick-ic' }, icon(ic)), h('span', { text: label }));
     const media = chatPlus.media.conv === c.id ? chatPlus.media.list.slice(0, 9) : [];
+    const editable = canEditRoom(c);
+    let titleEl = h('p', { class: 'profile-title', text: convTitle(c) });
+    if (editable && roomEdit.renaming === c.id) {
+      // Đổi tên ngay trong bảng (2.15.0)
+      const input = h('input', { class: 'search-input room-name-input', name: 'roomName', maxlength: '60', value: c.name || '', 'aria-label': 'Tên nhóm mới', enterkeyhint: 'done', autocomplete: 'off' });
+      const save = h('button', { class: 'btn btn-sm btn-primary', type: 'submit', text: 'Lưu' });
+      titleEl = h('form', { class: 'room-name-form', novalidate: true, onsubmit: (e) => { e.preventDefault(); saveRoomName(c, input.value, save); } },
+        input,
+        save,
+        h('button', { class: 'btn btn-sm', type: 'button', text: 'Hủy', onclick: () => { roomEdit.renaming = null; renderConvSheet(); } }));
+      setTimeout(() => { input.focus(); input.select(); }, 30);
+    }
     body.replaceChildren(
       h('div', { class: 'profile' },
-        convAvatarEl(c, 'avatar-xl', { dot: false }),
-        h('p', { class: 'profile-title', text: convTitle(c) }),
-        h('p', { class: 'hint', text: muteText(c) })),
+        editable
+          ? h('button', { class: 'group-photo', type: 'button', 'aria-label': 'Đổi ảnh nhóm', onclick: () => $('#group-photo-input').click() },
+            convAvatarEl(c, 'avatar-xl', { dot: false }),
+            h('span', { class: 'group-photo-cam', 'aria-hidden': 'true' }, icon('camera')))
+          : convAvatarEl(c, 'avatar-xl', { dot: false }),
+        titleEl,
+        h('p', { class: 'hint', text: muteText(c) }),
+        editable && roomEdit.renaming !== c.id
+          ? h('div', { class: 'room-edit-row' },
+            h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { roomEdit.renaming = c.id; renderConvSheet(); } }, icon('edit'), 'Đổi tên'),
+            h('button', { class: 'btn btn-sm', type: 'button', id: 'room-photo-btn', onclick: () => $('#group-photo-input').click() }, icon('camera'), 'Đổi ảnh'),
+            c.avatar ? h('button', { class: 'btn btn-sm btn-danger-quiet', type: 'button', onclick: (e) => removeRoomPhoto(c, e.currentTarget) }, 'Xóa ảnh') : null)
+          : null),
       h('div', { class: 'conv-quick-row' },
         quick('Tìm tin nhắn', 'search', () => { goBack(); setTimeout(openChatSearch, 260); }),
         quick(isMuted(c) ? 'Bật thông báo' : 'Tắt thông báo', isMuted(c) ? 'bell' : 'bell-off', (e) => {
@@ -3612,6 +3680,7 @@ ${sections}
       renderMessages();
     }
     if (currentSheet === 'group') renderGroupInfo();
+    if (currentSheet === 'conv' && state.currentId === conversationId) renderConvSheet();
   }
 
   function onPresence({ userId, online, lastSeen }) {
@@ -4451,20 +4520,17 @@ ${sections}
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
     const c = state.convs.get(state.currentId);
-    if (!file || !c || c.type !== 'group') return;
+    if (!file || !canEditRoom(c)) return;
     if (file.type && !/^image\//.test(file.type)) {
       toast('Hãy chọn một file ảnh.');
       return;
     }
-    await withBusy($('#group-photo-btn'), async () => {
+    const busyBtn = currentSheet === 'conv' && $('#room-photo-btn') ? $('#room-photo-btn') : $('#group-photo-btn');
+    await withBusy(busyBtn, async () => {
       try {
         const { blob } = await prepareImage(file, { max: 320, square: true, quality: 0.88 });
         const { conversation } = await api(`/api/groups/${c.id}/avatar`, { method: 'POST', raw: blob });
-        keepConv(conversation);
-        toast('Đã đổi ảnh nhóm.');
-        renderGroupInfo();
-        renderChatHeader();
-        renderConvList();
+        roomChanged(conversation, 'Đã đổi ảnh nhóm.');
       } catch (err) {
         toast(err.message || 'Không đổi được ảnh nhóm.');
       }

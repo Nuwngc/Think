@@ -1879,3 +1879,10 @@ button.story-thumb:focus-visible { outline: 2px solid var(--jade); outline-offse
 .msg-trans-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg-trans-hide { margin-left: auto; padding: 2px 6px; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .ai-dots i { animation: none; } }
+
+/* ===== Đổi tên / ảnh nhóm trong "Tùy chỉnh đoạn chat" (2.15.0) ===== */
+.room-edit-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 6px; }
+.room-edit-row .btn { display: inline-flex; align-items: center; gap: 6px; }
+.room-edit-row .ic { width: 16px; height: 16px; }
+.room-name-form { display: flex; align-items: center; gap: 8px; width: min(100%, 420px); margin-top: 10px; }
+.room-name-input { flex: 1; min-width: 0; }
