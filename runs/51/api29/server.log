@@ -1,0 +1,9 @@
+
+──────────────────────────────────────────────
+  Đã tạo tài khoản admin đầu tiên
+  Tên đăng nhập: admin
+  Mật khẩu:      (lấy từ ADMIN_PASSWORD trong .env)
+──────────────────────────────────────────────
+
+📦 Đã ghi nhận dung lượng 1 file có từ trước.
+✅ Think đang chạy tại http://localhost:3000
