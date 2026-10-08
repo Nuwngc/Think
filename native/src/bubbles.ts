@@ -108,7 +108,7 @@ export function headInfo(conv: Conversation, msg: Message | null, extra: Partial
     title: convTitle(conv, names.nameOf),
     initial: initialOf(conv.type === "dm" ? peer?.displayName : conv.type === "group" ? conv.name : "Think"),
     color: conv.type === "dm" ? colorOf(conv.peerId) : conv.type === "group" ? colorOf(conv.id + 3) : "#0E7C66",
-    avatarUrl: peer?.avatar ? fileUrl(peer.avatar) : conv.type === "group" && conv.avatar ? fileUrl(conv.avatar) : "",
+    avatarUrl: peer?.avatar ? fileUrl(peer.avatar) : conv.type !== "dm" && conv.avatar ? fileUrl(conv.avatar) : "",
     preview: msg ? `${conv.type === "dm" ? "" : `${convTitle(conv, names.nameOf)} · `}${previewText(msg, conv, names)}` : "",
     unread: unreadTotal(st.convs),
     general: conv.type === "general",

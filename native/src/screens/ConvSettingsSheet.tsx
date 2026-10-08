@@ -1,14 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 import { useShallow } from "zustand/react/shallow";
 
 import { emojiOf, isMuted, MUTE_OPTIONS, QUICK_EMOJIS, THEMES, themeOf } from "../chatThemes";
 import { convTitle, dayKey, dayLabel, hm } from "../format";
-import { namesOf, setAppearance, setConvPrefs, useStore } from "../store";
+import { pickAvatar } from "../images";
+import { namesOf, renameGroup, setAppearance, setConvPrefs, setGroupAvatar, showToast, useStore } from "../store";
 import { useColors, type Colors } from "../theme";
 import type { Conversation } from "../types";
-import { Button, ConvAvatar, Icon, type IconName, SectionLabel, Sheet, SheetItem, useStyles } from "../ui";
+import { Button, confirm, ConvAvatar, Field, Icon, type IconName, SectionLabel, Sheet, SheetItem, useStyles } from "../ui";
 import { MediaGrid, NO_PINS, useMedia } from "./ChatExtras";
 import { LockSection } from "./ChatLock";
 
@@ -89,6 +90,48 @@ export function ConvSettingsSheet({
   const theme = themeOf(conv);
   const emoji = emojiOf(conv);
   const thumb = Math.floor((Math.min(width, 560) - 40 - 8) / 3);
+  // Đổi tên / ảnh nhóm ngay tại đây (2.15.0): nhóm riêng thì ai cũng được, phòng chung thì chỉ admin (máy chủ cũng kiểm tra)
+  const editable = conv.type === "group" || (conv.type === "general" && me?.role === "admin");
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState(conv.name || "");
+  const [busy, setBusy] = useState<string | null>(null);
+  useEffect(() => {
+    if (!visible) setRenaming(false);
+  }, [visible]);
+  const runEdit = async (key: string, task: () => Promise<void>) => {
+    setBusy(key);
+    try {
+      await task();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Có lỗi xảy ra.");
+    } finally {
+      setBusy(null);
+    }
+  };
+  const saveName = () =>
+    runEdit("rename", async () => {
+      const next = newName.trim();
+      if (!next) throw new Error("Tên nhóm cần từ 1 đến 60 ký tự.");
+      if (next !== conv.name) {
+        await renameGroup(conv.id, next);
+        showToast("Đã đổi tên nhóm.");
+      }
+      setRenaming(false);
+    });
+  const changePhoto = () =>
+    runEdit("photo", async () => {
+      const img = await pickAvatar();
+      if (!img) return;
+      await setGroupAvatar(conv.id, img);
+      showToast("Đã đổi ảnh nhóm.");
+    });
+  const removePhoto = async () => {
+    if (!(await confirm("Xóa ảnh nhóm?", "Nhóm sẽ dùng lại ảnh mặc định.", "Xóa ảnh"))) return;
+    runEdit("photo-rm", async () => {
+      await setGroupAvatar(conv.id, null);
+      showToast("Đã xóa ảnh nhóm.");
+    });
+  };
 
   const quick = (icon: IconName, label: string, onPress: () => void, on = false) => (
     <Pressable onPress={onPress} style={({ pressed }) => [s.quick, pressed && { opacity: 0.7 }]} accessibilityRole="button" accessibilityLabel={label}>
@@ -105,9 +148,53 @@ export function ConvSettingsSheet({
     <>
       <Sheet visible={visible && !muteOpen} onClose={onClose} title="Tùy chỉnh đoạn chat">
         <View style={s.profile}>
-          <ConvAvatar conv={conv} users={users} meId={names.meId} size={72} dot={false} />
-          <Text style={[s.title, { color: c.text }]}>{convTitle(conv, names.nameOf)}</Text>
+          {editable ? (
+            <Pressable onPress={changePhoto} disabled={busy != null} accessibilityRole="button" accessibilityLabel="Đổi ảnh nhóm">
+              <ConvAvatar conv={conv} users={users} meId={names.meId} size={72} dot={false} />
+              <View style={[s.cam, { backgroundColor: c.surface, borderColor: c.line }]}>
+                <Icon name="photo-camera" size={16} color={c.text} />
+              </View>
+            </Pressable>
+          ) : (
+            <ConvAvatar conv={conv} users={users} meId={names.meId} size={72} dot={false} />
+          )}
+          {editable && renaming ? (
+            <View style={s.renameRow}>
+              <View style={{ flex: 1 }}>
+                <Field
+                  value={newName}
+                  onChangeText={setNewName}
+                  maxLength={60}
+                  autoFocus
+                  selectTextOnFocus
+                  returnKeyType="done"
+                  onSubmitEditing={saveName}
+                  accessibilityLabel="Tên nhóm mới"
+                />
+              </View>
+              <Button title="Lưu" small onPress={saveName} busy={busy === "rename"} disabled={!newName.trim()} />
+              <Button title="Hủy" small kind="secondary" onPress={() => setRenaming(false)} />
+            </View>
+          ) : (
+            <Text style={[s.title, { color: c.text }]}>{convTitle(conv, names.nameOf)}</Text>
+          )}
           <Text style={s.hint}>{muteText(conv)}</Text>
+          {editable && !renaming ? (
+            <View style={s.editRow}>
+              <Button
+                title="Đổi tên"
+                icon="edit"
+                kind="secondary"
+                small
+                onPress={() => {
+                  setNewName(conv.name || "");
+                  setRenaming(true);
+                }}
+              />
+              <Button title="Đổi ảnh" icon="photo-camera" kind="secondary" small busy={busy === "photo"} onPress={changePhoto} />
+              {conv.avatar ? <Button title="Xóa ảnh" kind="secondary" small busy={busy === "photo-rm"} onPress={removePhoto} /> : null}
+            </View>
+          ) : null}
         </View>
         <View style={s.quickRow}>
           {quick("search", "Tìm tin nhắn", () => {
@@ -232,6 +319,19 @@ export function ConvSettingsSheet({
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     profile: { alignItems: "center", gap: 4, paddingVertical: 6 },
+    cam: {
+      position: "absolute",
+      right: -4,
+      bottom: -4,
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      borderWidth: StyleSheet.hairlineWidth,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    renameRow: { flexDirection: "row", alignItems: "center", gap: 8, alignSelf: "stretch", marginTop: 6 },
+    editRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8, marginTop: 6 },
     title: { fontSize: 19, fontWeight: "800", marginTop: 4 },
     hint: { color: c.muted, fontSize: 13.5, lineHeight: 19 },
     quickRow: { flexDirection: "row", justifyContent: "space-around", paddingVertical: 8 },
