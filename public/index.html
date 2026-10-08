@@ -42,6 +42,10 @@
   <script src="/voice-ui.js" defer></script>
   <script src="/calls-ui.js" defer></script>
   <script src="/stories-ui.js" defer></script>
+  <script src="/formula-core.js" defer></script>
+  <script src="/formula-ui.js" defer></script>
+  <script src="/plans-core.js" defer></script>
+  <script src="/plans-ui.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -113,6 +117,9 @@
     <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6"/><path d="M18 6.5a8 8 0 0 1 0 11"/></symbol>
     <symbol id="i-volume-off" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></symbol>
     <symbol id="i-caro" viewBox="0 0 24 24"><path d="m4 4 6 6M10 4l-6 6"/><circle cx="16.5" cy="16.5" r="3.8"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-place" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.4"/></symbol>
+    <symbol id="i-sigma" viewBox="0 0 24 24"><path d="M17.5 5h-11l6 7-6 7h11"/></symbol>
     <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/><path d="m9.2 14.6 2 2 3.8-3.8"/></symbol>
     <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.5 3 5.5 13.5h6L10.5 21l8-10.5h-6Z"/></symbol>
     <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9.5 18h5"/><path d="M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3Z"/></symbol>
@@ -594,10 +601,12 @@
         <div class="chat-foot">
           <button id="jump-btn" class="jump-btn" type="button" hidden>Có tin nhắn mới</button>
           <p id="typing" class="typing" hidden></p>
+          <!-- Tin hẹn giờ đang chờ gửi trong cuộc trò chuyện này (2.16.0, public/plans-ui.js) -->
+          <div id="sched-bar" class="sched-bar" hidden></div>
           <div id="reply-bar" class="reply-bar" hidden></div>
           <div id="mention-box" class="mention-box" role="listbox" aria-label="Nhắc tên" hidden></div>
           <form id="composer" class="composer" autocomplete="off">
-            <button type="button" class="icon-btn" data-action="composer-more" aria-label="Thêm: bình chọn…"><svg class="ic"><use href="#i-plus"/></svg></button>
+            <button type="button" class="icon-btn" data-action="composer-more" aria-label="Thêm: bình chọn, kèo, hẹn giờ gửi, công thức"><svg class="ic"><use href="#i-plus"/></svg></button>
             <button type="button" class="icon-btn" data-action="pick-image" aria-label="Gửi ảnh"><svg class="ic"><use href="#i-image"/></svg></button>
             <input id="image-input" type="file" accept="image/*" multiple hidden>
             <button type="button" class="icon-btn mic-btn" id="mic-btn" aria-label="Ghi âm: giữ để nói, thả tay để gửi" aria-pressed="false"><svg class="ic"><use href="#i-mic"/></svg></button>
@@ -700,6 +709,31 @@
           <button class="btn btn-primary btn-block" type="submit">Gửi bình chọn</button>
         </form>
       </div>
+    </section>
+
+    <!-- Kèo, hẹn giờ gửi tin (2.16.0, public/plans-ui.js) -->
+    <section id="sheet-event" class="sheet" role="dialog" aria-modal="true" aria-labelledby="event-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="event-title">Tạo kèo</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body" id="event-body"></div>
+    </section>
+
+    <section id="sheet-schedule" class="sheet" role="dialog" aria-modal="true" aria-labelledby="schedule-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="schedule-title">Hẹn giờ gửi tin</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body" id="schedule-body"></div>
+    </section>
+
+    <section id="sheet-scheduled" class="sheet" role="dialog" aria-modal="true" aria-labelledby="scheduled-title" tabindex="-1" hidden>
+      <header class="sheet-head">
+        <h2 id="scheduled-title">Tin đang chờ gửi</h2>
+        <button class="icon-btn" type="button" data-action="close-sheet" aria-label="Đóng"><svg class="ic"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body"><ul id="scheduled-list" class="sched-list"></ul></div>
     </section>
 
     <section id="sheet-pins" class="sheet" role="dialog" aria-modal="true" aria-labelledby="pins-title" tabindex="-1" hidden>

@@ -12,6 +12,9 @@ App chat chạy trên web, cài được lên điện thoại như app thật (P
 - **Gọi thoại, gọi video** (mục 26, mới ở 2.10.0): gọi 1-1 trong cuộc trò chuyện riêng, giữa web và app đều được: chuông, rung, tắt micro, tắt / đổi máy ảnh, loa ngoài (app), nhật ký cuộc gọi và nút **Gọi lại** trong chat, thông báo cuộc gọi đến và **cuộc gọi nhỡ**. Tiếng và hình đi thẳng giữa hai máy (WebRTC).
 - **Gọi nhóm** (mục 26, mới ở 2.11.0): gọi thoại / gọi video cả nhóm (tối đa 8 người), ai đến sau thì bấm **Tham gia** trên thanh "… người đang gọi" trong khung chat. Sửa lỗi cuộc gọi kẹt ở **"Đang kết nối…"** khi dùng 4G: Think tự dùng máy chủ chuyển tiếp (TURN) miễn phí, admin cài TURN riêng miễn phí trong vài bước.
 - **Tin 24 giờ** (mục 27, mới ở 2.13.0): đăng ảnh hoặc dòng chữ trên nền màu, tự mất sau 24 giờ; hàng vòng tròn trên đầu danh sách chat, xem kiểu chạm trái / phải, thả cảm xúc hoặc trả lời thành tin nhắn riêng, người đăng xem được ai đã xem. Có trên web và App Think Beta.
+- **Kèo** (mục 28, mới ở 2.16.0): rủ cả nhóm đi đâu đó ngay trong chat — tên kèo, giờ hẹn, địa điểm; mọi người bấm **Đi / Có thể / Không đi**, thấy ai đi; trước giờ hẹn 1 tiếng Think **nhắc** những ai chọn Đi hoặc Có thể. Có trên web và App Think Beta.
+- **Hẹn giờ gửi tin** (mục 29, mới ở 2.16.0): viết trước, chọn giờ (sau 1 tiếng, tối nay 20:00, sáng mai 8:00 hoặc tự chọn), đến giờ Think tự gửi như bạn gửi; xem, **Gửi ngay** hoặc **Hủy** tin đang chờ. Có trên web và App Think Beta.
+- **Công thức toán, hóa** (mục 30, mới ở 2.16.0): gõ `x^2` thành x², `H_2O` thành H₂O, `Fe^3+` thành Fe³⁺, `x^{n+1}` thành xⁿ⁺¹; bàn phím ký hiệu √ π ± ≤ ≥ ≠ ∞ → ⇌ ↑ ↓ Δ α β… ngay trên ô nhập. Có trên web và App Think Beta.
 - **Khóa cuộc trò chuyện bằng mật khẩu** (mục 18, mới ở 2.9.0): đặt mật khẩu riêng cho một cuộc trò chuyện (nhóm hay riêng) trên tài khoản của mình; thông báo và bong bóng chat vẫn đầy đủ, nhưng bấm vào (hay mở từ danh sách) thì phải nhập mật khẩu mới xem được; danh sách không hiện nội dung tin. Có trên web và App Think Beta.
 - Gửi ảnh (tự nén trên máy trước khi gửi), dán ảnh bằng Ctrl+V trên máy tính.
 - Thanh điều hướng dưới cùng: **Tin nhắn**, **Trò chơi** (Nông trại, Xếp Khối, Cờ vua, Cờ caro), **Cá nhân** (trang cá nhân + bảng tin; nút ⚙ **Cài đặt**: tên, giới thiệu, ảnh bìa, giao diện sáng/tối, thông báo, lưu trên máy, đổi mật khẩu) và **Quản trị** (chỉ admin thấy).
@@ -343,6 +346,7 @@ git pull && npm install --omit=dev && pm2 restart think-chat
 | `AI_PROVIDER`, `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL` | Think AI dùng Cerebras (`AI_PROVIDER=cerebras`) hoặc dịch vụ kiểu OpenAI (`AI_PROVIDER=openai`), hoặc đổi model | Gemini, `gemini-flash-latest` |
 | `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | Máy chủ TURN cho cuộc gọi (dễ hơn: nhập trong Quản trị → AI, gọi, mục 26) | trống (dùng Open Relay dùng chung) |
 | `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | Dùng TURN của Cloudflare (máy chủ tự lấy mật khẩu tạm) | trống |
+| `KEEP_AWAKE` | Đặt `0` để máy chủ Render **không** tự giữ thức khi còn tin hẹn giờ / lời nhắc kèo (mục 29) | bật |
 
 Màu sắc nằm ở đầu file `public/app.css` (biến `--jade`, `--turmeric`). Icon app nằm trong `public/icons/`.
 
@@ -659,6 +663,44 @@ Có trên web và App Think Beta, giống "tin" của Messenger / Zalo. Cả nh�
 - Ảnh của tin dùng chung chỗ lưu ảnh với tin nhắn; hết 24 giờ máy chủ tự xóa tin và ảnh (dọn mỗi 5 phút). Tài khoản bị khóa thì tin bị ẩn.
 - Máy chủ: `src/stories.js` (bảng `stories`, `story_views`; `GET` / `POST /api/stories`, `DELETE /api/stories/:id`, `POST /api/stories/:id/view`, `GET /api/stories/:id/viewers`, `POST /api/stories/:id/reply` `{ emoji }` hoặc `{ text }`; realtime `story:new`, `story:deleted`, `story:viewed`). Tin nhắn trả lời tin có thêm `story` (ảnh nhỏ của tin, `alive`). Web: `public/stories-ui.js`. App: `native/src/stories/`.
 
+## 28. Kèo
+
+Có trên web và App Think Beta, trong mọi cuộc trò chuyện (nhóm, phòng chung, chat riêng).
+
+- **Tạo kèo**: nút **＋** cạnh ô nhập → **Tạo kèo** → đặt tên (vd "Đi ăn lẩu"), chọn giờ (nút nhanh **Tối nay 20:00**, **Tối mai 19:00**, **Thứ Bảy 19:00**, **Chủ nhật 9:00**, hoặc tự chọn ngày giờ), thêm địa điểm nếu muốn → **Gửi kèo**. Người tạo được tính là **Đi**.
+- **Thẻ kèo trong chat**: ô lịch (thứ, ngày, tháng), giờ hẹn và "còn … nữa", địa điểm, ba nút **Đi / Có thể / Không đi** kèm số người; bấm lại nút đang chọn để bỏ chọn. Dòng "An, Bình và 2 người khác sẽ đi" — bấm để xem ai đi, ai có thể, ai không.
+- **Nhắc giờ**: trước giờ hẹn **1 tiếng** (kèo tạo gấp: 15 phút) máy chủ gửi thông báo "⏰ Còn 1 tiếng nữa: Đi ăn lẩu" cho những ai chọn **Đi** hoặc **Có thể**, và thêm một dòng nhắc trong cuộc trò chuyện.
+- **Hủy kèo**: người tạo (hoặc admin) bấm **Hủy kèo** trên thẻ hoặc chạm giữ thẻ → **Hủy kèo**. Ai đã chọn Đi / Có thể nhận thông báo; thẻ đổi thành "Đã hủy". Qua giờ hẹn thì thẻ ghi "Đã diễn ra" và không chọn được nữa.
+- Danh sách chat và thông báo hiện "📅 Kèo: Đi ăn lẩu · 20:00 thứ Bảy 10/10 · Quán cũ". Tìm tin nhắn tìm được cả tên kèo và địa điểm; Think AI đọc được kèo khi tóm tắt.
+- Máy chủ: `src/events.js` (bảng `events`, `event_rsvps`; tin nhắn loại `event`; `POST /api/conversations/:id/events` `{ title, place, startsAt }`, `POST /api/messages/:id/rsvp` `{ status: "yes" | "maybe" | "no" | null }`, `POST /api/messages/:id/event/cancel`; nhắc giờ mỗi phút). Web: `public/plans-ui.js` (chữ giờ hẹn dùng chung: `public/plans-core.js`). App: `native/src/plans/`.
+
+## 29. Hẹn giờ gửi tin
+
+Có trên web và App Think Beta.
+
+- Gõ tin vào ô nhập như bình thường → nút **＋** → **Hẹn giờ gửi tin** (tin đang gõ được điền sẵn) → chọn **Sau 1 tiếng**, **Tối nay 20:00**, **Sáng mai 8:00** hoặc tự chọn ngày giờ (tối đa 1 năm) → **Hẹn giờ gửi**.
+- Thanh **"2 tin hẹn giờ · Gần nhất 20:00 hôm nay"** hiện trên ô nhập của cuộc trò chuyện đó (chỉ bạn thấy) → **Xem** để **Gửi ngay** hoặc **Hủy** từng tin. Hẹn trên điện thoại thì máy tính cũng thấy ngay.
+- Đến giờ, máy chủ gửi tin như bạn tự gửi: mọi người nhận thông báo như thường, @nhắc tên vẫn giữ, gọi @Think AI thì Think AI trả lời. Lúc đó bạn đã rời nhóm thì tin bị bỏ. Mỗi người tối đa 50 tin đang chờ.
+- **Render gói Free**: máy chủ ngủ sau 15 phút không ai dùng và đang ngủ thì không gửi được. Vì vậy khi còn tin hẹn giờ hoặc lời nhắc kèo trong **3 ngày tới**, máy chủ tự gọi địa chỉ của mình 10 phút một lần để **không ngủ** (dùng biến `RENDER_EXTERNAL_URL` Render tự đặt; hết việc thì lại ngủ như cũ). Một dịch vụ Free chạy cả tháng vẫn nằm trong 750 giờ miễn phí của Render. Không muốn vậy thì đặt `KEEP_AWAKE=0`: tin sẽ được gửi ngay khi máy chủ thức dậy (có người mở app).
+- Máy chủ: `src/scheduled.js` (bảng `scheduled_messages`; `GET /api/scheduled`, `POST /api/conversations/:id/scheduled` `{ text, sendAt, mentions }`, `DELETE /api/scheduled/:id`, `POST /api/scheduled/:id/send`; sự kiện realtime `scheduled:changed` chỉ gửi cho người hẹn), `src/keep-awake.js`. Web: `public/plans-ui.js`. App: `native/src/plans/`.
+
+## 30. Công thức toán, hóa
+
+Có trên web và App Think Beta. Viết thẳng trong tin nhắn, bình chọn, tên kèo:
+
+| Gõ | Hiện | Ghi chú |
+|---|---|---|
+| `x^2`, `10^-3`, `e^x` | x², 10⁻³, eˣ | mũ là số (có thể có dấu trừ) hoặc **một** chữ thường |
+| `x^{n+1}`, `2^(n+1)` | xⁿ⁺¹, 2ⁿ⁺¹ | mũ dài thì để trong `{ }` hoặc `( )` |
+| `H_2O`, `x_1`, `Ca(OH)_2` | H₂O, x₁, Ca(OH)₂ | chỉ số dưới là số (1–2 chữ số) |
+| `C_{n}H_{2n+2}` | CₙH₂ₙ₊₂ | chỉ số dưới có chữ thì để trong `{ }` |
+| `Fe^3+`, `SO_4^2-`, `Na^+` | Fe³⁺, SO₄²⁻, Na⁺ | điện tích ion |
+
+- Không đổi nhầm: mặt cười `^_^`, `T_T`, `-_-`, tên file `IMG_2024.jpg`, `file_12.png`, tên đăng nhập / mật khẩu kiểu `minh_12`, `Nha_88`, email, đường link, chữ `snake_case`. Chỉ số dưới sau một từ dài chỉ đổi khi từ đó là công thức hóa học (`NaHCO_3`, `KMnO_4`) hoặc hàm toán (`log_2`). `x^2+1` vẫn là x² + 1.
+- **Bàn phím ký hiệu**: nút **＋** → **Công thức toán, hóa** mở bảng ngay trên ô nhập (bàn phím điện thoại vẫn mở), ba trang **Toán** (xⁿ, xₙ, x², √, ∛, π, ∞, ±, ×, ÷, ≠, ≈, ≤, ≥, °, ∑, ∫, Δ, ∈, ⊂, ∪, ∩, ⇒, ⇔, ½, ℝ…), **Hóa** (₂ ₃ ₄, ⁺ ⁻ ²⁺ ³⁺, →, ⇌, ↑ khí, ↓ kết tủa, t°, °C, ·…), **Hy Lạp** (α β γ δ … Ω). Phím **xⁿ** chèn `^{}` và đặt con trỏ vào giữa; bôi đen chữ rồi bấm thì bọc chữ đó lại. Dòng **Xem trước** cho thấy tin sẽ hiện thế nào.
+- Web vẽ mũ / chỉ số bằng chữ nhỏ đặt cao / thấp; app, thông báo đẩy, dòng xem trước trong danh sách chat dùng chữ số nhỏ Unicode (x², H₂O). Ký tự không có dạng nhỏ (vd π trong `e^{iπ}`) thì thông báo ghi `e^(iπ)`. **Sao chép** giữ nguyên chữ đã gõ (`x^2`), để mật khẩu, tên đăng nhập… không bị đổi.
+- Phần tách công thức dùng chung: `public/formula-core.js` (máy chủ, web; bàn phím web: `public/formula-ui.js`) và `native/src/formula/` (app), có kiểm thử so khớp hai bản.
+
 ## Cấu trúc thư mục
 
 ```
@@ -675,6 +717,9 @@ src/ai.js            Think AI: tài khoản trợ lý, gọi Gemini / dịch v�
 src/calls.js         Gọi thoại / gọi video 1-1 và gọi nhóm: mời gọi, đổ chuông, chuyển thông tin kết nối WebRTC, nhật ký
 src/turn.js          Máy chủ STUN / TURN cho cuộc gọi: TURN riêng, Metered, Cloudflare, Open Relay dùng chung
 src/stories.js       Tin 24 giờ: đăng, xem, ai đã xem, thả cảm xúc / trả lời thành tin nhắn riêng, tự xóa sau 24 giờ
+src/events.js        Kèo: tạo kèo, Đi / Có thể / Không đi, hủy kèo, nhắc trước giờ hẹn
+src/scheduled.js     Hẹn giờ gửi tin: danh sách tin chờ của từng người, đến giờ tự gửi, Gửi ngay / Hủy
+src/keep-awake.js    Render gói Free: còn tin hẹn giờ / lời nhắc kèo thì máy chủ tự giữ thức
 src/chess.js         Cờ vua: thách đấu, đồng hồ, ELO, bảng xếp hạng, API /api/chess
 src/chess-engine.js  Hàng đợi gửi việc cho máy cờ; src/chess-worker.js chạy máy cờ trong luồng riêng
 src/chess-analysis.js Đánh giá ván đã xong bằng Stockfish (xếp loại thiên tài … sai lầm nghiêm trọng, độ chính xác)

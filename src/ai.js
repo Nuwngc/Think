@@ -10,6 +10,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { get, all, run, transaction, getSetting, setSetting, searchKey, IMAGE_DIR } = require('./db');
+const { eventText } = require('./events');
 
 const BOT_USERNAME = 'think.ai';
 const BOT_NAME = 'Think AI';
@@ -273,7 +274,7 @@ async function buildTurns({ conv, triggerId, readImage }) {
   const rows = all(
     `SELECT m.id, m.sender_id, m.kind, m.text, m.image, m.deleted, u.display_name AS name
        FROM messages m JOIN users u ON u.id = m.sender_id
-      WHERE m.conversation_id = ? AND m.id <= ? AND m.kind IN ('text', 'voice', 'poll') AND m.deleted = 0
+      WHERE m.conversation_id = ? AND m.id <= ? AND m.kind IN ('text', 'voice', 'poll', 'event') AND m.deleted = 0
       ORDER BY m.id DESC LIMIT ?`,
     conv.id,
     triggerId,
@@ -286,7 +287,14 @@ async function buildTurns({ conv, triggerId, readImage }) {
     // đi từ tin mới nhất để ưu tiên ảnh gần đây
     const m = rows[i];
     const role = isBot(m.sender_id) ? 'model' : 'user';
-    let text = m.kind === 'voice' ? '[gửi một tin nhắn thoại — bạn chưa nghe được]' : m.kind === 'poll' ? `[bình chọn] ${m.text || ''}` : m.text || '';
+    let text =
+      m.kind === 'voice'
+        ? '[gửi một tin nhắn thoại — bạn chưa nghe được]'
+        : m.kind === 'poll'
+          ? `[bình chọn] ${m.text || ''}`
+          : m.kind === 'event'
+            ? eventText(m.id, m.text)
+            : m.text || '';
     const parts = [];
     if (m.image && role === 'user') {
       const img = imagesLeft > 0 && readImage ? await readImage(m.image).catch(() => null) : null;
@@ -461,7 +469,9 @@ function transcript(rows) {
         ? '[tin nhắn thoại]'
         : m.kind === 'poll'
           ? `[bình chọn] ${m.text || ''}`
-          : `${m.image ? '[ảnh] ' : ''}${String(m.text || '').replace(/\s+/g, ' ').trim()}`;
+          : m.kind === 'event'
+            ? eventText(m.id, m.text)
+            : `${m.image ? '[ảnh] ' : ''}${String(m.text || '').replace(/\s+/g, ' ').trim()}`;
     return `${t} ${m.name}: ${body}`.trim();
   });
   // Quá dài thì bỏ bớt tin cũ nhất
@@ -648,7 +658,7 @@ function setupAI(ctx) {
     const rows = all(
       `SELECT m.id, m.sender_id, m.kind, m.text, m.image, m.created_at, u.display_name AS name
          FROM messages m JOIN users u ON u.id = m.sender_id
-        WHERE m.conversation_id = ? AND m.id > ? AND m.kind IN ('text', 'voice', 'poll') AND m.deleted = 0
+        WHERE m.conversation_id = ? AND m.id > ? AND m.kind IN ('text', 'voice', 'poll', 'event') AND m.deleted = 0
         ORDER BY m.id DESC LIMIT ?`,
       conv.id,
       unread ? afterId : 0,
@@ -679,7 +689,7 @@ function setupAI(ctx) {
     const m = get('SELECT id, conversation_id, kind, text, deleted FROM messages WHERE id = ?', Number(req.body?.messageId));
     if (!m || !memberIds(m.conversation_id).includes(req.user.id)) return res.status(404).json({ error: 'Không tìm thấy tin nhắn.' });
     const text = String(m.text || '').trim();
-    if (m.deleted || !['text', 'poll'].includes(m.kind) || !text) return res.status(400).json({ error: 'Tin nhắn này không có chữ để dịch.' });
+    if (m.deleted || !['text', 'poll', 'event'].includes(m.kind) || !text) return res.status(400).json({ error: 'Tin nhắn này không có chữ để dịch.' });
     const to = LANGS[req.body?.to] ? req.body.to : looksVietnamese(text) ? 'en' : 'vi';
     const key = `${m.id}:${to}`;
     if (translations.has(key)) return res.json({ text: translations.get(key), to, cached: true });

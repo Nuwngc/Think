@@ -20,6 +20,8 @@ import type {
   PostComment,
   ProfileStats,
   Reaction,
+  RsvpStatus,
+  Scheduled,
   StoragePayload,
   StorageSettings,
   Story,
@@ -293,6 +295,16 @@ export const api = {
     request<{ message: Message }>(`/api/conversations/${convId}/polls`, { method: "POST", body }),
   vote: (messageId: number, options: number[]) => request<{ message: Message }>(`/api/messages/${messageId}/vote`, { method: "POST", body: { options } }),
   closePoll: (messageId: number) => request<{ message: Message }>(`/api/messages/${messageId}/poll/close`, { method: "POST", body: {} }),
+  // Kèo, hẹn giờ gửi tin (2.16.0)
+  createEvent: (convId: number, body: { title: string; place: string; startsAt: number }) =>
+    request<{ message: Message }>(`/api/conversations/${convId}/events`, { method: "POST", body }),
+  rsvp: (messageId: number, status: RsvpStatus | null) => request<{ message: Message }>(`/api/messages/${messageId}/rsvp`, { method: "POST", body: { status } }),
+  cancelEvent: (messageId: number) => request<{ message: Message }>(`/api/messages/${messageId}/event/cancel`, { method: "POST", body: {} }),
+  scheduled: () => request<{ scheduled: Scheduled[] }>("/api/scheduled"),
+  schedule: (convId: number, body: { text: string; sendAt: number; mentions: number[] }) =>
+    request<{ scheduled: Scheduled[]; item: Scheduled | null }>(`/api/conversations/${convId}/scheduled`, { method: "POST", body }),
+  cancelScheduled: (id: number) => request<{ scheduled: Scheduled[] }>(`/api/scheduled/${id}`, { method: "DELETE" }),
+  sendScheduled: (id: number) => request<{ scheduled: Scheduled[]; message: Message }>(`/api/scheduled/${id}/send`, { method: "POST", body: {} }),
   media: (convId: number, before?: number) =>
     request<{ images: { id: number; senderId: number; image: string; createdAt: number }[]; hasMore: boolean }>(
       `/api/conversations/${convId}/media${before ? `?before=${before}` : ""}`,

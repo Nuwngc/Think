@@ -1,5 +1,5 @@
 /* Service worker: lưu giao diện để mở nhanh + hiện thông báo đẩy kể cả khi đã đóng app */
-const CACHE = 'think-v24';
+const CACHE = 'think-v25';
 // Ảnh trong tin nhắn và ảnh đại diện đã xem được giữ lại trên máy (tên file không bao giờ đổi),
 // nên vẫn hiện được khi mất mạng hoặc khi máy chủ đã dọn ảnh cũ. Tắt "Lưu trên máy" thì không giữ nữa.
 const MEDIA = 'think-media';
@@ -16,6 +16,10 @@ const SHELL = [
   '/voice-ui.js',
   '/calls-ui.js',
   '/stories-ui.js',
+  '/formula-core.js',
+  '/formula-ui.js',
+  '/plans-core.js',
+  '/plans-ui.js',
   '/games-ui.js',
   // Chuỗi hằng ngày của mọi game
   '/streaks.js',

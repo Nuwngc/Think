@@ -36,6 +36,7 @@ import { convTitle, previewText, type Names } from "./format";
 import type { PreparedImage } from "./images";
 import { bindSocial, closeUser, onSocialEvent, refreshSocial, resetSocial } from "./social/store";
 import { bindStories, loadStories, onStoryEvent, resetStories } from "./stories/store";
+import { bindPlans, loadScheduled, onScheduledEvent, resetPlans } from "./plans/store";
 import { offerSummary, resetAiHelp } from "./ai/help";
 import {
   isPending,
@@ -353,6 +354,7 @@ async function enterApp() {
   loadStreaks(); // chuỗi hằng ngày (gửi luôn ngày chơi lúc mất mạng)
   loadPuzzles(); // câu đố: sao, quiz hôm nay (gửi luôn kết quả giải lúc mất mạng)
   loadStories(); // tin 24 giờ
+  loadScheduled(); // tin hẹn giờ đang chờ gửi
   setupPush().catch(() => undefined);
 }
 
@@ -399,6 +401,7 @@ function resetAll(notice: string | null) {
   resetPuzzles();
   resetSocial();
   resetStories();
+  resetPlans();
   resetAiHelp();
   resetBlocksBoard();
   set({ ...initial, phase: "login", notice, appActive: get().appActive, update: get().update });
@@ -469,6 +472,7 @@ async function resync() {
     loadPuzzles();
     refreshSocial();
     loadStories();
+    loadScheduled();
     syncBlocks();
     const current = get().currentId;
     if (current != null) {
@@ -1420,6 +1424,7 @@ function connectSocket() {
     s.on(name, (data) => onStoryEvent(name, data));
   }
   s.on("ai:status", (data) => set({ aiReady: Boolean(data?.ready) }));
+  s.on("scheduled:changed", onScheduledEvent); // hẹn giờ gửi tin (2.16.0)
 }
 
 export function reportVisibility() {
@@ -1667,6 +1672,17 @@ bindPuzzles({
 
 bindStories({
   meId: () => get().me?.id ?? 0,
+});
+
+bindPlans({
+  meId: () => get().me?.id ?? 0,
+  current: (convId, id) => get().msgs[convId]?.list.find((x): x is Message => !isPending(x) && x.id === id),
+  receive: (m) => {
+    receive(m);
+    if (get().currentId === m.conversationId) set({ atBottom: true });
+  },
+  updated: (m) => onMessageUpdated({ message: m }),
+  toast: (text) => showToast(text),
 });
 
 bindSocial({

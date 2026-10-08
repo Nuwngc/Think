@@ -1886,3 +1886,84 @@ button.story-thumb:focus-visible { outline: 2px solid var(--jade); outline-offse
 .room-edit-row .ic { width: 16px; height: 16px; }
 .room-name-form { display: flex; align-items: center; gap: 8px; width: min(100%, 420px); margin-top: 10px; }
 .room-name-input { flex: 1; min-width: 0; }
+
+/* ----- Công thức toán, hóa (2.16.0, public/formula-ui.js): x^2 → x², H_2O → H₂O ----- */
+.fx { font-size: .72em; line-height: 0; position: relative; }
+sup.fx { vertical-align: baseline; top: -.48em; }
+sub.fx { vertical-align: baseline; top: .26em; }
+.fx-pad { border-top: 1px solid var(--line); background: var(--surface); padding: 6px 8px 2px; }
+.fx-pad[hidden] { display: none; }
+.fx-head { display: flex; align-items: center; gap: 6px; }
+.fx-tabs { display: flex; gap: 4px; flex: 1; min-width: 0; }
+.fx-tab { padding: 6px 13px; border-radius: 999px; font-size: 13.5px; font-weight: 700; color: var(--ink-2); }
+.fx-tab.is-on { background: var(--jade-wash); color: var(--jade-ink); }
+.fx-close .ic { width: 18px; height: 18px; }
+.fx-preview { display: flex; gap: 8px; align-items: baseline; padding: 2px 4px 6px; min-height: 26px; font-size: 14px; color: var(--ink); }
+.fx-preview-label { flex: none; font-size: 12px; font-weight: 700; color: var(--muted); }
+.fx-preview-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 5px; max-height: 142px; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 6px; }
+.fx-key { height: 40px; border-radius: 10px; background: var(--field); color: var(--ink); font-family: 'Cambria Math', 'STIX Two Math', 'Noto Serif', Georgia, serif; font-size: 18px; line-height: 1; }
+.fx-key.is-wide { background: var(--jade-wash); color: var(--jade-ink); font-weight: 700; }
+.fx-key:active { transform: scale(.94); background: color-mix(in srgb, var(--field), var(--ink) 10%); }
+@media (hover: hover) { .fx-key:hover { background: color-mix(in srgb, var(--field), var(--ink) 6%); } }
+
+/* ----- Kèo (2.16.0, public/plans-ui.js): ô lịch, giờ, địa điểm, Đi / Có thể / Không đi ----- */
+.bubble.keo { width: min(312px, 76vw); padding: 12px; display: grid; gap: 10px; white-space: normal; background: var(--theirs) !important; color: var(--ink) !important; box-shadow: inset 0 0 0 1px var(--theirs-line) !important; }
+.keo-top { display: flex; gap: 12px; align-items: flex-start; }
+.keo-date { flex: none; width: 52px; display: grid; text-align: center; border-radius: 12px; overflow: hidden; background: var(--turmeric-wash); color: var(--turmeric-ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--turmeric), transparent 50%); }
+.keo-wd { padding: 2px 0; background: var(--turmeric); color: #3A2A00; font-size: 11.5px; font-weight: 800; }
+.keo-day { padding-top: 3px; font-size: 22px; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.keo-mon { padding-bottom: 4px; font-size: 11px; font-weight: 700; }
+.keo-main { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.keo-title { font-size: 16px; font-weight: 800; line-height: 1.3; overflow-wrap: anywhere; }
+.keo-when, .keo-place { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; font-size: 13px; line-height: 1.35; color: var(--ink-2); }
+.keo-when .ic, .keo-place .ic { width: 14px; height: 14px; flex: none; color: var(--muted); }
+.keo-place span { overflow-wrap: anywhere; }
+.keo-status { color: var(--muted); }
+.keo-status::before { content: '·'; margin-right: 5px; }
+.keo-status.is-soon { color: var(--turmeric-ink); font-weight: 700; }
+.keo-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.keo-btn { min-height: 38px; padding: 6px 4px; display: flex; align-items: center; justify-content: center; gap: 4px; border-radius: 12px; background: var(--field); color: var(--ink); font-size: 13.5px; font-weight: 700; }
+.keo-btn b { font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; }
+.keo-btn .ic { width: 15px; height: 15px; stroke-width: 2.6; }
+.keo-btn.is-on { background: var(--mine-a, var(--jade)); color: #fff; }
+.keo-btn.is-maybe.is-on { background: var(--turmeric); color: #3A2A00; }
+.keo-btn.is-no.is-on { background: var(--ink-2); color: var(--surface); }
+.keo-btn.is-on b { color: inherit; opacity: .85; }
+.keo-btn:disabled { opacity: .6; }
+.keo-who { display: flex; align-items: center; gap: 8px; text-align: left; font-size: 12.5px; color: var(--ink-2); }
+.keo-faces { display: flex; padding-left: 6px; }
+.keo-faces:empty { display: none; }
+.keo-faces .avatar { margin-left: -6px; box-shadow: 0 0 0 2px var(--theirs); }
+.keo-cancel { justify-self: start; padding: 2px 0; font-size: 12.5px; font-weight: 700; color: var(--danger); }
+.keo.is-canceled .keo-title { text-decoration: line-through; color: var(--muted); }
+.keo.is-canceled .keo-date, .keo.is-past .keo-date { filter: grayscale(1); opacity: .65; }
+.keo.is-canceled .keo-status { color: var(--danger); font-weight: 700; }
+.keo-people-head { padding: 8px 10px 2px; font-size: 12px; font-weight: 800; color: var(--muted); }
+
+/* Chọn giờ (kèo, hẹn giờ gửi): nút giờ nhanh + ô ngày giờ */
+.when { display: grid; gap: 8px; }
+.when-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 1px 1px 2px; }
+.when-chips::-webkit-scrollbar { display: none; }
+.when-chip { flex: none; display: grid; gap: 1px; padding: 8px 12px; border-radius: 12px; text-align: left; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.when-chip strong { font-size: 13.5px; }
+.when-chip span { font-size: 11.5px; color: var(--muted); }
+.when-chip.is-on { background: var(--jade-wash); box-shadow: inset 0 0 0 1.5px var(--jade-ink); }
+.when-chip.is-on strong { color: var(--jade-ink); }
+.when-input { font-variant-numeric: tabular-nums; }
+.when-hint { min-height: 1.3em; color: var(--jade-ink); font-weight: 600; font-size: 13px; }
+
+/* Hẹn giờ gửi tin: thanh trên ô nhập + danh sách tin đang chờ */
+.sched-bar[hidden] { display: none; }
+.sched-bar { border-bottom: 1px solid var(--line); }
+.sched-bar-main { width: 100%; display: flex; align-items: center; gap: 10px; padding: 7px 14px; text-align: left; color: var(--ink); }
+.sched-bar-main > .ic { width: 20px; height: 20px; flex: none; color: var(--jade-ink); }
+.sched-bar-text { flex: 1; min-width: 0; display: flex; gap: 6px; font-size: 13px; white-space: nowrap; overflow: hidden; }
+.sched-bar-text span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.sched-bar-see { font-size: 13px; font-weight: 800; color: var(--jade-ink); }
+.sched-list { display: grid; gap: 10px; }
+.sched-row { display: grid; gap: 6px; padding: 12px; border-radius: 14px; background: var(--field); }
+.sched-when { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--jade-ink); }
+.sched-when .ic { width: 15px; height: 15px; flex: none; }
+.sched-text { max-height: 7.2em; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.4; }
+.sched-actions { display: flex; justify-content: flex-end; gap: 8px; }

@@ -83,6 +83,11 @@
       forwarded: Boolean(m.forwarded),
       mentions: Array.isArray(m.mentions) && m.mentions.length ? m.mentions : undefined,
       poll: m.poll || undefined,
+      // Tin nhắn thoại (2.5.0), trả lời tin 24 giờ (2.13.0), kèo (2.16.0)
+      audio: m.kind === 'voice' ? m.audio ?? null : undefined,
+      audioPurged: m.audioPurged ? true : undefined,
+      story: m.story || undefined,
+      event: m.event || undefined,
     };
   }
 

@@ -12,6 +12,9 @@ import type { ChatTheme } from "../chatThemes";
 import { closePoll, openChess, showToast, useStore, votePoll } from "../store";
 import { StoryRefCard } from "../stories/StoryRefCard";
 import { TranslationBox } from "../ai/TranslationBox";
+import { Fx } from "../formula/FormulaText";
+import { toUnicode } from "../formula/core";
+import { EventCard } from "../plans/EventCard";
 import { useColors, type Colors } from "../theme";
 import type { ChatItem, Conversation, Message, User } from "../types";
 import { Avatar, Icon, useStyles } from "../ui";
@@ -71,7 +74,13 @@ export const MessageRow = memo(function MessageRow(p: MessageRowProps) {
           delayLongPress={300}
           accessibilityHint={pending ? undefined : "Chạm giữ để trả lời, bày tỏ cảm xúc hoặc thu hồi"}
         >
-          {m.kind === "poll" && !m.deleted && !pending ? <PollCard {...p} mine={mine} /> : <Bubble {...p} mine={mine} />}
+          {m.kind === "poll" && !m.deleted && !pending ? (
+            <PollCard {...p} mine={mine} />
+          ) : m.kind === "event" && !m.deleted && !pending ? (
+            <EventCard m={m} meId={meId} accent={p.theme?.a || c.jade} nameOf={p.names.nameOf} />
+          ) : (
+            <Bubble {...p} mine={mine} />
+          )}
         </Pressable>
         {!pending && !m.deleted ? <TranslationBox messageId={m.id as number} /> : null}
         {!m.deleted && m.reactions?.length ? (
@@ -127,7 +136,9 @@ function PollCard(p: MessageRowProps & { mine: boolean }) {
     <View style={[s.poll, { backgroundColor: c.theirs, borderColor: c.line }]}>
       <View style={s.pollHead}>
         <Icon name="poll" size={18} color={accent} />
-        <Text style={[s.pollQ, { color: c.text }]}>{m.text}</Text>
+        <Text style={[s.pollQ, { color: c.text }]}>
+          <Fx text={m.text || ""} size={15.5} color={c.text} />
+        </Text>
       </View>
       <Text style={s.pollSub}>{poll.closed ? "Bình chọn đã kết thúc" : poll.multi ? "Chọn một hoặc nhiều đáp án" : "Chọn một đáp án"}</Text>
       {poll.options.map((o, i) => {
@@ -148,7 +159,9 @@ function PollCard(p: MessageRowProps & { mine: boolean }) {
             <View style={[s.pollMark, { borderRadius: poll.multi ? 6 : 10, borderColor: on ? accent : c.muted, backgroundColor: on ? accent : "transparent" }]}>
               {on ? <Icon name="check" size={13} color="#fff" /> : null}
             </View>
-            <Text style={[s.pollText, { color: c.text, fontWeight: poll.closed && n === max && n > 0 ? "800" : "500" }]}>{o.text}</Text>
+            <Text style={[s.pollText, { color: c.text, fontWeight: poll.closed && n === max && n > 0 ? "800" : "500" }]}>
+              <Fx text={o.text} size={14.5} color={c.text} />
+            </Text>
             <View style={s.pollVoters}>
               {o.votes.slice(0, 3).map((uid) => (
                 <View key={uid} style={s.pollVoter}>
@@ -252,7 +265,7 @@ function Bubble(p: MessageRowProps & { mine: boolean }) {
                     {x.text}
                   </Text>
                 ) : (
-                  x.text
+                  <Fx key={`${i}-${k}`} text={x.text} size={15.5} color={fg} />
                 ),
               )
             ),
@@ -296,7 +309,7 @@ function Quote(p: MessageRowProps & { mine: boolean }) {
     ? "Tin nhắn cũ đã được dọn khỏi máy chủ"
     : r.deleted
       ? "Tin nhắn đã được thu hồi"
-      : r.text || (r.audio ? voiceLabel() : r.image ? "📷 Ảnh" : "");
+      : toUnicode(r.text) || (r.audio ? voiceLabel() : r.image ? "📷 Ảnh" : "");
   return (
     <Pressable
       onPress={() => r.id && !r.missing && p.onPressQuote(r.id)}
