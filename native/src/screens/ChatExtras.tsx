@@ -165,7 +165,7 @@ export function ChatSearch({ conv, onClose, onPick }: { conv: Conversation; onCl
                   {dayLabel(m.createdAt)} {hm(m.createdAt)}
                 </Text>
               </View>
-              <Highlighted text={m.kind === "poll" ? `📊 ${m.text || ""}` : m.text || ""} q={q} />
+              <Highlighted text={m.kind === "poll" ? `📊 ${m.text || ""}` : m.kind === "event" ? `📅 ${m.text || ""}` : m.text || ""} q={q} />
             </View>
           </Pressable>
         )}

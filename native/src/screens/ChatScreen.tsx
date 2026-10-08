@@ -17,6 +17,8 @@ import { useShallow } from "zustand/react/shallow";
 import { emojiOf, themeOf } from "../chatThemes";
 import { joinGroupCall, startCall, useCall } from "../calls/engine";
 import { callInfoOf, chessShareOf, convTitle, dayKey, dayLabel, lastSeenText, REACTIONS, systemText } from "../format";
+import { FormulaPad } from "../formula/FormulaPad";
+import { insert as fxInsert } from "../formula/core";
 import { forgetPick, pickImages, prepareImage, rememberPick } from "../images";
 import { isPending } from "../messages";
 import {
@@ -31,6 +33,7 @@ import {
   emitTyping,
   loadMessages,
   lockConversationNow,
+  mentionsIn,
   namesOf,
   react,
   recall,
@@ -55,6 +58,9 @@ import { ConvSettingsSheet } from "./ConvSettingsSheet";
 import { GroupInfoSheet } from "./GroupInfoSheet";
 import { ImageViewer } from "./ImageViewer";
 import { MessageRow } from "./MessageItem";
+import { EventSheet, ScheduleSheet, ScheduledBar, ScheduledSheet } from "../plans/Sheets";
+import { cancelEvent } from "../plans/store";
+import { whenText } from "../plans/core";
 import { voiceLabel } from "../voice/core";
 import { releaseVoice } from "../voice/player";
 import { VoiceRecorder } from "../voice/ui";
@@ -162,6 +168,14 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinsOpen, setPinsOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
+  // Kèo, hẹn giờ gửi tin, bàn phím công thức (2.16.0)
+  const [eventOpen, setEventOpen] = useState(false);
+  const [scheduleFor, setScheduleFor] = useState<{ text: string; mentions: number[] } | null>(null);
+  const [scheduledOpen, setScheduledOpen] = useState(false);
+  const [padOpen, setPadOpen] = useState(false);
+  const selRef = useRef<{ start: number; end: number } | null>(null);
+  const caretTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => setPadOpen(false), [convId]);
   const [forwardFor, setForwardFor] = useState<Message | null>(null);
   // Nhảy tới một tin chưa tải (từ tìm kiếm / tin ghim): tải dần tin cũ hơn cho tới khi thấy
   const [jumpTarget, setJumpTarget] = useState<{ id: number; tries: number } | null>(null);
@@ -219,6 +233,18 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
       lastTyping.current = now;
       emitTyping(convId);
     }
+  };
+
+  // Bàn phím công thức: chèn ký hiệu vào chỗ con trỏ, giữ bàn phím điện thoại mở
+  const insertSymbol = (ins: string) => {
+    const sel = caret != null ? { start: caret, end: caret } : selRef.current || { start: draft.length, end: draft.length };
+    const r = fxInsert(draft, sel.start, sel.end, ins);
+    setDraft(convId, r.value);
+    selRef.current = { start: r.caret, end: r.caret };
+    setCaret(r.caret);
+    if (caretTimer.current) clearTimeout(caretTimer.current);
+    caretTimer.current = setTimeout(() => setCaret(null), 600);
+    inputRef.current?.focus();
   };
 
   const send = () => {
@@ -475,6 +501,8 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
         </View>
       ) : null}
 
+      <ScheduledBar convId={convId} onPress={() => setScheduledOpen(true)} />
+
       {editing ? (
         <View style={[s.replyBar, { borderTopColor: c.line }]}>
           <View style={[s.replyAccent, { backgroundColor: c.accent }]} />
@@ -511,9 +539,10 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
           caretToEnd(next);
         }}
       />
+      {padOpen && !recording ? <FormulaPad value={draft} onKey={insertSymbol} onClose={() => setPadOpen(false)} /> : null}
       <Composer>
         {recording ? null : (
-          <IconButton name="add-circle-outline" label="Thêm: ảnh, bình chọn" color={theme.a} onPress={() => setAttachOpen(true)} disabled={offline} />
+          <IconButton name="add-circle-outline" label="Thêm: ảnh, bình chọn, kèo, hẹn giờ, công thức" color={theme.a} onPress={() => setAttachOpen(true)} disabled={offline} />
         )}
         {/* Tin nhắn thoại (khung chat nổi không ghi âm: hỏi quyền micro trên ứng dụng khác dễ bị máy chặn) */}
         {bubble ? null : <VoiceRecorder convId={convId} accent={theme.a} disabled={offline || Boolean(editing)} onActive={setRecording} />}
@@ -528,6 +557,9 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
           maxLength={4000}
           editable={!offline}
           selection={caret != null ? { start: caret, end: caret } : undefined}
+          onSelectionChange={(e) => {
+            selRef.current = e.nativeEvent.selection;
+          }}
           accessibilityLabel="Nhập tin nhắn"
         />
         {recording ? null : draft.trim() || editing ? (
@@ -596,7 +628,7 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
                 }}
               />
             ) : null}
-            {menuFor.kind !== "poll" ? (
+            {menuFor.kind !== "poll" && menuFor.kind !== "event" ? (
               <SheetItem
                 icon="forward"
                 label="Chuyển tiếp"
@@ -624,6 +656,23 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
                   const m = menuFor;
                   setMenuFor(null);
                   closePoll(m);
+                }}
+              />
+            ) : null}
+            {menuFor.kind === "event" &&
+            menuFor.event &&
+            !menuFor.event.canceled &&
+            menuFor.event.startsAt > Date.now() &&
+            (menuFor.senderId === meId || me?.role === "admin") ? (
+              <SheetItem
+                icon="event-busy"
+                label="Hủy kèo"
+                danger
+                hint="Ai đã chọn Đi / Có thể sẽ được báo"
+                onPress={async () => {
+                  const m = menuFor;
+                  setMenuFor(null);
+                  if (await confirm("Hủy kèo?", `Những ai đã chọn Đi / Có thể sẽ nhận được thông báo kèo “${m.text}” bị hủy.`, "Hủy kèo")) cancelEvent(m);
                 }}
               />
             ) : null}
@@ -739,6 +788,35 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
             setTimeout(() => setPollOpen(true), 250);
           }}
         />
+        <SheetItem
+          icon="event"
+          label="Tạo kèo"
+          hint="Hẹn mọi người đi đâu đó; ai đi bấm Đi, Think nhắc trước giờ"
+          onPress={() => {
+            setAttachOpen(false);
+            setTimeout(() => setEventOpen(true), 250);
+          }}
+        />
+        <SheetItem
+          icon="schedule-send"
+          label="Hẹn giờ gửi tin"
+          hint="Viết trước, đến giờ Think tự gửi"
+          onPress={() => {
+            setAttachOpen(false);
+            const t = editing ? "" : draft.trim(); // đang sửa tin thì không lấy chữ đang sửa
+            setTimeout(() => setScheduleFor({ text: t, mentions: t ? mentionsIn(convId, t) : [] }), 250);
+          }}
+        />
+        <SheetItem
+          icon="functions"
+          label="Công thức toán, hóa"
+          hint="x², H₂O, √, π, →, ⇌… Gõ x^2 hay H_2O cũng được"
+          onPress={() => {
+            setAttachOpen(false);
+            setPadOpen(true);
+            setTimeout(() => inputRef.current?.focus(), 300);
+          }}
+        />
       </Sheet>
 
       <ImageViewer item={viewer} onClose={() => setViewer(null)} />
@@ -756,6 +834,20 @@ export function ChatScreen({ convId, bubble }: { convId: number; bubble?: Bubble
       />
       <PinsSheet conv={conv} visible={pinsOpen} onClose={() => setPinsOpen(false)} onJump={jumpTo} />
       <PollSheet convId={convId} visible={pollOpen} onClose={() => setPollOpen(false)} />
+      <EventSheet convId={convId} visible={eventOpen} onClose={() => setEventOpen(false)} />
+      <ScheduleSheet
+        convId={convId}
+        visible={Boolean(scheduleFor)}
+        prefill={scheduleFor?.text || ""}
+        mentions={scheduleFor?.mentions || []}
+        onClose={() => setScheduleFor(null)}
+        onScheduled={(t, at) => {
+          // Tin lấy từ ô nhập: hẹn xong thì xóa khỏi ô nhập
+          if (t && useStore.getState().drafts[convId]?.trim() === t) setDraft(convId, "");
+          showToast(`Đã hẹn gửi lúc ${whenText(at)}.`);
+        }}
+      />
+      <ScheduledSheet convId={convId} visible={scheduledOpen} onClose={() => setScheduledOpen(false)} />
       <ForwardSheet message={forwardFor} onClose={() => setForwardFor(null)} />
       {conv.type === "dm" ? <ChallengeSheet visible={chessOpen} onClose={() => setChessOpen(false)} opponentId={conv.peerId} /> : null}
     </KeyboardAware>

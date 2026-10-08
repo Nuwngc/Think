@@ -288,8 +288,17 @@
       case 'avatar': return d.removed ? `${actor} đã xóa ảnh nhóm` : `${actor} đã đổi ảnh nhóm`;
       case 'call': return callText(d, m);
       case 'gcall': return groupCallText(d, m);
+      case 'keo-cancel': return `${actor} đã hủy kèo “${d.title || ''}”`;
+      case 'keo-remind': return keoRemindText(d, m);
       default: return 'Cuộc trò chuyện vừa được cập nhật';
     }
+  }
+
+  // Kèo (2.16.0): dòng nhắc trước giờ hẹn "⏰ Còn 1 tiếng là tới kèo “Đi ăn lẩu” (20:00)"
+  function keoRemindText(d, m) {
+    const mins = Math.max(1, Math.round(((d.startsAt || 0) - m.createdAt) / 60000));
+    const left = mins < 60 ? `${mins} phút` : `${Math.floor(mins / 60)} tiếng${mins % 60 ? ` ${mins % 60} phút` : ''}`;
+    return `⏰ Còn ${left} là tới kèo “${d.title || ''}” (${hm(d.startsAt || 0)})`;
   }
 
   // Cuộc gọi (2.10.0): "📞 Cuộc gọi thoại · 2:31", "📹 Bạn đã lỡ cuộc gọi video từ An"...
@@ -439,6 +448,35 @@
       })
     : null;
 
+  // Công thức toán, hóa (2.16.0, public/formula-ui.js): x^2 → x², H_2O → H₂O
+  const formula = window.ThinkFormula || null;
+  const fx = (text) => (formula ? formula.nodes(String(text || '')) : [String(text || '')]);
+  const uni = (text) => (formula ? formula.toUnicode(String(text || '')) : String(text || ''));
+
+  // Kèo, hẹn giờ gửi tin (2.16.0, public/plans-ui.js, máy chủ src/events.js, src/scheduled.js)
+  const plans = window.ThinkPlans && window.PlansCore
+    ? window.ThinkPlans.create({
+        api, h, icon, avatarEl, userOf, nameOf, state, toast, withBusy, setFormError, placeMenu,
+        navigate: (hash) => navigate(hash),
+        goBack: () => goBack(),
+        receive: (m) => receive(m),
+        renderMessages: (opts) => { if (state.currentId != null) renderMessages(opts); },
+        renderConvList: () => renderConvList(),
+        onMessageUpdated: (data) => onMessageUpdated(data),
+        formulaNodes: fx,
+        currentSheet: () => currentSheet,
+        // Tin vừa hẹn giờ lấy từ ô nhập: xóa khỏi ô nhập
+        clearDraft: (convId, text) => {
+          if (state.currentId === convId && input.value.trim() === text) {
+            input.value = '';
+            state.drafts.delete(convId);
+            state.mentionPicks.delete(convId);
+            syncComposer();
+          }
+        },
+      })
+    : null;
+
   function showLogin(message) {
     teardown();
     showScreen('view-login');
@@ -464,6 +502,7 @@
     translations.clear();
     Object.assign(aiSum, { offer: null, convId: null, busy: false, text: '', error: '', meta: '' });
     if (stories) stories.reset();
+    if (plans) plans.reset();
     if (state.socket) {
       state.socket.removeAllListeners();
       state.socket.disconnect();
@@ -559,9 +598,13 @@
       navigate('#/', { replace: true });
       return;
     }
-    const sheet = { '#/new': 'new', '#/new-group': 'new-group', '#/group': 'group', '#/conv': 'conv', '#/forward': 'forward', '#/poll': 'poll', '#/pins': 'pins', '#/media': 'media' }[hash] || null;
+    const sheet = {
+      '#/new': 'new', '#/new-group': 'new-group', '#/group': 'group', '#/conv': 'conv', '#/forward': 'forward', '#/poll': 'poll', '#/pins': 'pins', '#/media': 'media',
+      '#/event': 'event', '#/schedule': 'schedule', '#/scheduled': 'scheduled',
+    }[hash] || null;
     // Các bảng của một cuộc trò chuyện cần đang mở cuộc trò chuyện đó
-    if (['conv', 'forward', 'poll', 'pins', 'media'].includes(sheet) && (state.currentId == null || (sheet === 'forward' && !chatPlus.forward))) {
+    const planSheet = ['event', 'schedule', 'scheduled'].includes(sheet);
+    if ((['conv', 'forward', 'poll', 'pins', 'media'].includes(sheet) || planSheet) && (state.currentId == null || (sheet === 'forward' && !chatPlus.forward) || (planSheet && !plans))) {
       navigate(state.currentId != null ? `#/c/${state.currentId}` : '#/', { replace: true });
       return;
     }
@@ -588,7 +631,13 @@
     if (caro) caro.route(tab === 'games' && gamesView === 'caro', !caroPage ? null : caroPage[1] ? 'bot' : caroPage[2] ? Number(caroPage[2]) : null);
     // Câu đố mở sau cùng (cột phải): các phần khác đã đóng cột của mình xong
     if (puzzles) puzzles.route(tab === 'games' && gamesView === 'puzzle' ? puzzleTarget : null);
+    const sheetBefore = currentSheet;
     showSheet(sheet);
+    if (plans && sheet !== sheetBefore) {
+      if (sheet === 'event') plans.renderEventForm();
+      if (sheet === 'schedule') plans.renderScheduleForm();
+      if (sheet === 'scheduled') plans.renderScheduledSheet();
+    }
     if (sheet === 'conv') renderConvSheet();
     if (sheet === 'forward') renderForward();
     if (sheet === 'poll') renderPollForm();
@@ -711,13 +760,14 @@
   function messageSummary(m) {
     if (m.kind === 'system') return systemText(m);
     if (m.deleted) return 'Tin nhắn đã được thu hồi';
-    if (m.kind === 'poll') return `📊 ${oneLine(m.text)}`;
+    if (m.kind === 'poll') return `📊 ${uni(oneLine(m.text))}`;
+    if (m.kind === 'event') return `📅 Kèo: ${uni(oneLine(m.text))}${m.event && m.event.canceled ? ' (đã hủy)' : ''}`;
     if (m.kind === 'voice') return voiceLabel(m);
     const hasImage = Boolean(m.image || m.localUrl);
     if (hasImage && !m.text) return 'Đã gửi một ảnh';
     const shared = !hasImage && m.text ? chessShareOf(m.text) : null;
     if (shared) return `♟ ${shared.title}`;
-    return `${hasImage ? '📷 ' : ''}${String(m.text || '').replace(/\s+/g, ' ')}`;
+    return `${hasImage ? '📷 ' : ''}${uni(String(m.text || '').replace(/\s+/g, ' '))}`;
   }
   function previewText(m, c) {
     if (m.kind === 'system') return systemText(m);
@@ -794,6 +844,11 @@
      ========================================================= */
   const messagesEl = $('#messages');
   const input = $('#composer-input');
+  // Bàn phím ký hiệu toán, hóa (2.16.0) ngay trên ô nhập; mở từ nút ＋ → Công thức toán, hóa
+  const fxPad = formula
+    ? formula.createPad({ input, h, icon, onChange: () => input.dispatchEvent(new Event('input', { bubbles: true })) })
+    : null;
+  if (fxPad) $('#composer').before(fxPad.el);
 
   function box(id) {
     let b = state.msgs.get(id);
@@ -1035,6 +1090,8 @@
       hideMentions();
       renderPinBar();
       loadPins(id);
+      if (plans) plans.renderBar();
+      if (fxPad) fxPad.close();
       $('#jump-btn').hidden = true;
       clearNotifications(id);
     }
@@ -1274,7 +1331,7 @@
     if (isPinned(m)) tags.push(h('span', null, icon('pin'), 'Đã ghim'));
     if (tags.length) col.append(h('span', { class: 'msg-tags' }, tags));
     if (m.story && !m.deleted && stories) col.append(stories.refEl(m)); // trả lời / thả cảm xúc một tin 24 giờ
-    col.append(m.kind === 'poll' && !m.deleted ? pollEl(m) : bubbleEl(m));
+    col.append(m.kind === 'poll' && !m.deleted ? pollEl(m) : m.kind === 'event' && !m.deleted && plans ? plans.eventEl(m) : bubbleEl(m));
     const trans = m.id && translations.size ? translationEl(m) : null; // bản dịch của Think AI
     if (trans) col.append(trans);
     const reacts = reactionsEl(m);
@@ -1309,7 +1366,7 @@
     else if (purged) b.append(goneImageEl(true));
     const shared = m.text ? chessShareOf(m.text) : null;
     if (shared) b.append(chessShareCard(shared));
-    else if (m.text) b.append(h('span', { class: 'bubble-text' }, withMentions(linkify(m.text), m.mentions)));
+    else if (m.text) b.append(h('span', { class: 'bubble-text' }, formula ? formula.within(withMentions(linkify(m.text), m.mentions)) : withMentions(linkify(m.text), m.mentions)));
     return b;
   }
 
@@ -1323,7 +1380,7 @@
         : { ...r, text: 'Tin nhắn cũ đã được dọn khỏi máy chủ', gone: true };
     }
     const who = r.senderId == null ? 'Tin nhắn cũ' : r.senderId === state.me.id ? 'Bạn' : nameOf(r.senderId);
-    const text = r.deleted ? 'Tin nhắn đã được thu hồi' : r.text || (r.audio ? '🎤 Tin nhắn thoại' : r.image ? '📷 Ảnh' : '');
+    const text = r.deleted ? 'Tin nhắn đã được thu hồi' : uni(r.text) || (r.audio ? '🎤 Tin nhắn thoại' : r.image ? '📷 Ảnh' : '');
     return h('button', { class: `quote${r.deleted || r.gone ? ' is-gone' : ''}`, type: 'button', dataset: { reply: r.id }, 'aria-label': `Xem tin nhắn gốc của ${who}` },
       h('span', { class: 'quote-name', text: who }),
       h('span', { class: 'quote-text', text }));
@@ -1545,14 +1602,17 @@
       })));
     const items = [{ label: 'Trả lời', run: () => startReply(m) }];
     const mineMsg = m.senderId === state.me.id;
-    if (mineMsg && m.kind !== 'poll' && m.text != null && !chessShareOf(m.text || '')) items.push({ label: 'Sửa', run: () => startEdit(m) });
+    if (mineMsg && m.kind !== 'poll' && m.kind !== 'event' && m.text != null && !chessShareOf(m.text || '')) items.push({ label: 'Sửa', run: () => startEdit(m) });
     if (m.text && m.kind !== 'poll') items.push({ label: 'Sao chép', run: () => copyText(m.text).then(() => toast('Đã sao chép tin nhắn.'), () => toast('Không sao chép được.')) });
     if (m.id && m.text && m.kind === 'text' && !chessShareOf(m.text) && !(m.story && m.story.reaction) && aiUsable(state.convs.get(m.conversationId))) {
       items.push({ label: translations.get(m.id)?.text ? 'Ẩn bản dịch' : 'Dịch (Think AI)', run: () => (translations.get(m.id)?.text ? (translations.delete(m.id), renderMessages({ preserve: true })) : translateMsg(m)) });
     }
-    if (m.kind !== 'poll') items.push({ label: 'Chuyển tiếp', run: () => openForward(m) });
+    if (m.kind !== 'poll' && m.kind !== 'event') items.push({ label: 'Chuyển tiếp', run: () => openForward(m) });
     items.push(isPinned(m) ? { label: 'Bỏ ghim', run: () => pinMessage(m, false) } : { label: 'Ghim', run: () => pinMessage(m, true) });
     if (m.kind === 'poll' && mineMsg && m.poll && !m.poll.closed) items.push({ label: 'Kết thúc bình chọn', run: () => closePoll(m) });
+    if (m.kind === 'event' && plans && m.event && !m.event.canceled && m.event.startsAt > Date.now() && (mineMsg || state.me.role === 'admin')) {
+      items.push({ label: 'Hủy kèo', danger: true, run: () => plans.cancelEvent(m) });
+    }
     if (m.image || m.localUrl) {
       items.push({ label: 'Xem ảnh', run: () => openLightbox(m.localUrl || m.image) });
       items.push({ label: 'Tải ảnh về máy', run: () => downloadImage(m.localUrl || m.image) });
@@ -2436,7 +2496,7 @@
           h('span', { class: 'search-hit-head' },
             h('strong', { text: m.senderId === state.me.id ? 'Bạn' : nameOf(m.senderId) }),
             h('time', { text: `${dayLabel(m.createdAt)} ${hm(m.createdAt)}` })),
-          h('span', { class: 'search-hit-text' }, highlight(m.kind === 'poll' ? `📊 ${m.text}` : m.text || '', q)))))));
+          h('span', { class: 'search-hit-text' }, highlight(m.kind === 'poll' ? `📊 ${m.text}` : m.kind === 'event' ? `📅 ${m.text}` : m.text || '', q)))))));
   }
   $('#chat-search-input').addEventListener('input', () => {
     clearTimeout(chatPlus.searchTimer);
@@ -2515,6 +2575,12 @@
     const r = btn.getBoundingClientRect();
     placeMenu(menuButtons([
       { label: '📊 Tạo bình chọn', run: () => navigate('#/poll') },
+      ...(plans ? [
+        { label: '📅 Tạo kèo', run: () => navigate('#/event') },
+        // Đang sửa tin thì không lấy chữ đang sửa
+        { label: '⏰ Hẹn giờ gửi tin', run: () => (state.editing.has(c.id) ? plans.openSchedule('', []) : plans.openSchedule(input.value.trim(), mentionsIn(c.id, input.value))) },
+      ] : []),
+      ...(fxPad ? [{ label: '∑ Công thức toán, hóa', run: () => fxPad.toggle(true) }] : []),
       { label: '🖼️ Gửi ảnh', run: () => $('#image-input').click() },
       { label: `${c.emoji || '👍'} Gửi biểu tượng nhanh`, run: () => sendText({ quick: true }) },
     ]), r.left + 90, r.top, null);
@@ -2574,7 +2640,7 @@
     const mine = new Set(p.options.map((o, i) => (o.votes.includes(state.me.id) ? i : -1)).filter((i) => i >= 0));
     const max = Math.max(1, ...p.options.map((o) => o.votes.length));
     return h('div', { class: `bubble poll${p.closed ? ' is-closed' : ''}` },
-      h('p', { class: 'poll-q' }, icon('poll'), h('span', { text: m.text })),
+      h('p', { class: 'poll-q' }, icon('poll'), h('span', null, fx(m.text))),
       h('p', { class: 'poll-sub', text: p.closed ? 'Bình chọn đã kết thúc' : p.multi ? 'Chọn một hoặc nhiều đáp án' : 'Chọn một đáp án' }),
       h('div', { class: 'poll-opts' }, p.options.map((o, i) => {
         const n = o.votes.length;
@@ -2587,7 +2653,7 @@
           onclick: (e) => { e.stopPropagation(); vote(m, i); },
         },
         h('span', { class: `poll-mark${p.multi ? ' is-multi' : ''}`, 'aria-hidden': 'true' }, on ? icon('check') : null),
-        h('span', { class: 'poll-text', text: o.text }),
+        h('span', { class: 'poll-text' }, fx(o.text)),
         h('span', { class: 'poll-voters' }, o.votes.slice(0, 3).map((uid) => avatarEl(userOf(uid), 'avatar-xs', { dot: false }))),
         h('span', { class: 'poll-count', text: total ? `${pct}%` : '0' }));
       })),
@@ -2749,6 +2815,7 @@
     btn.classList.toggle('is-emoji', Boolean(quick));
     $('.send-emoji', btn).textContent = quick;
     btn.setAttribute('aria-label', quick ? `Gửi ${quick}` : state.editing.has(state.currentId) ? 'Lưu tin nhắn đã sửa' : 'Gửi');
+    if (fxPad) fxPad.update();
   }
 
   function bumpConv(convId, m) {
@@ -3486,6 +3553,7 @@ ${sections}
         if (streaks) streaks.load();
         if (puzzles) puzzles.load(); // gửi kết quả câu đố giải lúc mất mạng
         if (stories) stories.load();
+        if (plans) plans.load();
         if (calls) calls.onReconnect(); // đang gọi thì báo máy chủ mình đã nối lại
       }
       state.everConnected = true;
@@ -3517,6 +3585,7 @@ ${sections}
     if (stories) {
       for (const ev of ['story:new', 'story:deleted', 'story:viewed']) socket.on(ev, (data) => stories.onEvent(ev, data));
     }
+    if (plans) socket.on('scheduled:changed', (data) => plans.onScheduled(data));
     socket.on('ai:status', (data) => {
       state.aiReady = Boolean(data && data.ready);
       if (state.currentId != null) renderAiSum();
@@ -5344,6 +5413,7 @@ ${sections}
     if (streaks) streaks.load(); // chuỗi hằng ngày (gửi luôn ngày chơi lúc mất mạng)
     if (puzzles) puzzles.load(); // câu đố: tiến độ trên máy chủ (gửi luôn kết quả giải lúc mất mạng)
     if (stories) stories.load(); // tin 24 giờ
+    if (plans) plans.load(); // tin hẹn giờ đang chờ gửi
     syncPush();
     if (LocalDB.ready()) {
       cacheMe(state.me);

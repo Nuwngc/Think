@@ -46,11 +46,32 @@ export type Poll = {
   options: { text: string; votes: number[] }[];
 };
 
+/** Kèo (2.16.0, tin loại "event", tên kèo nằm ở text): giờ hẹn, địa điểm, ai Đi / Có thể / Không đi */
+export type EventInfo = {
+  place: string;
+  startsAt: number;
+  canceled: boolean;
+  yes: number[];
+  maybe: number[];
+  no: number[];
+};
+export type RsvpStatus = "yes" | "maybe" | "no";
+
+/** Tin hẹn giờ gửi đang chờ (2.16.0), chỉ người hẹn thấy */
+export type Scheduled = {
+  id: number;
+  conversationId: number;
+  text: string;
+  sendAt: number;
+  createdAt: number;
+  mentions: number[];
+};
+
 export type Message = {
   id: number;
   conversationId: number;
   senderId: number;
-  kind: "text" | "system" | "poll" | "voice";
+  kind: "text" | "system" | "poll" | "voice" | "event";
   text: string | null;
   image: string | null;
   deleted: boolean;
@@ -69,6 +90,8 @@ export type Message = {
   /** Những người được @nhắc tên */
   mentions?: number[];
   poll?: Poll | null;
+  /** Kèo (2.16.0) */
+  event?: EventInfo | null;
   /** Trả lời / thả cảm xúc một tin 24 giờ (2.13.0): ảnh nhỏ của tin */
   story?: StoryRef;
 };

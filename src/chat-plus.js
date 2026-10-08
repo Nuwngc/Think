@@ -176,7 +176,7 @@ function setupChatPlus(ctx) {
     const before = Number.parseInt(req.query.before, 10) || Number.MAX_SAFE_INTEGER;
     const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     const rows = all(
-      `SELECT id FROM messages WHERE conversation_id = ? AND id < ? AND deleted = 0 AND kind IN ('text', 'poll')
+      `SELECT id FROM messages WHERE conversation_id = ? AND id < ? AND deleted = 0 AND kind IN ('text', 'poll', 'event')
          AND search_text LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT 31`,
       convId, before, like
     );

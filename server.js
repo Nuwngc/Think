@@ -38,6 +38,10 @@ const chatLock = require('./src/chat-lock');
 const ai = require('./src/ai');
 const { setupCalls } = require('./src/calls');
 const { setupStories, storyAlive } = require('./src/stories');
+const { setupEvents, eventData, eventSummary } = require('./src/events');
+const { setupScheduled } = require('./src/scheduled');
+const { setupKeepAwake } = require('./src/keep-awake');
+const Formula = require('./public/formula-core.js');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -217,6 +221,7 @@ function serializeMessage(m, reactions) {
     if (m.forwarded) out.forwarded = true; // chuyển tiếp từ cuộc trò chuyện khác
     if (m.mentions) out.mentions = String(m.mentions).split(',').filter(Boolean).map(Number); // @nhắc tên
     if (m.kind === 'poll') out.poll = chatPlus.pollData(m.id); // bình chọn
+    if (m.kind === 'event') out.event = eventData(m.id); // kèo (2.16.0)
     if (m.story) {
       // Trả lời / thả cảm xúc một tin 24 giờ (src/stories.js): ảnh nhỏ của tin, tin còn xem được không
       try {
@@ -948,17 +953,15 @@ async function notifyMembers(conv, message, members) {
   const sender = get('SELECT display_name, avatar FROM users WHERE id = ?', message.senderId);
   // Tin chia sẻ ván cờ ("♟ Tên vs Tên\n…\nđường dẫn"): thông báo chỉ cần dòng đầu
   const chessShare = /^♟ ([^\n]+)\n(?:[^\n]*\n)?\S*#\/chess\/g\/\d+\s*$/.exec(message.text || '');
-  const text = message.kind === 'poll'
-    ? `📊 Bình chọn: ${message.text}`
-    : message.kind === 'voice'
-      ? `🎤 Tin nhắn thoại${message.audio && message.audio.ms ? ` (${VoiceCore.clock(message.audio.ms)})` : ''}`
-      : chessShare
-        ? `♟ Chia sẻ ván cờ: ${chessShare[1]}`
-        : message.story
-          ? message.story.reaction
-            ? `Đã bày tỏ cảm xúc ${message.text} về tin của bạn`
-            : `Trả lời tin của bạn: ${message.text}`
-          : message.text ? (message.image ? `📷 ${message.text}` : message.text) : '📷 Đã gửi một ảnh';
+  // Công thức toán / hóa (2.16.0): thông báo hiện x², H₂O thay cho x^2, H_2O
+  const body = Formula.toUnicode(message.text || '');
+  let text;
+  if (message.kind === 'poll') text = `📊 Bình chọn: ${body}`;
+  else if (message.kind === 'event') text = eventSummary(message);
+  else if (message.kind === 'voice') text = `🎤 Tin nhắn thoại${message.audio && message.audio.ms ? ` (${VoiceCore.clock(message.audio.ms)})` : ''}`;
+  else if (chessShare) text = `♟ Chia sẻ ván cờ: ${chessShare[1]}`;
+  else if (message.story) text = message.story.reaction ? `Đã bày tỏ cảm xúc ${message.text} về tin của bạn` : `Trả lời tin của bạn: ${body}`;
+  else text = body ? (message.image ? `📷 ${body}` : body) : '📷 Đã gửi một ảnh';
   const base = {
     type: 'message',
     conversationId: conv.id,
@@ -1439,13 +1442,16 @@ setupSocial({
 
 /* ---------------- API: tin 24 giờ (story, 2.13.0) — src/stories.js ---------------- */
 
-// Tin nhắn trả lời / thả cảm xúc một tin 24 giờ: lưu, phát realtime, thông báo đẩy như tin nhắn thường
-function postStoryMessage(convId, senderId, text, story) {
+// Tin nhắn do máy chủ gửi thay người dùng: trả lời / thả cảm xúc tin 24 giờ (kèm story), tin hẹn giờ đến giờ gửi (2.16.0).
+// Lưu, phát realtime, thông báo đẩy như tin nhắn thường; ai = true thì Think AI trả lời nếu được nhắn riêng / gọi tên.
+function postMessage(convId, senderId, { text, story = null, mentions = [], ai: askAi = false }) {
   const conv = get('SELECT * FROM conversations WHERE id = ?', convId);
+  const tags = [...mentions];
+  if (askAi && conv.type !== 'dm' && ai.mentionsBot(text) && ai.getBotId() && !tags.includes(ai.getBotId())) tags.push(ai.getBotId());
   const id = transaction(() => {
     const newId = Number(
-      run("INSERT INTO messages (conversation_id, sender_id, kind, text, story, search_text, created_at) VALUES (?, ?, 'text', ?, ?, ?, ?)",
-        convId, senderId, text, JSON.stringify(story), searchKey(text), Date.now()).lastInsertRowid
+      run("INSERT INTO messages (conversation_id, sender_id, kind, text, story, mentions, search_text, created_at) VALUES (?, ?, 'text', ?, ?, ?, ?, ?)",
+        convId, senderId, text, story ? JSON.stringify(story) : null, tags.length ? tags.join(',') : null, searchKey(text), Date.now()).lastInsertRowid
     );
     run('UPDATE conversations SET last_message_id = ? WHERE id = ?', newId, convId);
     run('UPDATE members SET last_read_id = ? WHERE conversation_id = ? AND user_id = ?', newId, convId, senderId);
@@ -1455,6 +1461,7 @@ function postStoryMessage(convId, senderId, text, story) {
   const members = memberIds(convId);
   for (const uid of members) io.to(`user:${uid}`).emit('message:new', message);
   notifyMembers(conv, message, members).catch((err) => console.warn('[push]', err.message));
+  if (askAi) aiBot.onMessage(conv, message);
   return message;
 }
 
@@ -1472,7 +1479,7 @@ setupStories({
   },
   removeUpload,
   ensureDm,
-  postMessage: postStoryMessage,
+  postMessage: (convId, senderId, text, story) => postMessage(convId, senderId, { text, story }),
 });
 
 /* ---------------- API: trò chơi trên máy (Xếp Khối) — chỉ giữ điểm cho bảng xếp hạng (src/games.js) ---------------- */
@@ -1568,6 +1575,31 @@ const aiBot = ai.setupAI({
       buf = ai.readLocalImage(url);
     }
     return buf;
+  },
+});
+
+/* ---------------- Kèo (2.16.0) — src/events.js; hẹn giờ gửi tin (2.16.0) — src/scheduled.js ---------------- */
+
+const notifyUser = (uid, payload) => push.sendToUser(uid, payload);
+const events = setupEvents({
+  app,
+  io,
+  requireAuth,
+  requireReady,
+  membership,
+  memberIds,
+  loadMessage,
+  systemMessage,
+  emitMessage,
+  notifyMembers,
+  notify: notifyUser,
+});
+const scheduled = setupScheduled({ app, io, requireAuth, requireReady, membership, cleanMentions: chatPlus.cleanMentions, postMessage });
+// Render gói Free: còn tin hẹn giờ / lời nhắc kèo sắp đến hạn thì máy chủ không ngủ (src/keep-awake.js)
+setupKeepAwake({
+  nextDue: () => {
+    const times = [events.nextDue(), scheduled.nextDue()].filter(Boolean);
+    return times.length ? Math.min(...times) : null;
   },
 });
 

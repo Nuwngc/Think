@@ -1,6 +1,8 @@
 // Chữ và thời gian hiển thị, giống hệt bản web (public/app.js) để hai bên đọc như nhau.
 import type { ChatItem, Conversation, Message, User } from "./types";
 import { voiceLabel } from "./voice/core";
+import { toUnicode } from "./formula/core";
+import { hm as clock } from "./plans/core";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -127,7 +129,7 @@ export function callInfoOf(m: Pick<Message, "text" | "kind">): { video: boolean 
   }
 }
 
-export function systemText(m: Pick<Message, "text" | "senderId">, names: Names) {
+export function systemText(m: Pick<Message, "text" | "senderId"> & { createdAt?: number }, names: Names) {
   let d: {
     event?: string;
     name?: string;
@@ -141,6 +143,8 @@ export function systemText(m: Pick<Message, "text" | "senderId">, names: Names) 
     duration?: number;
     to?: number;
     count?: number;
+    title?: string;
+    startsAt?: number;
   } = {};
   try {
     d = JSON.parse(m.text || "{}");
@@ -171,9 +175,20 @@ export function systemText(m: Pick<Message, "text" | "senderId">, names: Names) 
       return callText(d, m.senderId, names);
     case "gcall":
       return groupCallText(d, m.senderId, names);
+    case "keo-cancel":
+      return `${actor} đã hủy kèo “${d.title || ""}”`;
+    case "keo-remind":
+      return keoRemindText(d.title || "", d.startsAt || 0, m.createdAt || 0);
     default:
       return "Cuộc trò chuyện vừa được cập nhật";
   }
+}
+
+/** Kèo (2.16.0): dòng nhắc trước giờ hẹn "⏰ Còn 1 tiếng là tới kèo “Đi ăn lẩu” (20:00)" — giống bản web */
+export function keoRemindText(title: string, startsAt: number, createdAt: number) {
+  const mins = Math.max(1, Math.round((startsAt - createdAt) / 60000));
+  const left = mins < 60 ? `${mins} phút` : `${Math.floor(mins / 60)} tiếng${mins % 60 ? ` ${mins % 60} phút` : ""}`;
+  return `⏰ Còn ${left} là tới kèo “${title}” (${clock(startsAt)})`;
 }
 
 const hasImage = (m: ChatItem) => Boolean(m.image || ("localUri" in m && m.localUri));
@@ -181,13 +196,14 @@ const hasImage = (m: ChatItem) => Boolean(m.image || ("localUri" in m && m.local
 export function messageSummary(m: ChatItem, names: Names) {
   if (m.kind === "system") return systemText(m, names);
   if (m.deleted) return "Tin nhắn đã được thu hồi";
-  if (m.kind === "poll") return `📊 ${oneLine(m.text)}`;
+  if (m.kind === "poll") return `📊 ${toUnicode(oneLine(m.text))}`;
+  if (m.kind === "event") return `📅 Kèo: ${toUnicode(oneLine(m.text))}${"event" in m && m.event?.canceled ? " (đã hủy)" : ""}`;
   if (m.kind === "voice") return voiceLabel(m.audio?.ms);
   if (hasImage(m) && !m.text) return "Đã gửi một ảnh";
   if ("imagePurged" in m && m.imagePurged && !m.text) return "Ảnh đã được dọn khỏi máy chủ";
   const shared = !hasImage(m) && m.text ? chessShareOf(m.text) : null;
   if (shared) return `♟ ${shared.title}`;
-  return `${hasImage(m) ? "📷 " : ""}${oneLine(m.text)}`;
+  return `${hasImage(m) ? "📷 " : ""}${toUnicode(oneLine(m.text))}`;
 }
 
 /* ---------------- Ván cờ được chia sẻ vào cuộc trò chuyện ----------------

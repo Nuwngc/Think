@@ -694,6 +694,85 @@ def s_ai():
         raise RuntimeError("Không về được danh sách tin nhắn")
 
 
+def s_plans():
+    """Kèo, hẹn giờ gửi, công thức (2.16.0): Bạn Bè gửi tin có công thức + tạo kèo trong nhóm → app hiện x², H₂O và thẻ kèo
+    → bấm Đi (máy chủ ghi nhận) → tin hẹn giờ (đặt qua máy chủ) hiện thanh "1 tin hẹn giờ" → Gửi ngay
+    → mở bàn phím công thức, bấm x² rồi gửi (máy chủ nhận "12345²")"""
+    token, tester_id = login_token(args.user, args.password)
+    ban_token, _ = login_token("ban", "ban12345")
+    _, hai_id = login_token("hai", "hai12345")
+    notes = []
+    g = api_call("/api/groups", {"name": "Nhóm kèo thử", "memberIds": [tester_id, hai_id]}, token=ban_token)
+    conv = (g.get("conversation") or g)["id"]
+    api_call(f"/api/conversations/{conv}/messages", {"text": "Cong thuc: x^2 + y^2 = r^2, H_2O, Fe^3+"}, token=ban_token)
+    start = int(time.time() * 1000) + 26 * 3600 * 1000
+    ev = (api_call(f"/api/conversations/{conv}/events", {"title": "Di an lau", "place": "Quan cu", "startsAt": start}, token=ban_token).get("message") or {})
+    if not ev.get("id"):
+        raise RuntimeError(f"Bạn Bè không tạo được kèo: {ev}")
+    time.sleep(2)
+    tap(r"^Nhóm kèo thử($|[,.])")
+    if wait_for(r"x² \+ y² = r², H₂O, Fe³⁺", 20) is None:
+        raise RuntimeError("Không thấy công thức hiện thành x², H₂O, Fe³⁺")
+    notes.append("công thức hiện đúng")
+    if wait_for(r"^Đi: 1 người$", 15) is None:
+        raise RuntimeError("Không thấy thẻ kèo (nút Đi)")
+    tap(r"^Đi: 1 người$")
+    going = False
+    end = time.time() + 15
+    while time.time() < end and not going:
+        msgs = api_call(f"/api/conversations/{conv}/messages", token=token).get("messages", [])
+        going = any(m.get("id") == ev["id"] and tester_id in ((m.get("event") or {}).get("yes") or []) for m in msgs)
+        time.sleep(1)
+    if not going:
+        raise RuntimeError("Bấm Đi nhưng máy chủ chưa ghi nhận")
+    if wait_for(r"^Đi: 2 người, bạn đã chọn$", 10) is None:
+        raise RuntimeError("Thẻ kèo chưa đổi sang đã chọn Đi")
+    notes.append("bấm Đi được")
+    # Tin hẹn giờ (đặt từ máy khác): thanh hẹn giờ hiện ngay, bấm Gửi ngay
+    api_call(f"/api/conversations/{conv}/scheduled", {"text": "hengio 24680", "sendAt": int(time.time() * 1000) + 7200 * 1000}, token=token)
+    if wait_for(r"^1 tin hẹn giờ\. Xem$", 15) is None:
+        raise RuntimeError("Không thấy thanh tin hẹn giờ")
+    tap(r"^1 tin hẹn giờ\. Xem$")
+    tap(r"^Gửi ngay$")
+    sent = False
+    end = time.time() + 15
+    while time.time() < end and not sent:
+        msgs = api_call(f"/api/conversations/{conv}/messages", token=ban_token).get("messages", [])
+        sent = any(m.get("text") == "hengio 24680" and m.get("senderId") == tester_id for m in msgs)
+        time.sleep(1)
+    if not sent:
+        raise RuntimeError("Bấm Gửi ngay nhưng máy chủ chưa có tin")
+    notes.append("tin hẹn giờ: Gửi ngay được")
+    time.sleep(2)
+    # Bàn phím công thức
+    tap(r"^Thêm: ảnh, bình chọn")
+    tap(r"^Công thức toán, hóa$")
+    if wait_for(r"^Đóng bàn phím ký hiệu$", 10) is None:
+        raise RuntimeError("Không mở được bàn phím công thức")
+    box = wait_for(r"Nhập tin nhắn", 10)
+    if box is None:
+        raise RuntimeError("Không thấy ô nhập tin nhắn")
+    tap_xy(*center(box))
+    type_text("12345")
+    tap(r"^Bình phương$")
+    tap(r"^Gửi$")
+    got = False
+    end = time.time() + 15
+    while time.time() < end and not got:
+        msgs = api_call(f"/api/conversations/{conv}/messages", token=ban_token).get("messages", [])
+        got = any(m.get("text") == "12345²" and m.get("senderId") == tester_id for m in msgs)
+        time.sleep(1)
+    if not got:
+        raise RuntimeError("Gửi tin có ký hiệu x² nhưng máy chủ không nhận đúng \"12345²\"")
+    notes.append("bàn phím ký hiệu chèn được ²")
+    tap(r"^Đóng bàn phím ký hiệu$")
+    hide_keyboard()
+    back()
+    if wait_for(r"^Trò chơi", 10) is None:
+        raise RuntimeError("Không về được danh sách tin nhắn")
+    return ", ".join(notes)
+
+
 def s_games_hub():
     tap(r"^Trò chơi")
     if wait_for(r"Xếp Khối", 15) is None:
@@ -1295,6 +1374,7 @@ def main():
         step("Gọi nhóm: tham gia, rời", s_gcall)
         step("Tin 24 giờ: đăng, xem tin của bạn", s_story)
         step("Think AI: hỏi trợ lý", s_ai)
+        step("Kèo, hẹn giờ gửi, công thức toán / hóa", s_plans)
         step("Mục Trò chơi", s_games_hub)
         step("Nông trại: thu hoạch, gieo hạt (có âm thanh)", s_farm)
         step("Nông trại: ghé vườn bạn rồi quay lại", s_farm_visit)

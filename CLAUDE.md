@@ -57,6 +57,15 @@ Dữ liệu ở `public/puzzles/<game>.json` và bản giống hệt `native/src
 - Màn xem tin có thanh tiến độ chạy liên tục: kiểm tra APK qua API (bước "Tin 24 giờ"), và xóa tin ở cuối bước để các bước sau bấm "Bạn Bè" trong danh sách chat không trúng vòng tròn tin.
 - `replaceChildren` của trình duyệt biến `null` thành chữ "null": lọc `filter(Boolean)` trước khi truyền.
 
+## Kèo, hẹn giờ gửi tin, công thức toán / hóa (2.16.0)
+
+- Kèo là tin nhắn loại `event` (tên kèo ở `messages.text`, người tạo = người gửi), chi tiết ở `events` / `event_rsvps` (`src/events.js`); `serializeMessage` thêm `event` (`eventData`). Thêm loại tin mới thì nhớ: chữ xem trước (`messageSummary` web, `messageSummary` trong `native/src/format.ts`), thông báo (`notifyMembers`), Think AI (`kind IN (...)` trong `src/ai.js`), tìm tin (`src/chat-plus.js`), menu chạm giữ (Sửa / Chuyển tiếp) ở cả hai bản.
+- Tin hệ thống `{ event: 'keo-cancel', title }` và `{ event: 'keo-remind', title, startsAt }`: chữ ở `systemText` / `keoRemindText` (web `public/app.js`) và `native/src/format.ts` phải giống nhau.
+- Nhắc kèo và gửi tin hẹn giờ chạy bằng vòng lặp trên máy chủ (`sweep`), gửi trễ khi máy chủ thức dậy (kèo đã bắt đầu thì thôi nhắc). `src/keep-awake.js` giữ máy chủ Render thức khi còn việc trong 3 ngày tới — đừng bỏ, người dùng chạy Render gói Free.
+- Tin hẹn giờ gửi bằng `postMessage(convId, senderId, { text, mentions, ai: true })` trong `server.js` (dùng chung với trả lời tin 24 giờ): lưu, phát realtime, thông báo, gọi Think AI như tin thường.
+- Chữ giờ hẹn, nút giờ nhanh có hai bản giống hệt: `public/plans-core.js` và `native/src/plans/core.ts` (kiểm thử so khớp). Web `public/plans-ui.js`; app `native/src/plans/`.
+- Công thức: `public/formula-core.js` (máy chủ dùng cho thông báo, web) và `native/src/formula/core.ts` phải giống hệt (kiểm thử so khớp `parse`, `toUnicode`, `PAD`, `insert`). Không dùng `\p{...}` trong regex (Hermes); chữ cái viết hẳn ra. Luật tránh đổi nhầm (`^_^`, `T_T`, tên file, link) có kiểm thử ở `test/plans.test.js` — sửa luật thì thêm ví dụ vào đó. Web vẽ `<sup>/<sub>`, app dùng chữ số nhỏ Unicode (`Fx` trong `FormulaText.tsx`; ký tự không có dạng nhỏ thì chữ nhỏ, không dùng View trong Text).
+
 ## Tin nhắn thoại, thành tựu
 
 - Tin nhắn thoại: phần dùng chung `public/voice-core.js` và bản app `native/src/voice/core.ts` phải giống hệt (kiểm thử so khớp). Mỗi lúc một trình phát dùng chung (`native/src/voice/player.ts`) — đừng tạo trình phát riêng cho từng tin (Android hết luồng âm thanh).
